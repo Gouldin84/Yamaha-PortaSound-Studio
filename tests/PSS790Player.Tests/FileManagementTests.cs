@@ -204,5 +204,127 @@ namespace PSS790Player.Tests
                 try { var d = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorPSS_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
             }
         }
+
+        [Fact]
+        public void VoiceOverrideStore_BatchRename_MigratesMultipleSongOverrides()
+        {
+            var oldFolder = Path.Combine(AppPaths.GmMidiDir, "BatchSource");
+            var newFolder = Path.Combine(AppPaths.GmMidiDir, "BatchTarget");
+
+            var songA = Path.Combine(oldFolder, "SongA.mid");
+            var songB = Path.Combine(oldFolder, "SongB.mid");
+            var songC = Path.Combine(oldFolder, "SongC.mid");
+
+            var newSongA = Path.Combine(newFolder, "SongA.mid");
+            var newSongB = Path.Combine(newFolder, "SongB.mid");
+            var newSongC = Path.Combine(newFolder, "SongC.mid");
+
+            _store.SetOverride(songA, 0, 10);
+            _store.SetOverride(songB, 1, 20);
+            _store.SetOverride(songC, 2, 30);
+
+            Assert.True(_store.HasOverrides(songA));
+            Assert.True(_store.HasOverrides(songB));
+            Assert.True(_store.HasOverrides(songC));
+
+            // Perform batch rename
+            var batchMoves = new[]
+            {
+                (oldPath: songA, newPath: newSongA),
+                (oldPath: songB, newPath: newSongB),
+                (oldPath: songC, newPath: newSongC)
+            };
+
+            foreach (var (oldPath, newPath) in batchMoves)
+            {
+                _store.RenameFile(oldPath, newPath);
+            }
+
+            Assert.False(_store.HasOverrides(songA));
+            Assert.False(_store.HasOverrides(songB));
+            Assert.False(_store.HasOverrides(songC));
+
+            Assert.True(_store.HasOverrides(newSongA));
+            Assert.True(_store.HasOverrides(newSongB));
+            Assert.True(_store.HasOverrides(newSongC));
+
+            Assert.Equal(10, _store.GetOverrides(newSongA)[0]);
+            Assert.Equal(20, _store.GetOverrides(newSongB)[1]);
+            Assert.Equal(30, _store.GetOverrides(newSongC)[2]);
+        }
+
+        [Fact]
+        public void MoveFolder_PreservesNestedSongOverridesAcrossHierarchies()
+        {
+            var rootFolder = Path.Combine(AppPaths.GmMidiDir, "Level1", "Level2");
+            var movedFolder = Path.Combine(AppPaths.GmMidiDir, "Archived", "Level2");
+
+            var nestedSong = Path.Combine(rootFolder, "DeepTrack.mid");
+            var expectedMovedSong = Path.Combine(movedFolder, "DeepTrack.mid");
+
+            _store.SetOverride(nestedSong, 5, 88);
+            Assert.True(_store.HasOverrides(nestedSong));
+
+            _store.RenameFolder(rootFolder, movedFolder);
+
+            Assert.False(_store.HasOverrides(nestedSong));
+            Assert.True(_store.HasOverrides(expectedMovedSong));
+            Assert.Equal(88, _store.GetOverrides(expectedMovedSong)[5]);
+        }
+
+        [Fact]
+        public void BatchDelete_RemovesOverridesAndLinkedFiles()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            var testSub = "BatchDeleteTest_" + Guid.NewGuid().ToString("N");
+            var gmDir = Path.Combine(AppPaths.GmMidiDir, testSub);
+            var pssDir = Path.Combine(AppPaths.Pss790MidiDir, testSub);
+
+            Directory.CreateDirectory(gmDir);
+            Directory.CreateDirectory(pssDir);
+
+            try
+            {
+                var gm1 = Path.Combine(gmDir, "Track1.mid");
+                var pss1 = Path.Combine(pssDir, "Track1.mid");
+                var gm2 = Path.Combine(gmDir, "Track2.mid");
+                var pss2 = Path.Combine(pssDir, "Track2.mid");
+
+                File.WriteAllText(gm1, "dummy");
+                File.WriteAllText(pss1, "dummy");
+                File.WriteAllText(gm2, "dummy");
+                File.WriteAllText(pss2, "dummy");
+
+                _store.SetOverride(gm1, 0, 12);
+                _store.SetOverride(pss1, 0, 15);
+
+                var filesToDelete = new[] { gm1, gm2 };
+                foreach (var file in filesToDelete)
+                {
+                    _store.RemoveOverrides(file);
+                    File.Delete(file);
+
+                    var linked = AppPaths.FindMatchingLinkedFile(file);
+                    if (!string.IsNullOrEmpty(linked) && File.Exists(linked))
+                    {
+                        _store.RemoveOverrides(linked);
+                        File.Delete(linked);
+                    }
+                }
+
+                Assert.False(File.Exists(gm1));
+                Assert.False(File.Exists(pss1));
+                Assert.False(File.Exists(gm2));
+                Assert.False(File.Exists(pss2));
+
+                Assert.False(_store.HasOverrides(gm1));
+                Assert.False(_store.HasOverrides(pss1));
+            }
+            finally
+            {
+                try { if (Directory.Exists(gmDir)) Directory.Delete(gmDir, true); } catch { }
+                try { if (Directory.Exists(pssDir)) Directory.Delete(pssDir, true); } catch { }
+            }
+        }
     }
 }

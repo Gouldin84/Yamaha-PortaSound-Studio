@@ -137,8 +137,9 @@
                         </svg>
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Quick-Pick Library</h3>
                     </div>
-                    <div class="flex items-center space-x-1.5">
-                        <button id="btnCollapseAll" title="Collapse All / Expand All Folders" class="px-2 py-0.5 text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
+                    <div class="flex items-center space-x-1">
+                        <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode" class="px-1.5 py-0.5 text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
+                        <button id="btnCollapseAll" title="Collapse All / Expand All Folders" class="px-1.5 py-0.5 text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
                         <span id="sidebarSongCount" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">0 songs</span>
                         <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B)" class="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-lg">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,6 +161,28 @@
                 <!-- Tree View Container -->
                 <div id="treeContainer" class="flex-1 overflow-y-auto max-h-[640px] pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
                     <div class="text-center py-8 text-slate-500 text-xs">Scanning MIDI library...</div>
+                </div>
+
+                <!-- Floating / Docked Batch Action Bar -->
+                <div id="sidebarBatchBar" class="hidden p-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-2 select-none">
+                    <div class="flex items-center justify-between text-xs">
+                        <span id="batchCountBadge" class="font-bold text-cyan-400 text-[11px]">0 selected</span>
+                        <div class="space-x-2">
+                            <button id="btnBatchSelectAll" class="text-[10px] text-slate-400 hover:text-cyan-300">All</button>
+                            <span class="text-slate-600 text-[10px]">•</span>
+                            <button id="btnBatchClear" class="text-[10px] text-slate-400 hover:text-rose-400">Clear</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-1.5">
+                        <button id="btnBatchMove" class="px-2.5 py-1.5 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                            <span>📦</span>
+                            <span>Move</span>
+                        </button>
+                        <button id="btnBatchDelete" class="px-2.5 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                            <span>🗑️</span>
+                            <span>Delete</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Bottom Quick Explorer Actions & Tip -->

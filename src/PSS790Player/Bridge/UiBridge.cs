@@ -118,11 +118,20 @@ namespace PSS790Player.Bridge
                     case "move_file":
                         HandleMoveFile(root);
                         break;
+                    case "batch_move_files":
+                        HandleBatchMoveFiles(root);
+                        break;
+                    case "move_folder":
+                        HandleMoveFolder(root);
+                        break;
                     case "check_linked_file":
                         HandleCheckLinkedFile(root);
                         break;
                     case "delete_item":
                         HandleDeleteItem(root);
+                        break;
+                    case "batch_delete_files":
+                        HandleBatchDeleteFiles(root);
                         break;
                     case "refresh_library":
                         SendLibraryUpdate();
@@ -593,11 +602,234 @@ namespace PSS790Player.Bridge
             SendToJs("notification", new { message = movedLinked ? $"Moved both GM and PSS-790 versions to {folderLabel}" : $"Moved '{fileName}' to {folderLabel}" });
         }
 
+        private void HandleBatchMoveFiles(JsonElement root)
+        {
+            var targetCategory = root.TryGetProperty("targetCategory", out var tc) ? tc.GetString() : "gm";
+            var targetSubFolder = root.TryGetProperty("targetSubFolder", out var tsf) ? tsf.GetString() ?? "" : "";
+            var alsoMoveLinked = root.TryGetProperty("alsoMoveLinked", out var aml) && aml.GetBoolean();
+
+            var sourcePaths = new List<string>();
+            if (root.TryGetProperty("sourcePaths", out var spArray) && spArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in spArray.EnumerateArray())
+                {
+                    var p = el.GetString();
+                    if (!string.IsNullOrEmpty(p)) sourcePaths.Add(p);
+                }
+            }
+            else if (root.TryGetProperty("sourcePath", out var spProp) && !string.IsNullOrEmpty(spProp.GetString()))
+            {
+                sourcePaths.Add(spProp.GetString()!);
+            }
+
+            if (sourcePaths.Count == 0)
+            {
+                SendToJs("error", new { message = "No files selected to move." });
+                return;
+            }
+
+            var baseDir = string.Equals(targetCategory, "pss790", StringComparison.OrdinalIgnoreCase)
+                ? AppPaths.Pss790MidiDir
+                : AppPaths.GmMidiDir;
+
+            var destDir = Path.Combine(baseDir, targetSubFolder);
+            if (!AppPaths.IsPathInsideLibrary(destDir) && !string.Equals(Path.GetFullPath(destDir), Path.GetFullPath(baseDir), StringComparison.OrdinalIgnoreCase))
+            {
+                SendToJs("error", new { message = "Invalid destination folder." });
+                return;
+            }
+
+            if (!Directory.Exists(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            var isTargetGm = string.Equals(targetCategory, "gm", StringComparison.OrdinalIgnoreCase);
+            var mirrorBaseDir = isTargetGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+            var mirrorDestDir = Path.Combine(mirrorBaseDir, targetSubFolder);
+
+            int movedCount = 0;
+            int movedLinkedCount = 0;
+
+            foreach (var sourcePath in sourcePaths)
+            {
+                if (!File.Exists(sourcePath) || !AppPaths.IsPathInsideLibrary(sourcePath)) continue;
+
+                var fileName = Path.GetFileName(sourcePath);
+                var destPath = Path.Combine(destDir, fileName);
+
+                if (!string.Equals(sourcePath, destPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(destPath))
+                    {
+                        continue;
+                    }
+
+                    File.Move(sourcePath, destPath);
+                    VoiceOverrideStore.Instance.RenameFile(sourcePath, destPath);
+
+                    if (string.Equals(_currentFilePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _currentFilePath = destPath;
+                    }
+                    movedCount++;
+                }
+
+                if (alsoMoveLinked)
+                {
+                    var linkedPath = AppPaths.FindMatchingLinkedFile(sourcePath);
+                    if (!string.IsNullOrWhiteSpace(linkedPath) && File.Exists(linkedPath) && AppPaths.IsPathInsideLibrary(linkedPath))
+                    {
+                        if (!Directory.Exists(mirrorDestDir))
+                        {
+                            Directory.CreateDirectory(mirrorDestDir);
+                        }
+
+                        var linkedFileName = Path.GetFileName(linkedPath);
+                        var mirrorDestPath = Path.Combine(mirrorDestDir, linkedFileName);
+
+                        if (!string.Equals(linkedPath, mirrorDestPath, StringComparison.OrdinalIgnoreCase) && !File.Exists(mirrorDestPath))
+                        {
+                            File.Move(linkedPath, mirrorDestPath);
+                            VoiceOverrideStore.Instance.RenameFile(linkedPath, mirrorDestPath);
+
+                            if (string.Equals(_currentFilePath, linkedPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _currentFilePath = mirrorDestPath;
+                            }
+                            movedLinkedCount++;
+                        }
+                    }
+                }
+            }
+
+            SendLibraryUpdate();
+            var folderLabel = string.IsNullOrEmpty(targetSubFolder) ? "(Root)" : targetSubFolder;
+            var msg = movedLinkedCount > 0
+                ? $"Moved {movedCount} songs (+ {movedLinkedCount} linked) to {folderLabel}"
+                : $"Moved {movedCount} song{(movedCount == 1 ? "" : "s")} to {folderLabel}";
+            SendToJs("notification", new { message = msg });
+        }
+
+        private void HandleMoveFolder(JsonElement root)
+        {
+            var sourceFolderPath = root.TryGetProperty("sourceFolderPath", out var sfp) ? sfp.GetString() : null;
+            var targetCategory = root.TryGetProperty("targetCategory", out var tc) ? tc.GetString() : "gm";
+            var targetParentSubFolder = root.TryGetProperty("targetParentSubFolder", out var tps) ? tps.GetString() ?? "" : "";
+
+            if (string.IsNullOrWhiteSpace(sourceFolderPath) || !Directory.Exists(sourceFolderPath))
+            {
+                SendToJs("error", new { message = "Source folder not found." });
+                return;
+            }
+
+            if (!AppPaths.IsPathInsideLibrary(sourceFolderPath))
+            {
+                SendToJs("error", new { message = "Cannot move folders outside library." });
+                return;
+            }
+
+            var baseDir = string.Equals(targetCategory, "pss790", StringComparison.OrdinalIgnoreCase)
+                ? AppPaths.Pss790MidiDir
+                : AppPaths.GmMidiDir;
+
+            var folderName = Path.GetFileName(sourceFolderPath);
+            var destDir = Path.Combine(baseDir, targetParentSubFolder, folderName);
+
+            // Prevent moving folder into itself or its own subfolder
+            if (destDir.StartsWith(sourceFolderPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(Path.GetFullPath(destDir), Path.GetFullPath(sourceFolderPath), StringComparison.OrdinalIgnoreCase))
+            {
+                SendToJs("error", new { message = "Cannot move a folder into itself." });
+                return;
+            }
+
+            if (Directory.Exists(destDir))
+            {
+                SendToJs("error", new { message = $"Folder '{folderName}' already exists in destination." });
+                return;
+            }
+
+            var destParent = Path.GetDirectoryName(destDir) ?? baseDir;
+            if (!Directory.Exists(destParent))
+            {
+                Directory.CreateDirectory(destParent);
+            }
+
+            Directory.Move(sourceFolderPath, destDir);
+            VoiceOverrideStore.Instance.RenameFolder(sourceFolderPath, destDir);
+
+            if (_currentFilePath != null && _currentFilePath.StartsWith(sourceFolderPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                _currentFilePath = destDir + _currentFilePath.Substring(sourceFolderPath.Length);
+            }
+
+            // Symmetrically move mirrored folder in counterpart library
+            try
+            {
+                var isGm = sourceFolderPath.StartsWith(AppPaths.GmMidiDir, StringComparison.OrdinalIgnoreCase);
+                var srcRoot = isGm ? AppPaths.GmMidiDir : AppPaths.Pss790MidiDir;
+                var mirrorRoot = isGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+
+                var relFolder = Path.GetRelativePath(srcRoot, sourceFolderPath);
+                var mirrorSourceFolder = Path.Combine(mirrorRoot, relFolder);
+
+                if (Directory.Exists(mirrorSourceFolder))
+                {
+                    var mirrorDestDir = Path.Combine(mirrorRoot, targetParentSubFolder, folderName);
+                    var mirrorDestParent = Path.GetDirectoryName(mirrorDestDir) ?? mirrorRoot;
+                    if (!Directory.Exists(mirrorDestParent))
+                    {
+                        Directory.CreateDirectory(mirrorDestParent);
+                    }
+
+                    if (!Directory.Exists(mirrorDestDir))
+                    {
+                        Directory.Move(mirrorSourceFolder, mirrorDestDir);
+                        VoiceOverrideStore.Instance.RenameFolder(mirrorSourceFolder, mirrorDestDir);
+
+                        if (_currentFilePath != null && _currentFilePath.StartsWith(mirrorSourceFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _currentFilePath = mirrorDestDir + _currentFilePath.Substring(mirrorSourceFolder.Length);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            SendLibraryUpdate();
+            SendToJs("notification", new { message = $"Moved folder '{folderName}'" });
+        }
+
         private void HandleCheckLinkedFile(JsonElement root)
         {
-            var filePath = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : null;
             var isFolder = root.TryGetProperty("isFolder", out var ifProp) && ifProp.GetBoolean();
 
+            if (root.TryGetProperty("filePaths", out var fpArray) && fpArray.ValueKind == JsonValueKind.Array)
+            {
+                var paths = new List<string>();
+                int linkedFound = 0;
+                foreach (var el in fpArray.EnumerateArray())
+                {
+                    var p = el.GetString();
+                    if (!string.IsNullOrEmpty(p))
+                    {
+                        paths.Add(p);
+                        if (AppPaths.FindMatchingLinkedFile(p) != null) linkedFound++;
+                    }
+                }
+                SendToJs("linked_file_checked", new
+                {
+                    isBatch = true,
+                    totalCount = paths.Count,
+                    hasLinked = linkedFound > 0,
+                    linkedCount = linkedFound,
+                    isFolder = false
+                });
+                return;
+            }
+
+            var filePath = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : null;
             if (string.IsNullOrWhiteSpace(filePath))
             {
                 SendToJs("linked_file_checked", new { filePath = "", hasLinked = false, linkedPath = (string?)null, linkedName = (string?)null, isFolder = false });
@@ -632,6 +864,76 @@ namespace PSS790Player.Bridge
                 linkedName = linked != null ? AppPaths.GetRelativeLibraryPath(linked) : null,
                 isFolder = false
             });
+        }
+
+        private void HandleBatchDeleteFiles(JsonElement root)
+        {
+            var alsoDeleteLinked = root.TryGetProperty("alsoDeleteLinked", out var adl) && adl.GetBoolean();
+            var filePaths = new List<string>();
+
+            if (root.TryGetProperty("filePaths", out var fpArray) && fpArray.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in fpArray.EnumerateArray())
+                {
+                    var p = el.GetString();
+                    if (!string.IsNullOrEmpty(p)) filePaths.Add(p);
+                }
+            }
+            else if (root.TryGetProperty("fullPath", out var fpProp) && !string.IsNullOrEmpty(fpProp.GetString()))
+            {
+                filePaths.Add(fpProp.GetString()!);
+            }
+
+            if (filePaths.Count == 0)
+            {
+                SendToJs("error", new { message = "No files selected to delete." });
+                return;
+            }
+
+            int deletedCount = 0;
+            int deletedLinkedCount = 0;
+
+            foreach (var fullPath in filePaths)
+            {
+                if (!File.Exists(fullPath) || !AppPaths.IsPathInsideLibrary(fullPath)) continue;
+
+                if (string.Equals(_currentFilePath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _player.Stop();
+                    _currentFilePath = null;
+                    _loadedOriginalMidi = null;
+                    _loadedRemappedMidi = null;
+                }
+
+                VoiceOverrideStore.Instance.RemoveOverrides(fullPath);
+                File.Delete(fullPath);
+                deletedCount++;
+
+                if (alsoDeleteLinked)
+                {
+                    var linkedPath = AppPaths.FindMatchingLinkedFile(fullPath);
+                    if (!string.IsNullOrWhiteSpace(linkedPath) && File.Exists(linkedPath) && AppPaths.IsPathInsideLibrary(linkedPath))
+                    {
+                        if (string.Equals(_currentFilePath, linkedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _player.Stop();
+                            _currentFilePath = null;
+                            _loadedOriginalMidi = null;
+                            _loadedRemappedMidi = null;
+                        }
+
+                        VoiceOverrideStore.Instance.RemoveOverrides(linkedPath);
+                        File.Delete(linkedPath);
+                        deletedLinkedCount++;
+                    }
+                }
+            }
+
+            SendLibraryUpdate();
+            var msg = deletedLinkedCount > 0
+                ? $"Deleted {deletedCount} songs (+ {deletedLinkedCount} linked)"
+                : $"Deleted {deletedCount} song{(deletedCount == 1 ? "" : "s")}";
+            SendToJs("notification", new { message = msg });
         }
 
         private void HandleDeleteItem(JsonElement root)

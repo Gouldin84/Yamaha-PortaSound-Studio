@@ -22,6 +22,10 @@ let state = {
     expandedFolders: new Set(),
     collapsedCategories: new Set(),
     visibleSongList: [],
+    // Multi-Selection State
+    isSelectMode: false,
+    selectedSongs: new Set(),
+    lastCheckedSongPath: null,
     channels: Array.from({ length: 16 }, (_, i) => ({
         channel: i,
         channelDisplay: i + 1,
@@ -461,6 +465,110 @@ function toggleCollapseAllFolders() {
     renderLibraryTree();
 }
 
+function updateBatchBar() {
+    const bar = document.getElementById("sidebarBatchBar");
+    const badge = document.getElementById("batchCountBadge");
+    const btnToggle = document.getElementById("btnToggleSelectMode");
+    const count = state.selectedSongs.size;
+
+    if (badge) badge.textContent = `${count} selected`;
+
+    if (btnToggle) {
+        if (state.isSelectMode || count > 0) {
+            btnToggle.classList.add("bg-cyan-500/20", "text-cyan-400", "border", "border-cyan-500/40");
+        } else {
+            btnToggle.classList.remove("bg-cyan-500/20", "text-cyan-400", "border", "border-cyan-500/40");
+        }
+    }
+
+    if (bar) {
+        if (state.isSelectMode || count > 0) {
+            bar.classList.remove("hidden");
+        } else {
+            bar.classList.add("hidden");
+        }
+    }
+}
+
+function toggleSelectMode() {
+    state.isSelectMode = !state.isSelectMode;
+    if (!state.isSelectMode) {
+        state.selectedSongs.clear();
+        state.lastCheckedSongPath = null;
+    }
+    updateBatchBar();
+    renderLibraryTree();
+}
+
+function clearSelection() {
+    state.selectedSongs.clear();
+    state.lastCheckedSongPath = null;
+    state.isSelectMode = false;
+    updateBatchBar();
+    renderLibraryTree();
+}
+
+function selectAllVisible() {
+    if (state.selectedSongs.size === state.visibleSongList.length && state.visibleSongList.length > 0) {
+        state.selectedSongs.clear();
+    } else {
+        state.visibleSongList.forEach(file => state.selectedSongs.add(file.fullPath));
+    }
+    state.isSelectMode = state.selectedSongs.size > 0;
+    updateBatchBar();
+    renderLibraryTree();
+}
+
+function attachDropTarget(targetEl, targetCategory, targetSubFolder, targetFullPath) {
+    targetEl.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        targetEl.classList.add("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+    });
+
+    targetEl.addEventListener("dragleave", (e) => {
+        e.stopPropagation();
+        targetEl.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+    });
+
+    targetEl.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        targetEl.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+
+        try {
+            const raw = e.dataTransfer.getData("application/json");
+            if (!raw) return;
+            const data = JSON.parse(raw);
+
+            if (data.type === "songs" && Array.isArray(data.paths) && data.paths.length > 0) {
+                sendToHost("batch_move_files", {
+                    sourcePaths: data.paths,
+                    targetCategory: targetCategory,
+                    targetSubFolder: targetSubFolder,
+                    alsoMoveLinked: true
+                });
+                clearSelection();
+            } else if (data.type === "folder" && data.fullPath) {
+                // Prevent dropping folder onto itself or into its own subfolder
+                if (data.fullPath.toLowerCase() === targetFullPath.toLowerCase() ||
+                    targetFullPath.toLowerCase().startsWith(data.fullPath.toLowerCase() + "\\")) {
+                    showToast("Cannot move a folder into itself.", true);
+                    return;
+                }
+                sendToHost("move_folder", {
+                    sourceFolderPath: data.fullPath,
+                    targetCategory: targetCategory,
+                    targetParentSubFolder: targetSubFolder
+                });
+            }
+        } catch (err) {
+            console.error("Drop error:", err);
+        }
+    });
+}
+
 function toggleCategory(catKey) {
     if (state.collapsedCategories.has(catKey)) {
         state.collapsedCategories.delete(catKey);
@@ -615,6 +723,20 @@ function openActionModal(actionType, target) {
 
         // Check for matching counterpart file across mirrored library
         sendToHost("check_linked_file", { filePath: target.fullPath, isFolder: false });
+    } else if (actionType === "batch_move") {
+        icon.textContent = "📦";
+        title.textContent = `Move ${target.paths.length} Songs to Folder`;
+        desc.textContent = `Select destination folder for ${target.paths.length} selected songs:`;
+        inputContainer.classList.add("hidden");
+        moveContainer.classList.remove("hidden");
+        populateMoveFolderSelect("gm", "");
+
+        const linkedMoveContainer = document.getElementById("actionModalLinkedMoveContainer");
+        if (linkedMoveContainer) linkedMoveContainer.classList.add("hidden");
+
+        modal.classList.remove("hidden");
+
+        sendToHost("check_linked_file", { filePaths: target.paths, isFolder: false });
     } else if (actionType === "delete") {
         icon.textContent = "🗑️";
         const isFolder = target.type === "folder";
@@ -638,6 +760,26 @@ function openActionModal(actionType, target) {
         modal.classList.remove("hidden");
 
         sendToHost("check_linked_file", { filePath: target.fullPath, isFolder: isFolder });
+    } else if (actionType === "batch_delete") {
+        icon.textContent = "🗑️";
+        title.textContent = `Delete ${target.paths.length} Songs`;
+        desc.textContent = `Are you sure you want to permanently delete these ${target.paths.length} selected songs?`;
+        inputContainer.classList.add("hidden");
+
+        const deleteLabel = document.querySelector("#actionModalLinkedDeleteContainer span");
+        if (deleteLabel) {
+            deleteLabel.textContent = "Also delete matching PSS-790 versions in mirrored library";
+        }
+
+        btnConfirm.className = "px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition";
+        btnConfirm.textContent = `Delete All ${target.paths.length} Forever`;
+
+        const delContainer = document.getElementById("actionModalLinkedDeleteContainer");
+        if (delContainer) delContainer.classList.add("hidden");
+
+        modal.classList.remove("hidden");
+
+        sendToHost("check_linked_file", { filePaths: target.paths, isFolder: false });
     }
 }
 
@@ -670,6 +812,31 @@ function populateMoveFolderSelect(category, currentSubFolder) {
 function handleLinkedFileChecked(data) {
     if (!activeModalAction || !activeModalAction.target) return;
     const target = activeModalAction.target;
+
+    if (data.isBatch) {
+        if (activeModalAction.actionType === "batch_delete" && data.hasLinked) {
+            const container = document.getElementById("actionModalLinkedDeleteContainer");
+            const label = document.getElementById("actionModalLinkedPathLabel");
+            const chk = document.getElementById("chkAlsoDeleteLinked");
+
+            if (container && label && chk) {
+                label.textContent = `${data.linkedCount} matching PSS-790 version(s) found in mirrored library`;
+                chk.checked = true;
+                container.classList.remove("hidden");
+            }
+        } else if (activeModalAction.actionType === "batch_move" && data.hasLinked) {
+            const container = document.getElementById("actionModalLinkedMoveContainer");
+            const label = document.getElementById("actionModalLinkedMovePathLabel");
+            const chk = document.getElementById("chkAlsoMoveLinked");
+
+            if (container && label && chk) {
+                label.textContent = `${data.linkedCount} matching PSS-790 version(s) found in mirrored library`;
+                chk.checked = true;
+                container.classList.remove("hidden");
+            }
+        }
+        return;
+    }
 
     if (activeModalAction.actionType === "delete" && target.fullPath === data.filePath && data.hasLinked) {
         const container = document.getElementById("actionModalLinkedDeleteContainer");
@@ -744,6 +911,16 @@ function confirmActionModal() {
             alsoMoveLinked: alsoMove,
             linkedPath: target.linkedPath || null
         });
+    } else if (actionType === "batch_move") {
+        const selectedSubFolder = folderSelect ? folderSelect.value : "";
+        const alsoMove = chkMoveLinked && chkMoveLinked.checked;
+        sendToHost("batch_move_files", {
+            sourcePaths: target.paths,
+            targetCategory: "gm",
+            targetSubFolder: selectedSubFolder,
+            alsoMoveLinked: alsoMove
+        });
+        clearSelection();
     } else if (actionType === "delete") {
         const alsoDelete = chkLinked && chkLinked.checked && !!target.linkedPath;
         sendToHost("delete_item", {
@@ -752,6 +929,13 @@ function confirmActionModal() {
             alsoDeleteLinked: alsoDelete,
             linkedPath: target.linkedPath || null
         });
+    } else if (actionType === "batch_delete") {
+        const alsoDelete = chkLinked && chkLinked.checked;
+        sendToHost("batch_delete_files", {
+            filePaths: target.paths,
+            alsoDeleteLinked: alsoDelete
+        });
+        clearSelection();
     }
 
     closeActionModal();
@@ -815,6 +999,29 @@ function renderFolderNode(folder, depth, catKey, query) {
         </div>
         <span class="text-[9px] font-mono text-slate-500 ml-1">(${count})</span>
     `;
+
+    folderHeader.draggable = true;
+    folderHeader.addEventListener("dragstart", (e) => {
+        e.stopPropagation();
+        e.dataTransfer.setData("application/json", JSON.stringify({
+            type: "folder",
+            fullPath: folder.fullPath,
+            name: folder.name,
+            category: catKey,
+            relativePath: folder.relativePath || folder.name
+        }));
+        e.dataTransfer.effectAllowed = "move";
+        folderHeader.classList.add("opacity-50");
+    });
+    folderHeader.addEventListener("dragend", () => {
+        folderHeader.classList.remove("opacity-50");
+        document.querySelectorAll(".drag-target-active").forEach(el => {
+            el.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+        });
+    });
+
+    attachDropTarget(folderHeader, catKey, folder.relativePath || folder.name, folder.fullPath);
+
     folderHeader.addEventListener("click", () => toggleFolder(folderKey));
     folderHeader.addEventListener("contextmenu", (e) => {
         showContextMenu(e, {
@@ -941,6 +1148,7 @@ function renderLibraryTree() {
             <span class="text-[10px] font-mono text-slate-500 font-medium">(${catSongCount})</span>
         `;
         catHeader.addEventListener("click", () => toggleCategory(cat.key));
+        attachDropTarget(catHeader, cat.key, "", tree.fullPath);
         catHeader.addEventListener("contextmenu", (e) => {
             showContextMenu(e, {
                 type: "category",
@@ -980,6 +1188,7 @@ function renderLibraryTree() {
                     <span class="text-[9px] font-mono text-slate-500 ml-1">(${filteredRootFiles.length})</span>
                 `;
                 rootHeader.addEventListener("click", () => toggleFolder(rootKey));
+                attachDropTarget(rootHeader, cat.key, "", tree.fullPath);
                 rootHeader.addEventListener("contextmenu", (e) => {
                     showContextMenu(e, {
                         type: "folder",
@@ -1039,15 +1248,20 @@ function createSongItemElement(file) {
     const isSelected = file.fullPath === state.selectedSongPath;
     const isPlaying = file.fullPath === state.currentFilePath && state.isPlaying;
     const isPss = file.format === "pss790";
+    const isChecked = state.selectedSongs.has(file.fullPath);
+    const chkVisibility = (state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
 
     const div = document.createElement("div");
-    div.className = `tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''}`;
+    div.className = `group tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''} ${isChecked ? 'bg-cyan-950/40 border-cyan-800/50' : ''}`;
     div.dataset.fullPath = file.fullPath;
     div.dataset.fileName = file.fileName;
-    div.title = `${file.fileName}\nFolder: ${file.subFolder || '(Root)'}\nClick: Load & inspect\nDouble-click: Play immediately`;
+    div.title = `${file.fileName}\nFolder: ${file.subFolder || '(Root)'}\nClick: Load & inspect\nDouble-click: Play immediately\nDrag: Move to folder`;
+
+    div.draggable = true;
 
     div.innerHTML = `
         <div class="flex items-center space-x-1.5 min-w-0 flex-1">
+            <input type="checkbox" class="song-checkbox w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 cursor-pointer mr-0.5 accent-cyan-500 shrink-0 ${chkVisibility}" ${isChecked ? 'checked' : ''}>
             <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}">
                 ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
             </span>
@@ -1058,13 +1272,67 @@ function createSongItemElement(file) {
         </span>
     `;
 
-    div.addEventListener("click", () => {
+    const chk = div.querySelector(".song-checkbox");
+    if (chk) {
+        chk.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (e.shiftKey && state.lastCheckedSongPath && state.visibleSongList.length > 0) {
+                const idx1 = state.visibleSongList.findIndex(f => f.fullPath === state.lastCheckedSongPath);
+                const idx2 = state.visibleSongList.findIndex(f => f.fullPath === file.fullPath);
+                if (idx1 !== -1 && idx2 !== -1) {
+                    const start = Math.min(idx1, idx2);
+                    const end = Math.max(idx1, idx2);
+                    for (let i = start; i <= end; i++) {
+                        state.selectedSongs.add(state.visibleSongList[i].fullPath);
+                    }
+                }
+            } else {
+                if (chk.checked) {
+                    state.selectedSongs.add(file.fullPath);
+                } else {
+                    state.selectedSongs.delete(file.fullPath);
+                }
+            }
+            state.lastCheckedSongPath = file.fullPath;
+            if (state.selectedSongs.size > 0) {
+                state.isSelectMode = true;
+            }
+            updateBatchBar();
+            renderLibraryTree();
+        });
+    }
+
+    div.addEventListener("dragstart", (e) => {
+        e.stopPropagation();
+        const draggedPaths = state.selectedSongs.has(file.fullPath)
+            ? Array.from(state.selectedSongs)
+            : [file.fullPath];
+
+        e.dataTransfer.setData("application/json", JSON.stringify({
+            type: "songs",
+            paths: draggedPaths,
+            category: file.format
+        }));
+        e.dataTransfer.effectAllowed = "move";
+        div.classList.add("opacity-50");
+    });
+
+    div.addEventListener("dragend", () => {
+        div.classList.remove("opacity-50");
+        document.querySelectorAll(".drag-target-active").forEach(el => {
+            el.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+        });
+    });
+
+    div.addEventListener("click", (e) => {
+        if (e.target.classList.contains("song-checkbox")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_metadata", { path: file.fullPath });
     });
 
-    div.addEventListener("dblclick", () => {
+    div.addEventListener("dblclick", (e) => {
+        if (e.target.classList.contains("song-checkbox")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_and_play", { path: file.fullPath });
@@ -1666,6 +1934,26 @@ const btnCollapseAll = document.getElementById("btnCollapseAll");
 if (btnCollapseAll) {
     btnCollapseAll.addEventListener("click", toggleCollapseAllFolders);
 }
+
+const btnToggleSelectMode = document.getElementById("btnToggleSelectMode");
+if (btnToggleSelectMode) {
+    btnToggleSelectMode.addEventListener("click", toggleSelectMode);
+}
+
+document.getElementById("btnBatchSelectAll")?.addEventListener("click", selectAllVisible);
+document.getElementById("btnBatchClear")?.addEventListener("click", clearSelection);
+
+document.getElementById("btnBatchMove")?.addEventListener("click", () => {
+    if (state.selectedSongs.size > 0) {
+        openActionModal("batch_move", { paths: Array.from(state.selectedSongs) });
+    }
+});
+
+document.getElementById("btnBatchDelete")?.addEventListener("click", () => {
+    if (state.selectedSongs.size > 0) {
+        openActionModal("batch_delete", { paths: Array.from(state.selectedSongs) });
+    }
+});
 
 const sidebarSearchInput = document.getElementById("sidebarSearchInput");
 const btnClearSearch = document.getElementById("btnClearSearch");

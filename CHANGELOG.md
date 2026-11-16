@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-16
+
+### Added
+- **Interactive Drag & Drop File & Folder Management**:
+  - Drag individual songs or multiple selected songs directly into any folder header, root library group, or category root.
+  - Drag entire folders (and all nested subtrees) into other folders or root directories with instant reorganizational drops.
+  - Active drop targets illuminate with cyan outlines (`ring-2 ring-cyan-400 bg-cyan-950/60`) for intuitive visual feedback.
+  - Automatic circular drag prevention: moving a folder into itself or its own descendant subfolder is cleanly blocked.
+- **Multi-Select Checkboxes & Batch Actions**:
+  - Checkboxes added to song rows, supporting single-click toggles and `Shift + Click` range selections.
+  - New multi-select mode toggle button (`☑`) in the sidebar header to reveal checkboxes across all files.
+  - Docked batch action bar showing selected count, `All` (toggle select all visible), `Clear`, `📦 Move`, and `🗑️ Delete`.
+- **Batch Move & Batch Delete with Mirrored Counterparts**:
+  - **Batch Move**: Relocate multiple selected songs simultaneously to any folder, with optional mirrored relocation of linked counterpart files and automatic `VoiceOverrideStore` key migrations.
+  - **Batch Delete**: Permanently delete multiple selected songs in one operation, with detection and optional removal of matching counterpart songs in the mirrored library.
+
 ## [1.6.1] - 2026-11-16
 
 ### Fixed
