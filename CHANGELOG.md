@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] - 2026-11-16
+
+### Fixed
+- **Top Header Bar Fit for ASUS ROG Ally & Handheld Displays**:
+  - Restructured top navigation toolbar (`index.html`) to fit 720p / 1080p @ 150% Windows scaling (1280x720 effective resolution) on ASUS ROG Ally and similar handheld devices without clipping buttons or generating horizontal overflow.
+  - Restricted the redundant `Quick:` GM dropdown to ultra-wide displays (`2xl:` >= 1536px), instantly reclaiming 180px of horizontal breathing room.
+  - Refined button padding, compact icon-first labels with responsive text visibility, and constrained Port select width (`max-w-[110px]` to `[160px]`), ensuring `Library`, `Load`, `Folder`, `Export`, `Batch`, and `About` buttons remain 100% visible, accessible, and aligned.
+- **Electric Grand Piano GM Remapping (Voice 00 Grand Piano)**:
+  - Fixed GM Program 2 (Electric Grand Piano / Yamaha CP-80) remapping from PSS-790 Voice 01 (FM Electric Piano 1) to Voice 00 (AWM Acoustic Grand Piano).
+  - Resolved harsh, metallic, tinny playback in acoustic ballads including *The Greatest Showman - Never Enough*, *Evanescence - My Immortal*, *Alan Walker - Faded*, and *Celine Dion - My Heart Will Go On*.
+- **The Greatest Showman "Never Enough" PSS-790 Edition**:
+  - Created full orchestral `PSS-790 Ready` multi-timbral arrangements in `PSS-790 Midi\Never Enough.mid` and `PSS-790 Midi\Greatest Showman Theme - Never Enough.mid` featuring warm Grand Piano, Bowed Contrabass, Strings, Flute, French Horn, Timpani, Harp, Tubular Bells, and Yamaha PSS-790 Drums.
+
 ## [1.8.5] - 2026-11-16
 
 ### Fixed

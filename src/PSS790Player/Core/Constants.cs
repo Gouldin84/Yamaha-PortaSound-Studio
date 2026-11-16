@@ -246,7 +246,7 @@ namespace PSS790Player.Core
         public static readonly ReadOnlyDictionary<byte, int> GmToPss790VoiceMap = new(new Dictionary<byte, int>
         {
             // 0-7: Piano
-            { 0, 0 }, { 1, 0 }, { 2, 1 }, { 3, 5 }, { 4, 1 }, { 5, 2 }, { 6, 3 }, { 7, 6 },
+            { 0, 0 }, { 1, 0 }, { 2, 0 }, { 3, 5 }, { 4, 1 }, { 5, 2 }, { 6, 3 }, { 7, 6 },
             // 8-15: Chromatic Percussion
             { 8, 43 }, { 9, 43 }, { 10, 98 }, { 11, 40 }, { 12, 41 }, { 13, 42 }, { 14, 43 }, { 15, 37 },
             // 16-23: Organ
