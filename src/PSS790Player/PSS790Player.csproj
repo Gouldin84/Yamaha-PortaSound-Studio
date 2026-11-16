@@ -12,11 +12,12 @@
     <Company>Gouldin84</Company>
     <Product>Yamaha PSS-790 MIDI Workstation</Product>
     <Copyright>Copyright © 2026 Gouldin84</Copyright>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     
     <!-- Standalone Single-File Configuration -->
-    <Version>1.8.1</Version>
-    <AssemblyVersion>1.8.1</AssemblyVersion>
-    <FileVersion>1.8.1</FileVersion>
+    <Version>1.8.2</Version>
+    <AssemblyVersion>1.8.2</AssemblyVersion>
+    <FileVersion>1.8.2</FileVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -30,8 +31,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Resource Include="Assets\app.ico" />
     <EmbeddedResource Include="WebUI\**\*" />
     <Content Include="WebUI\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\app.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
