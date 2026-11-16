@@ -336,5 +336,49 @@ namespace PSS790Player.Tests
                 if (Directory.Exists(tempTarget)) Directory.Delete(tempTarget, true);
             }
         }
+
+        [Fact]
+        public void Remap_WithRpn12PitchBend_RetainsFullOctaveScaleFactor()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            // Send RPN 0,0 with Data Entry MSB = 12 (1 full octave)
+            track.Events.Add(new ControlChangeEvent((SevenBitNumber)101, (SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            track.Events.Add(new ControlChangeEvent((SevenBitNumber)100, (SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            track.Events.Add(new ControlChangeEvent((SevenBitNumber)6, (SevenBitNumber)12) { Channel = (FourBitNumber)0 });
+
+            // Send pitch bend (+1 octave swing = 16383)
+            track.Events.Add(new PitchBendEvent(16383) { Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            var remapped = Remapper.Remap(midi);
+            var pb = remapped.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
+
+            // With RPN 12 detected, scale factor is 12/12 = 1.0 (retains full 16383 swing instead of 9557)
+            Assert.Equal(16383, pb.PitchValue);
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_OverlappingSamePitchNotes_ClampsPriorNote()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+
+            // Note 1: Pitch 60 from tick 0 to 480
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            // Note 2: Same pitch 60 arrives at tick 240 (before Note 1 finishes)
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            var optimizer = new PolyphonyOptimizer(enabled: true);
+            var optimized = optimizer.Optimize(midi);
+
+            var notes = optimized.GetNotes().OrderBy(n => n.Time).ToList();
+            Assert.Equal(2, notes.Count);
+            // Note 1 must be clamped so its EndTime is <= Note 2's start Time
+            Assert.True(notes[0].EndTime <= notes[1].Time);
+        }
     }
 }

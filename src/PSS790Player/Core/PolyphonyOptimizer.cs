@@ -71,6 +71,29 @@ namespace PSS790Player.Core
                 }
             }
 
+            // 2. Resolve Overlapping Same-Pitch Notes on Same Channel
+            // If a note starts while an earlier note of the exact same pitch on the same channel is still sounding,
+            // clamp the earlier note's duration so it ends when the new note starts, preventing hardware voice desync.
+            var notesByChannelPitch = allNotes.GroupBy(n => (n.Channel, n.NoteNumber));
+            foreach (var group in notesByChannelPitch)
+            {
+                var ordered = group.OrderBy(n => n.Time).ToList();
+                for (int i = 0; i < ordered.Count - 1; i++)
+                {
+                    var current = ordered[i];
+                    var next = ordered[i + 1];
+                    if (current.EndTime > next.Time)
+                    {
+                        var clampedLen = Math.Max(1, next.Time - current.Time);
+                        var key = (current.Channel, current.NoteNumber, current.Time);
+                        if (!clampedLengths.ContainsKey(key) || clampedLen < clampedLengths[key])
+                        {
+                            clampedLengths[key] = clampedLen;
+                        }
+                    }
+                }
+            }
+
             if (clampedLengths.Count > 0)
             {
                 foreach (var trackChunk in resultFile.GetTrackChunks())

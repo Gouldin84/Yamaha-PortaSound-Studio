@@ -87,6 +87,32 @@ namespace PSS790Player.Core
             }
 
             // Full GM to PSS-790 Remapping Pipeline
+            // 1. Pre-scan for RPN 0,0 (Pitch Bend Sensitivity) across tracks before filtering controllers
+            var channelBendRange = new Dictionary<int, int>();
+            foreach (var trackChunk in remapped.GetTrackChunks())
+            {
+                var rpnMsb = new Dictionary<int, int>();
+                var rpnLsb = new Dictionary<int, int>();
+
+                foreach (var evt in trackChunk.Events)
+                {
+                    if (evt is ControlChangeEvent cc)
+                    {
+                        int ch = cc.Channel;
+                        if (cc.ControlNumber == 101) rpnMsb[ch] = cc.ControlValue;
+                        else if (cc.ControlNumber == 100) rpnLsb[ch] = cc.ControlValue;
+                        else if (cc.ControlNumber == 6)
+                        {
+                            if (rpnMsb.TryGetValue(ch, out var msb) && msb == 0 &&
+                                rpnLsb.TryGetValue(ch, out var lsb) && lsb == 0)
+                            {
+                                channelBendRange[ch] = (int)cc.ControlValue;
+                            }
+                        }
+                    }
+                }
+            }
+
             var usedChannels = new HashSet<int>();
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
@@ -172,8 +198,12 @@ namespace PSS790Player.Core
                             }
                             else if (chEvt is PitchBendEvent pb && options.ScalePitchBend)
                             {
+                                double scaleFactor = channelBendRange.TryGetValue(originalChannel, out var range) && range > 0
+                                    ? Math.Clamp((double)range / 12.0, 0.05, 1.0)
+                                    : Constants.PitchBendScaleFactor;
+
                                 int centered = pb.PitchValue - 8192;
-                                int scaled = (int)Math.Round(centered * Constants.PitchBendScaleFactor);
+                                int scaled = (int)Math.Round(centered * scaleFactor);
                                 int finalValue = Math.Clamp(8192 + scaled, 0, 16383);
                                 pb.PitchValue = (ushort)finalValue;
                             }
