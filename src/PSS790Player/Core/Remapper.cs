@@ -141,9 +141,10 @@ namespace PSS790Player.Core
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
-                // Filter unsupported events
+                // Filter unsupported events and foreign GS/XG SysEx to protect 31.25k baud hardware buffers
                 trackChunk.Events.RemoveAll(e =>
                     e is ChannelAftertouchEvent or NoteAftertouchEvent ||
+                    e is NormalSysExEvent or EscapeSysExEvent ||
                     (e is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
                     (e is ProgramChangeEvent pc && pc.Channel == (FourBitNumber)9)
                 );
@@ -212,6 +213,39 @@ namespace PSS790Player.Core
                 }
             }
 
+            // Ensure all active melodic channels with notes have an initial Program Change
+            var allActiveNoteChannels = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<NoteOnEvent>()
+                .Where(n => n.Velocity > 0)
+                .Select(n => (int)n.Channel)
+                .Distinct()
+                .ToHashSet();
+
+            var allPcChannels = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<ProgramChangeEvent>()
+                .Select(p => (int)p.Channel)
+                .Distinct()
+                .ToHashSet();
+
+            var firstTrack = remapped.GetTrackChunks().FirstOrDefault();
+            if (firstTrack != null)
+            {
+                foreach (var ch in allActiveNoteChannels)
+                {
+                    if (ch != 15 && !allPcChannels.Contains(ch))
+                    {
+                        // Default to PSS-790 Voice 00: PIANO (MidiProgram 3) at Tick 0
+                        firstTrack.Events.Insert(0, new ProgramChangeEvent((SevenBitNumber)3)
+                        {
+                            Channel = (FourBitNumber)ch,
+                            DeltaTime = 0
+                        });
+                    }
+                }
+            }
+
             // Run Smart Polyphony Optimizer
             if (options.EnablePolyphonyGuard)
             {
@@ -271,8 +305,15 @@ namespace PSS790Player.Core
                 return pssNote;
             }
 
+            // Musical fallbacks for extended GM/GS drum notes
+            if (gmNote is 27 or 28) return 64; // High Q / Slap -> Rimshot
+            if (gmNote is 31 or 33) return 75; // Sticks / Click -> Woodblock/Cowbell
+            if (gmNote is 82 or 83) return 58; // Shaker / Jingle Bell -> Maracas
+            if (gmNote is 84 or 85) return 76; // Bell Tree / Castanets -> Triangle Open
+            if (gmNote is 86 or 87) return 45; // Surdo -> Bass Drum Hi
+
             if (gmNote < 35) return 44; // Bass drum lo
-            if (gmNote > 81) return 60; // Crash cymbal
+            if (gmNote > 81) return 58; // Default high percussion -> Maracas
             return 49;                  // Snare hi
         }
 

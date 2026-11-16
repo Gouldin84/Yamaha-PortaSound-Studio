@@ -94,7 +94,9 @@ namespace PSS790Player.Core
                 }
             }
 
-            if (clampedLengths.Count > 0)
+            bool hasClamped = clampedLengths.Count > 0;
+            bool hasZeroDuration = allNotes.Any(n => n.Length == 0);
+            if (hasClamped || hasZeroDuration)
             {
                 foreach (var trackChunk in resultFile.GetTrackChunks())
                 {
@@ -104,7 +106,11 @@ namespace PSS790Player.Core
                         var key = (note.Channel, note.NoteNumber, note.Time);
                         if (clampedLengths.TryGetValue(key, out var targetLen))
                         {
-                            note.Length = Math.Min(note.Length, targetLen);
+                            note.Length = Math.Max(1, Math.Min(note.Length, targetLen));
+                        }
+                        else if (note.Length == 0)
+                        {
+                            note.Length = 1;
                         }
                     }
                 }

@@ -380,5 +380,46 @@ namespace PSS790Player.Tests
             // Note 1 must be clamped so its EndTime is <= Note 2's start Time
             Assert.True(notes[0].EndTime <= notes[1].Time);
         }
+
+        [Fact]
+        public void Remap_FiltersForeignSysEx_ProtectsHardwareReceiveBuffers()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new NormalSysExEvent(new byte[] { 0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41 })); // Roland GS Reset
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            var remapped = Remapper.Remap(midi);
+            var sysExEvents = remapped.GetTimedEvents().Where(te => te.Event is NormalSysExEvent or EscapeSysExEvent).ToList();
+            Assert.Empty(sysExEvents);
+        }
+
+        [Fact]
+        public void Remap_ActiveChannelMissingProgramChange_InjectsDefaultPiano()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            // Channel 0 has notes but NO ProgramChange
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            var remapped = Remapper.Remap(midi);
+            var pcs = remapped.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent).Select(te => (ProgramChangeEvent)te.Event).ToList();
+
+            // Must have injected ProgramChangeEvent(3) (Voice 00: PIANO)
+            var ch0Pc = pcs.FirstOrDefault(p => p.Channel == (FourBitNumber)0);
+            Assert.NotNull(ch0Pc);
+            Assert.Equal((SevenBitNumber)3, ch0Pc.ProgramNumber);
+        }
+
+        [Fact]
+        public void TranslateDrumNote_ExtendedNotes_ReturnsMusicalFallbacks()
+        {
+            Assert.Equal((byte)64, Remapper.TranslateDrumNote(28)); // Slap -> Rimshot
+            Assert.Equal((byte)75, Remapper.TranslateDrumNote(31)); // Sticks -> Woodblock
+            Assert.Equal((byte)58, Remapper.TranslateDrumNote(82)); // Shaker -> Maracas
+            Assert.Equal((byte)76, Remapper.TranslateDrumNote(84)); // Bell Tree -> Triangle Open
+        }
     }
 }

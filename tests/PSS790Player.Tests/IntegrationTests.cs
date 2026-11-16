@@ -130,5 +130,45 @@ namespace PSS790Player.Tests
             Assert.Equal("VIOLIN 1", v3.Name);
             Assert.Equal(30, v3.VoiceNumber);
         }
+
+        [Fact]
+        public void Pss790Library_AuditAfterBatchConvert_HasZeroSysExAndZeroMissingPc()
+        {
+            var musicDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "Music", "Midi");
+            var pssDir = Path.Combine(musicDir, "PSS-790 Midi");
+
+            if (!Directory.Exists(pssDir)) return;
+
+            var files = Directory.GetFiles(pssDir, "*.mid", SearchOption.AllDirectories);
+            Assert.True(files.Length >= 113, "Expected at least 113 PSS-790 files, got " + files.Length);
+
+            foreach (var file in files)
+            {
+                var midi = MidiFile.Read(file, Constants.DefaultReadingSettings);
+                var events = midi.GetTimedEvents().Select(te => te.Event).ToList();
+
+                // 1. Verify foreign SysEx completely filtered
+                var sysEx = events.OfType<SysExEvent>().ToList();
+                if (sysEx.Any())
+                {
+                    throw new System.Exception($"File '{Path.GetFileName(file)}' has {sysEx.Count} SysEx events! Type: {sysEx[0].GetType().FullName}");
+                }
+
+                // 2. Verify all active melodic channels have a Program Change
+                var activeMelodicChannels = events.OfType<NoteOnEvent>()
+                    .Where(n => n.Channel != (FourBitNumber)15)
+                    .Select(n => n.Channel)
+                    .Distinct();
+
+                var pcChannels = events.OfType<ProgramChangeEvent>()
+                    .Select(pc => pc.Channel)
+                    .ToHashSet();
+
+                foreach (var ch in activeMelodicChannels)
+                {
+                    Assert.Contains(ch, pcChannels);
+                }
+            }
+        }
     }
 }
