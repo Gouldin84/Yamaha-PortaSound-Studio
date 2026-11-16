@@ -22,7 +22,7 @@ namespace PSS790Player.Core
             if (!Directory.Exists(targetDirectory))
                 Directory.CreateDirectory(targetDirectory);
 
-            var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.TopDirectoryOnly)
+            var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
                             f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -37,12 +37,17 @@ namespace PSS790Player.Core
                     if (cancellationToken.IsCancellationRequested)
                         break;
 
-                    var fileName = Path.GetFileName(file);
-                    var destFile = Path.Combine(targetDirectory, fileName);
+                    var relPath = Path.GetRelativePath(sourceDirectory, file);
+                    var destFile = Path.Combine(targetDirectory, relPath);
+                    var destDir = Path.GetDirectoryName(destFile);
+                    if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir))
+                    {
+                        Directory.CreateDirectory(destDir);
+                    }
 
                     try
                     {
-                        var sourceMidi = MidiFile.Read(file);
+                        var sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
                         var remapped = Remapper.Remap(sourceMidi, options);
                         Remapper.SaveRemapped(remapped, destFile);
                     }
@@ -52,7 +57,7 @@ namespace PSS790Player.Core
                     }
 
                     completed++;
-                    progress?.Report((completed, total, fileName));
+                    progress?.Report((completed, total, relPath));
                 }
             }, cancellationToken);
 

@@ -81,5 +81,54 @@ namespace PSS790Player.Tests
             Assert.Contains(drumNoteOns, n => n.NoteNumber == (SevenBitNumber)49); // GM 38 -> PSS 49 (SNARE HI)
             Assert.Contains(drumNoteOns, n => n.NoteNumber == (SevenBitNumber)57); // GM 42 -> PSS 57 (HI HAT CLOSED)
         }
+
+        [Fact]
+        public async System.Threading.Tasks.Task SyncLibrary_RecursiveBatchConvert_AllFilesConvertSuccessfully()
+        {
+            var musicDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "Music", "Midi");
+            var gmDir = Path.Combine(musicDir, "GM Midi");
+            var pssDir = Path.Combine(musicDir, "PSS-790 Midi");
+
+            if (!Directory.Exists(gmDir)) return;
+
+            int count = await BatchConverter.ConvertDirectoryAsync(gmDir, pssDir);
+            Assert.True(count >= 113, "Expected at least 113 files converted, but got " + count);
+        }
+
+        [Fact]
+        public void BleachSong_InBothGmAndPss_DisplaysIdenticalTrueVoices()
+        {
+            var musicDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "Music", "Midi");
+            var gmFile = Path.Combine(musicDir, "GM Midi", "Anime", "Bleach - Never Meant To Belong.mid");
+            var pssFile = Path.Combine(musicDir, "PSS-790 Midi", "Anime", "Bleach - Never Meant To Belong.mid");
+
+            if (!File.Exists(gmFile) || !File.Exists(pssFile)) return;
+
+            var gmMidi = MidiFile.Read(gmFile, Constants.DefaultReadingSettings);
+            var pssMidi = MidiFile.Read(pssFile, Constants.DefaultReadingSettings);
+
+            // In GM file, CH 1 & 2 are GM Prog 1 (Bright Piano), CH 3 is GM Prog 40 (Violin)
+            // In PSS file, CH 1 & 2 are PSS HW Prog 3 (PIANO), CH 3 is PSS HW Prog 10 (VIOLIN 1)
+            Assert.Equal(MidiFormat.GeneralMidi, Remapper.DetectMidiFormat(gmMidi));
+            Assert.Equal(MidiFormat.Pss790Native, Remapper.DetectMidiFormat(pssMidi));
+
+            var pssTimedEvents = pssMidi.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent).ToList();
+            var ch1Pc = pssTimedEvents.Select(te => te.Event).OfType<ProgramChangeEvent>().First(pc => pc.Channel == (FourBitNumber)0);
+            var ch2Pc = pssTimedEvents.Select(te => te.Event).OfType<ProgramChangeEvent>().First(pc => pc.Channel == (FourBitNumber)1);
+            var ch3Pc = pssTimedEvents.Select(te => te.Event).OfType<ProgramChangeEvent>().First(pc => pc.Channel == (FourBitNumber)2);
+
+            // HW Program 3 must map to Voice 0: PIANO (NOT Honky-Tonk)
+            Assert.Equal((SevenBitNumber)3, ch1Pc.ProgramNumber);
+            Assert.Equal((SevenBitNumber)3, ch2Pc.ProgramNumber);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch1Pc.ProgramNumber, out var v1));
+            Assert.Equal("PIANO", v1.Name);
+            Assert.Equal(0, v1.VoiceNumber);
+
+            // HW Program 10 must map to Voice 30: VIOLIN 1 (NOT Music Box)
+            Assert.Equal((SevenBitNumber)10, ch3Pc.ProgramNumber);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch3Pc.ProgramNumber, out var v3));
+            Assert.Equal("VIOLIN 1", v3.Name);
+            Assert.Equal(30, v3.VoiceNumber);
+        }
     }
 }

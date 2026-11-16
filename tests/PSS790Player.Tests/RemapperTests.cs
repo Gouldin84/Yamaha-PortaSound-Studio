@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
@@ -273,6 +274,67 @@ namespace PSS790Player.Tests
             var restoredGm = ReverseRemapper.ReverseRemapToGeneralMidi(pssMidi);
             var restoredPb = restoredGm.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
             Assert.InRange(restoredPb.PitchValue, 16375, 16383);
+        }
+
+        [Fact]
+        public void Pss790MidiProgramToVoice_MapsAllProgramsAccurately()
+        {
+            Assert.Equal(100, Constants.Pss790MidiProgramToVoice.Count);
+
+            // Program 3 -> Voice 0: PIANO
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue(3, out var vPiano));
+            Assert.Equal(0, vPiano.VoiceNumber);
+            Assert.Equal("PIANO", vPiano.Name);
+
+            // Program 10 -> Voice 30: VIOLIN 1
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue(10, out var vViolin));
+            Assert.Equal(30, vViolin.VoiceNumber);
+            Assert.Equal("VIOLIN 1", vViolin.Name);
+
+            // Program 25 -> Voice 5: HONKY-TONK PIANO
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue(25, out var vHonky));
+            Assert.Equal(5, vHonky.VoiceNumber);
+            Assert.Equal("HONKY-TONK PIANO", vHonky.Name);
+
+            // Program 15 -> Voice 44: TRUMPET
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue(15, out var vTrumpet));
+            Assert.Equal(44, vTrumpet.VoiceNumber);
+            Assert.Equal("TRUMPET", vTrumpet.Name);
+
+            // Program 20 -> Voice 55: FLUTE
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue(20, out var vFlute));
+            Assert.Equal(55, vFlute.VoiceNumber);
+            Assert.Equal("FLUTE", vFlute.Name);
+        }
+
+        [Fact]
+        public async System.Threading.Tasks.Task BatchConverter_RecursiveSubdirectories_PreservesHierarchy()
+        {
+            var tempSource = Path.Combine(Path.GetTempPath(), "PSS790_Batch_Source_" + System.Guid.NewGuid());
+            var tempTarget = Path.Combine(Path.GetTempPath(), "PSS790_Batch_Target_" + System.Guid.NewGuid());
+
+            try
+            {
+                Directory.CreateDirectory(Path.Combine(tempSource, "Anime", "Bleach"));
+                Directory.CreateDirectory(Path.Combine(tempSource, "Pop Music"));
+
+                var m1 = new MidiFile(new TrackChunk(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90)));
+                m1.Write(Path.Combine(tempSource, "RootSong.mid"));
+                m1.Write(Path.Combine(tempSource, "Pop Music", "PopSong.mid"));
+                m1.Write(Path.Combine(tempSource, "Anime", "Bleach", "BleachSong.mid"));
+
+                int converted = await BatchConverter.ConvertDirectoryAsync(tempSource, tempTarget);
+                Assert.Equal(3, converted);
+
+                Assert.True(File.Exists(Path.Combine(tempTarget, "RootSong.mid")));
+                Assert.True(File.Exists(Path.Combine(tempTarget, "Pop Music", "PopSong.mid")));
+                Assert.True(File.Exists(Path.Combine(tempTarget, "Anime", "Bleach", "BleachSong.mid")));
+            }
+            finally
+            {
+                if (Directory.Exists(tempSource)) Directory.Delete(tempSource, true);
+                if (Directory.Exists(tempTarget)) Directory.Delete(tempTarget, true);
+            }
         }
     }
 }

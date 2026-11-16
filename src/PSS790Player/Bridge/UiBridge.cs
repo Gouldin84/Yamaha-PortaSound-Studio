@@ -155,7 +155,8 @@ namespace PSS790Player.Bridge
                             VoiceOverrideStore.Instance.ResetOverrides(_currentFilePath);
                             _options.ChannelVoiceOverrides.Clear();
                             ReapplyRemapping();
-                            var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
+                            var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                            var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                             SendToJs("channels_updated", new { channels = channelInfo });
                             SendToJs("notification", new { message = "Reset voices to default GM mapping." });
                         }
@@ -1259,7 +1260,7 @@ namespace PSS790Player.Bridge
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                 ReapplyRemapping();
 
-                var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
+                var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
 
                 SendToJs("file_loaded", new
@@ -1302,7 +1303,7 @@ namespace PSS790Player.Bridge
                 }
 
                 _currentFilePath = resolvedPath;
-                _loadedOriginalMidi = MidiFile.Read(resolvedPath);
+                _loadedOriginalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
 
                 // Restore saved per-song voice overrides from VoiceOverrideStore!
                 _options.ChannelVoiceOverrides.Clear();
@@ -1315,7 +1316,7 @@ namespace PSS790Player.Bridge
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                 ReapplyRemapping();
 
-                var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
+                var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
 
                 SendToJs("file_loaded", new
@@ -1359,7 +1360,7 @@ namespace PSS790Player.Bridge
             }
         }
 
-        private List<object> AnalyzeChannels(MidiFile midi)
+        private List<object> AnalyzeChannels(MidiFile midi, MidiFormat format)
         {
             var channelPrograms = new Dictionary<int, byte>();
             var channelNotes = new HashSet<int>();
@@ -1385,14 +1386,47 @@ namespace PSS790Player.Bridge
             {
                 bool hasNotes = channelNotes.Contains(ch);
                 byte? prog = channelPrograms.TryGetValue(ch, out var p) ? p : null;
-                bool isDrum = ch == 9; // GM Drum channel
+                bool isDrum = (format == MidiFormat.Pss790Native) ? (ch == 15) : (ch == 9);
 
-                string role = isDrum ? "Drums (Remapped to Ch 16)" : (ch == 15 ? "Channel 16" : $"Channel {ch + 1}");
-                string detectedInstrument = isDrum
-                    ? "GM Standard Drum Kit"
-                    : (prog.HasValue ? GetGmInstrumentName(prog.Value) : "Default Piano");
+                string role = isDrum
+                    ? (format == MidiFormat.Pss790Native ? "Fixed Rhythm (Ch 16)" : "Drums (Remapped to Ch 16)")
+                    : $"Channel {ch + 1}";
 
-                int defaultPssVoice = isDrum ? 96 : (prog.HasValue ? Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0) : 0);
+                string detectedInstrument;
+                int defaultPssVoice;
+                string defaultPssVoiceName;
+
+                if (format == MidiFormat.Pss790Native)
+                {
+                    if (isDrum)
+                    {
+                        detectedInstrument = "PSS-790 Percussion (Chart 1)";
+                        defaultPssVoice = 96;
+                        defaultPssVoiceName = "PERCUSSIONS";
+                    }
+                    else if (prog.HasValue && Constants.Pss790MidiProgramToVoice.TryGetValue(prog.Value, out var voiceInfo))
+                    {
+                        defaultPssVoice = voiceInfo.VoiceNumber;
+                        defaultPssVoiceName = voiceInfo.Name;
+                        detectedInstrument = voiceInfo.Name;
+                    }
+                    else
+                    {
+                        defaultPssVoice = 0;
+                        defaultPssVoiceName = "PIANO";
+                        detectedInstrument = "Default Piano";
+                    }
+                }
+                else // General MIDI
+                {
+                    detectedInstrument = isDrum
+                        ? "GM Standard Drum Kit"
+                        : (prog.HasValue ? GetGmInstrumentName(prog.Value) : "Default Piano");
+
+                    defaultPssVoice = isDrum ? 96 : (prog.HasValue ? Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0) : 0);
+                    defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO";
+                }
+
                 int? voiceOverride = _options.ChannelVoiceOverrides.TryGetValue(ch, out var vo) ? vo : null;
 
                 list.Add(new
@@ -1405,7 +1439,7 @@ namespace PSS790Player.Bridge
                     gmProgram = prog,
                     detectedInstrument,
                     defaultPssVoice,
-                    defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO",
+                    defaultPssVoiceName,
                     voiceOverride
                 });
             }

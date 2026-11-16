@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Melanchall.DryWetMidi.Core;
 
 namespace PSS790Player.Core
 {
@@ -11,6 +12,16 @@ namespace PSS790Player.Core
         public const int PolyphonyMax = 28;
         public const int PolyphonyGuardThreshold = 22;
         public const double PitchBendScaleFactor = 1.0 / 6.0; // PSS-790 is fixed +/- 12 semitones, GM is +/- 2
+
+        public static readonly ReadingSettings DefaultReadingSettings = new()
+        {
+            InvalidChunkSizePolicy = InvalidChunkSizePolicy.Ignore,
+            NotEnoughBytesPolicy = NotEnoughBytesPolicy.Ignore,
+            NoHeaderChunkPolicy = NoHeaderChunkPolicy.Ignore,
+            InvalidChannelEventParameterValuePolicy = InvalidChannelEventParameterValuePolicy.ReadValid,
+            InvalidMetaEventParameterValuePolicy = InvalidMetaEventParameterValuePolicy.SnapToLimits,
+            MissedEndOfTrackPolicy = MissedEndOfTrackPolicy.Ignore
+        };
 
         public static readonly HashSet<byte> AllowedControlChanges = new()
         {
@@ -449,11 +460,21 @@ namespace PSS790Player.Core
             { 99, 55 }  // ORCHESTRA HIT -> Orchestra Hit
         });
 
+        // Reverse Chart 2 Program byte to VoiceInfo
+        public static readonly ReadOnlyDictionary<byte, VoiceInfo> Pss790MidiProgramToVoice;
+
         // Reverse Chart 2 Program byte to GM Instrument Number (0-127)
         public static readonly ReadOnlyDictionary<byte, byte> Pss790MidiProgramToGmMap;
 
         static Constants()
         {
+            var progToVoice = new Dictionary<byte, VoiceInfo>();
+            foreach (var voice in Pss790Voices.Values)
+            {
+                progToVoice[voice.MidiProgram] = voice;
+            }
+            Pss790MidiProgramToVoice = new ReadOnlyDictionary<byte, VoiceInfo>(progToVoice);
+
             var map = new Dictionary<byte, byte>();
             foreach (var kvp in Pss790Voices)
             {
