@@ -1249,7 +1249,8 @@ function createSongItemElement(file) {
     const isPlaying = file.fullPath === state.currentFilePath && state.isPlaying;
     const isPss = file.format === "pss790";
     const isChecked = state.selectedSongs.has(file.fullPath);
-    const chkVisibility = (state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
+    const isTouch = window.matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window);
+    const chkVisibility = (isTouch || state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
 
     const div = document.createElement("div");
     div.className = `group tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''} ${isChecked ? 'bg-cyan-950/40 border-cyan-800/50' : ''}`;

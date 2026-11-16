@@ -68,6 +68,18 @@ This application provides a complete bidirectional workstation:
   - **`🎵 Export to General MIDI (DAW/PC)`**: Reverse conversion translating Channel 16 &rarr; Channel 10 drums, Chart 1 notes &rarr; GM drum notes, and Chart 2 voices &rarr; GM instruments for use in Ableton, FL Studio, Logic, Reaper, or Windows media players.
   - **`🎧 Send to Player (Audition)`**: Transfers the native take directly into Tab 1 in Passthrough Mode to play back on the keyboard immediately.
 
+### 🎮 Asus ROG Ally & Handheld Touch Optimization
+- **Fixed-Viewport Workstation Layout**: Full viewport locking (`h-screen overflow-hidden`) eliminates awkward page scrolling, matching professional DAWs like Ableton Live and FL Studio.
+- **Independent Two-Pane Scrolling**:
+  - **Left Sidebar**: 100% height pane where only the file tree scrolls internally. The search bar, selection buttons, docked batch action bar (`📦 Move` & `🗑️ Delete`), and refresh footer remain **100% visible on screen at all times**.
+  - **Right Workspace**: Independent scrollable pane for the transport deck, 16-channel mixer, and inbound monitor. Scrolling the mixer never shifts or hides the library sidebar.
+- **Touch-Friendly Hit Targets**:
+  - Enlarged tap targets ($\ge 36\text{px}$–$44\text{px}$) across buttons and controls.
+  - Checkboxes automatically visible on touchscreens with generous hit zones.
+  - Enlarged $22\text{px}$ slider thumbs for effortless finger volume and tempo tweaking.
+  - 120Hz fluid kinetic touch scrolling via `touch-action: pan-y`.
+- **DPI Scaling & Handheld Dimensions**: Tailored for the Asus ROG Ally Z1 Extreme ($1280 \times 720$ effective resolution at 150% Windows scaling) and compact laptop displays with auto-scaling modals and compact single-line navigation.
+
 ### 📁 Standardized User Library (`C:\Users\%USERNAME%\Music\Midi\`)
 - **`GM Midi\` Subfolder**: Drop zone for raw General MIDI files (automatically remapped during playback and conversion).
 - **`PSS-790 Midi\` Subfolder**: Output destination for converted files and native PSS-790 takes (played in direct Passthrough Mode).

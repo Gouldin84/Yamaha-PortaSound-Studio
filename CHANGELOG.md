@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-16
+
+### Added
+- **Asus ROG Ally Z1 Extreme & Handheld Touch Optimizations**:
+  - **Fixed Viewport Architecture (`h-screen overflow-hidden`)**: Eliminated outer page scrolling completely. The app operates as a locked, full-viewport audio workstation matching standard professional DAWs.
+  - **Independent Two-Pane Scrolling**:
+    - **Left Sidebar**: 100% height pane (`h-full flex flex-col`) where only the tree container scrolls internally. The sidebar header, search input, docked batch action bar (`📦 Move`, `🗑️ Delete`), and refresh footer remain **100% visible on screen at all times without window scrolling**.
+    - **Right Workspace**: Dedicated scrollable deck (`flex-1 min-w-0 h-full overflow-y-auto`) for the transport deck, 16-channel mixer, and inbound signal monitor. Scrolling the mixer never shifts or conceals the library sidebar.
+  - **Compact Single-Row Header**: Redesigned navigation header (~46px) with responsive icon badges that cleanly fit on $1097\text{px}$–$1280\text{px}$ screens without wrapping.
+  - **Touch Hit Target Optimization**:
+    - Checkbox hit zones enlarged to $\ge 36\text{px}$ and automatically displayed on touchscreens without requiring hover.
+    - Mixer and tempo range slider thumbs enlarged to $22\text{px}$ for effortless finger dragging.
+    - Kinetic 120Hz smooth scrolling enabled via `touch-action: pan-y`.
+    - Modal dialogs fitted with `max-h-[90vh] overflow-y-auto` to prevent off-screen clipping when on-screen touch keyboards appear.
+  - **WPF Handheld Display Scaling**: Updated `MainWindow.xaml` startup defaults to `Width="1280" Height="720" MinWidth="960" MinHeight="480" WindowState="Maximized"`, preventing titlebar/taskbar clipping on 7-inch 150% scaled displays.
+
 ## [1.7.1] - 2026-11-16
 
 ### Fixed

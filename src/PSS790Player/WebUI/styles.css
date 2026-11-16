@@ -1,5 +1,9 @@
 /* Custom Modern UI Styling for PSS-790 Player */
 
+* {
+    -webkit-tap-highlight-color: transparent;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
     width: 6px;
@@ -126,12 +130,18 @@ input[type="range"]::-webkit-slider-thumb:hover {
     100% { background-color: transparent; box-shadow: none; }
 }
 
+/* Kinetic scrolling & touch pan */
+#treeContainer,
+#viewPlayerRightPane,
+.custom-scrollbar {
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
+}
+
 /* Quick-Pick Sidebar Styling */
 #quickPickSidebar {
-    height: calc(100vh - 6.5rem);
-    max-height: calc(100vh - 6.5rem);
-    position: sticky;
-    top: 80px;
+    height: 100%;
+    max-height: 100%;
     display: flex;
     flex-direction: column;
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease, opacity 0.2s ease;
@@ -167,6 +177,30 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .tree-song-item.playing {
     color: #38bdf8 !important;
     font-weight: 600;
+}
+
+/* Touch & Handheld (Asus ROG Ally) Optimizations */
+@media (pointer: coarse) {
+    /* Larger slider thumbs for effortless finger dragging */
+    input[type="range"]::-webkit-slider-thumb {
+        width: 22px;
+        height: 22px;
+        box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+    }
+
+    /* Song row hit targets */
+    .tree-song-item {
+        min-height: 2.1rem;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+    }
+
+    /* Checkboxes visible on touchscreen with comfortable hit area */
+    .song-checkbox {
+        display: inline-block !important;
+        width: 1.15rem;
+        height: 1.15rem;
+    }
 }
 
 /* Context Menu & Action Modal Styles */

@@ -25,124 +25,124 @@
         }
     </script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-cyan-500 selection:text-black flex flex-col overflow-x-hidden">
+<body class="bg-slate-950 text-slate-100 h-screen font-sans selection:bg-cyan-500 selection:text-black flex flex-col overflow-hidden select-none">
 
     <!-- Top Navigation Header -->
-    <header class="glass-panel sticky top-0 z-30 px-6 py-3 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
+    <header class="glass-panel shrink-0 z-30 px-3 sm:px-4 py-2 border-b border-slate-800/80 flex items-center justify-between gap-2 overflow-x-auto custom-scrollbar">
         <!-- Logo & Title -->
-        <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="flex items-center space-x-2.5 shrink-0">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center shadow-md shadow-cyan-500/20">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
                 </svg>
             </div>
             <div>
-                <div class="flex items-center space-x-2">
-                    <h1 class="text-base font-bold tracking-tight text-white">PSS-790 MIDI Remapper</h1>
-                    <span class="px-2 py-0.5 text-xs font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60">AWM Engine</span>
+                <div class="flex items-center space-x-1.5">
+                    <h1 class="text-xs sm:text-sm font-bold tracking-tight text-white whitespace-nowrap">PSS-790 MIDI Remapper</h1>
+                    <span class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden sm:inline-block">AWM Engine</span>
                 </div>
-                <p class="text-xs text-slate-400">Multi-Timbral 16-Channel Voice & Drum Synthesizer Bridge</p>
+                <p class="hidden xl:block text-[10px] text-slate-400">Multi-Timbral 16-Channel Voice & Drum Synthesizer Bridge</p>
             </div>
         </div>
 
         <!-- Workspace Tab Switcher -->
-        <div class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 shadow-inner">
-            <button id="tabBtnPlayer" class="tab-btn active flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition-all">
-                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 shadow-inner shrink-0">
+            <button id="tabBtnPlayer" class="tab-btn active flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition-all">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span>Player & Remapper</span>
+                <span>Player</span>
             </button>
-            <button id="tabBtnRecorder" class="tab-btn flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all">
-                <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-                <span>MIDI Studio</span>
-                <span id="recordingPill" class="hidden px-1.5 py-0.5 bg-rose-500/20 text-rose-400 text-[10px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
+            <button id="tabBtnRecorder" class="tab-btn flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span>Studio</span>
+                <span id="recordingPill" class="hidden px-1.5 py-0.2 bg-rose-500/20 text-rose-400 text-[9px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
             </button>
         </div>
 
         <!-- MIDI Hardware Device Selector -->
-        <div class="flex items-center space-x-3">
-            <div class="flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
-                <label for="deviceSelect" class="text-xs font-medium text-slate-400">MIDI Port:</label>
-                <select id="deviceSelect" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[200px]">
+        <div class="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            <div class="flex items-center space-x-1.5 bg-slate-900/80 px-2 sm:px-2.5 py-1 rounded-lg border border-slate-800">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+                <label for="deviceSelect" class="text-[11px] font-medium text-slate-400 hidden md:inline-block">Port:</label>
+                <select id="deviceSelect" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[130px] sm:max-w-[170px]">
                     <option value="" disabled selected>Scanning devices...</option>
                 </select>
             </div>
 
             <!-- Quick-Pick Sidebar Toggle -->
-            <button id="btnToggleSidebar" title="Toggle Quick-Pick Library Tree (Ctrl+B)" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="btnToggleSidebar" title="Toggle Quick-Pick Library Tree (Ctrl+B)" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
                 </svg>
-                <span>Quick-Pick</span>
+                <span class="hidden sm:inline">Library</span>
             </button>
 
             <!-- Browse & Library Buttons -->
-            <button id="btnBrowse" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="btnBrowse" title="Load MIDI File from Disk" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                 </svg>
-                <span>Load File</span>
+                <span>Load</span>
             </button>
 
             <!-- Quick General MIDI Library Picker -->
-            <div class="flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
-                <label for="librarySelect" class="text-xs font-medium text-slate-400">Library:</label>
-                <select id="librarySelect" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[220px]">
+            <div class="hidden lg:flex items-center space-x-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800">
+                <label for="librarySelect" class="text-[11px] font-medium text-slate-400">Quick:</label>
+                <select id="librarySelect" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[140px]">
                     <option value="" selected disabled>Library Loading...</option>
                 </select>
             </div>
 
             <!-- Open Explorer Folder Button -->
-            <button id="btnOpenFolder" title="Open Music\Midi in Windows Explorer" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="btnOpenFolder" title="Open Music\Midi in Windows Explorer" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                 </svg>
-                <span>Open Folder</span>
+                <span class="hidden sm:inline">Folder</span>
             </button>
 
             <!-- Save Remapped MIDI Button -->
-            <button id="btnSaveRemapped" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-600/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="btnSaveRemapped" title="Export Remapped MIDI File" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-md shadow-cyan-600/30 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
                 </svg>
-                <span>Export Remapped</span>
+                <span>Export</span>
             </button>
 
             <!-- Batch Remapper Button -->
-            <button id="btnOpenBatch" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
-                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="btnOpenBatch" title="Batch Remap Folder of MIDIs" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
-                <span>Batch Converter</span>
+                <span>Batch</span>
             </button>
         </div>
     </header>
 
     <!-- Main Content Area -->
-    <main class="flex-1 p-6 max-w-[1700px] w-full mx-auto space-y-6">
+    <main class="flex-1 min-h-0 flex p-2.5 sm:p-3 w-full overflow-hidden">
 
         <!-- ================= TAB 1: PLAYER & REMAPPER ================= -->
-        <div id="viewPlayer" class="flex gap-6 items-start">
+        <div id="viewPlayer" class="w-full h-full flex gap-3 overflow-hidden">
 
-            <!-- Quick-Pick Folder Tree Sidebar (Docked Left, ~290px) -->
-            <aside id="quickPickSidebar" class="w-[290px] shrink-0 glass-panel rounded-2xl border border-slate-800/80 shadow-xl p-4 flex flex-col space-y-3.5 sticky top-[80px] h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] transition-all duration-300">
+            <!-- Quick-Pick Folder Tree Sidebar (Docked Left, ~285px) -->
+            <aside id="quickPickSidebar" class="w-[285px] shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 sm:p-3 flex flex-col space-y-2 h-full max-h-full overflow-hidden transition-all duration-300">
                 <!-- Sidebar Header -->
-                <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5 shrink-0">
-                    <div class="flex items-center space-x-2">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-2 shrink-0">
+                    <div class="flex items-center space-x-1.5">
                         <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                         </svg>
-                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Quick-Pick Library</h3>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Library</h3>
                     </div>
                     <div class="flex items-center space-x-1">
-                        <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode" class="px-1.5 py-0.5 text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
-                        <button id="btnCollapseAll" title="Collapse All / Expand All Folders" class="px-1.5 py-0.5 text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
-                        <span id="sidebarSongCount" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">0 songs</span>
-                        <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B)" class="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-lg">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
+                        <button id="btnCollapseAll" title="Collapse All / Expand All Folders" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
+                        <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">0 songs</span>
+                        <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B)" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                             </svg>
                         </button>
@@ -151,20 +151,20 @@
 
                 <!-- Real-Time Search Filter -->
                 <div class="relative shrink-0">
-                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, games, folders..." class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 pl-8 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
-                    <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, folders..." class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
+                    <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
-                    <button id="btnClearSearch" class="hidden absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs font-bold">×</button>
+                    <button id="btnClearSearch" class="hidden absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs font-bold">×</button>
                 </div>
 
                 <!-- Tree View Container -->
-                <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
+                <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1 custom-scrollbar text-xs select-none">
                     <div class="text-center py-8 text-slate-500 text-xs">Scanning MIDI library...</div>
                 </div>
 
                 <!-- Floating / Docked Batch Action Bar -->
-                <div id="sidebarBatchBar" class="hidden shrink-0 p-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-2 select-none">
+                <div id="sidebarBatchBar" class="hidden shrink-0 p-2 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-1.5 select-none">
                     <div class="flex items-center justify-between text-xs">
                         <span id="batchCountBadge" class="font-bold text-cyan-400 text-[11px]">0 selected</span>
                         <div class="space-x-2">
@@ -174,11 +174,11 @@
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-1.5">
-                        <button id="btnBatchMove" class="px-2.5 py-1.5 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                        <button id="btnBatchMove" class="px-2.5 py-2 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 active:bg-cyan-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
                             <span>📦</span>
                             <span>Move</span>
                         </button>
-                        <button id="btnBatchDelete" class="px-2.5 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                        <button id="btnBatchDelete" class="px-2.5 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:bg-rose-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
                             <span>🗑️</span>
                             <span>Delete</span>
                         </button>
@@ -187,7 +187,7 @@
 
                 <!-- Bottom Quick Explorer Actions & Tip -->
                 <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
-                    <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1" title="Rescan Music\Midi folders">
+                    <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Rescan Music\Midi folders">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                         <span>Refresh</span>
                     </button>
@@ -196,8 +196,8 @@
                 </div>
             </aside>
 
-            <!-- Main Deck & 16-Channel Mixer Area -->
-            <div class="flex-1 min-w-0 space-y-6">
+            <!-- Main Deck & 16-Channel Mixer Area (Independently Scrollable) -->
+            <div id="viewPlayerRightPane" class="flex-1 min-w-0 h-full overflow-y-auto space-y-3.5 pr-1 custom-scrollbar">
 
             <!-- Transport Deck & Song Header -->
             <section class="glass-panel p-5 rounded-2xl border border-slate-800/80 shadow-xl space-y-4">
@@ -296,7 +296,7 @@
         </div>
 
         <!-- ================= TAB 2: MIDI STUDIO / RECORDER ================= -->
-        <div id="viewRecorder" class="hidden space-y-6">
+        <div id="viewRecorder" class="hidden w-full h-full overflow-y-auto space-y-4 pr-1 custom-scrollbar">
 
             <!-- Studio Toolbar & Safety Bar -->
             <section class="glass-panel p-5 rounded-2xl border border-slate-800/80 shadow-xl space-y-4">
@@ -481,8 +481,8 @@
     </main>
 
     <!-- Batch Converter Modal Drawer -->
-    <div id="batchModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-        <div class="glass-panel max-w-lg w-full p-6 rounded-2xl border border-slate-700/80 shadow-2xl space-y-4">
+    <div id="batchModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 hidden">
+        <div class="glass-panel max-w-lg w-full p-5 sm:p-6 rounded-2xl border border-slate-700/80 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div class="flex items-center space-x-2">
                     <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -559,8 +559,8 @@
     </div>
 
     <!-- Library File Action Modal (New Folder, Rename, Move, Delete) -->
-    <div id="fileActionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden">
-        <div class="glass-panel p-6 rounded-2xl border border-slate-800 max-w-md w-full mx-4 shadow-2xl space-y-4">
+    <div id="fileActionModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden p-3">
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-md w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <!-- Modal Header -->
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div class="flex items-center space-x-2">
