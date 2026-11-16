@@ -2230,8 +2230,19 @@ document.getElementById("btnCancelBatch").addEventListener("click", () => {
 document.getElementById("btnStartBatch").addEventListener("click", () => {
     const src = document.getElementById("batchSourceDir").value;
     const tgt = document.getElementById("batchTargetDir").value;
+    const emulateSustain = document.getElementById("chkBatchSustain")?.checked ?? true;
+    const neutralizePitch = document.getElementById("chkBatchPitchTune")?.checked ?? true;
+    const polyphonyGuard = document.getElementById("chkBatchPolyphony")?.checked ?? true;
+    const reverbBoost = document.getElementById("chkBatchReverb")?.checked ?? true;
     document.getElementById("btnStartBatch").disabled = true;
-    sendToHost("start_batch", { sourceDir: src, targetDir: tgt });
+    sendToHost("start_batch", {
+        sourceDir: src,
+        targetDir: tgt,
+        emulateSustain,
+        neutralizePitch,
+        polyphonyGuard,
+        reverbBoost
+    });
 });
 
 // Library Sync Modal Handlers

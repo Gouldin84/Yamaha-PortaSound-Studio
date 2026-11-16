@@ -481,5 +481,122 @@ namespace PSS790Player.Tests
             // Must map to PSS-790 Voice 43: GLOCKENSPIEL (MidiProgram 32)
             Assert.Equal((SevenBitNumber)32, pc.ProgramNumber);
         }
+
+        [Fact]
+        public void Remap_EmulateSustainPedal_ExtendsStaccatoNotesAndFiltersCC64()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            // Sustain pedal DOWN at tick 0
+            tr.Events.Add(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)127) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            // Note On at tick 0
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            // Staccato key release at tick 100
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 100 });
+            // Sustain pedal UP at tick 800 (DeltaTime 700)
+            tr.Events.Add(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 700 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { EmulateSustainPedal = true });
+
+            var notes = remapped.GetNotes().ToList();
+            Assert.Single(notes);
+            // Note should be extended from 100 ticks to at least 750+ ticks
+            Assert.True(notes[0].Length >= 750, $"Expected length >= 750, got {notes[0].Length}");
+
+            // CC 64 should be filtered out to protect PSS-790 serial buffer
+            var ccs = remapped.GetTimedEvents().Select(te => te.Event).OfType<ControlChangeEvent>().ToList();
+            Assert.DoesNotContain(ccs, cc => (byte)cc.ControlNumber == 64);
+        }
+
+        [Fact]
+        public void Remap_NeutralizeAcousticPitchBends_CentersPianoPitchBend()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 }); // GM 0 Grand Piano
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new PitchBendEvent(4000) { Channel = (FourBitNumber)0, DeltaTime = 50 }); // Detuned flat pitch bend
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 100 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { NeutralizeAcousticPitchBends = true });
+
+            var pbs = remapped.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().ToList();
+            Assert.NotEmpty(pbs);
+            // All pitch bends on piano channel must be neutralized to pure 8192
+            Assert.All(pbs, pb => Assert.Equal(8192, pb.PitchValue));
+        }
+
+        [Fact]
+        public void Remap_ScalesPitchBend_PreservesGuitarPitchBend()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)29) { Channel = (FourBitNumber)0, DeltaTime = 0 }); // GM 29 Overdriven Guitar
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new PitchBendEvent(16383) { Channel = (FourBitNumber)0, DeltaTime = 50 }); // Full pitch bend
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 100 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { NeutralizeAcousticPitchBends = true, ScalePitchBend = true });
+
+            var pbs = remapped.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().ToList();
+            // Guitar must retain scaled pitch bend
+            var scaledPb = pbs.FirstOrDefault(p => p.PitchValue > 8192);
+            Assert.NotNull(scaledPb);
+            Assert.InRange(scaledPb.PitchValue, 9550, 9565);
+        }
+
+        [Fact]
+        public void Remap_AutoCenterDanglingPitchBends_InsertsCenterBendAtTrackEnd()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)30) { Channel = (FourBitNumber)0, DeltaTime = 0 }); // Distortion Guitar
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new PitchBendEvent(12000) { Channel = (FourBitNumber)0, DeltaTime = 50 }); // Dangling sharp bend
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 100 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { AutoCenterDanglingPitchBends = true });
+
+            var pbs = remapped.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().ToList();
+            Assert.NotEmpty(pbs);
+            // The final pitch bend on channel 0 must be centered at 8192
+            Assert.Equal(8192, pbs.Last().PitchValue);
+        }
+
+        [Fact]
+        public void Remap_DefaultReverbBoost_InjectsReverbOnChannelsWithoutReverb()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 100 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)38, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 }); // Drum
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)38, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 100 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { DefaultReverbBoost = true });
+
+            var ccs = remapped.GetTimedEvents().Select(te => te.Event).OfType<ControlChangeEvent>().ToList();
+            var ch0Reverb = ccs.FirstOrDefault(c => c.Channel == (FourBitNumber)0 && c.ControlNumber == (SevenBitNumber)91);
+            var ch15Reverb = ccs.FirstOrDefault(c => c.Channel == (FourBitNumber)15 && c.ControlNumber == (SevenBitNumber)91);
+
+            Assert.NotNull(ch0Reverb);
+            Assert.Equal((SevenBitNumber)54, ch0Reverb.ControlValue); // Melodic reverb
+            Assert.NotNull(ch15Reverb);
+            Assert.Equal((SevenBitNumber)32, ch15Reverb.ControlValue); // Drum reverb
+        }
+
+        [Fact]
+        public void Remap_AcousticMelodicNoteClamping_FoldsNotesAbove88()
+        {
+            // For Piano (GM 0), note 92 (E6+) should fold down by 1 octave to 80
+            Assert.Equal((byte)80, Remapper.ClampMelodicNote(92, 0));
+            // For Flute / Synth (GM 80), note 92 stays 92
+            Assert.Equal((byte)92, Remapper.ClampMelodicNote(92, 80));
+        }
     }
 }

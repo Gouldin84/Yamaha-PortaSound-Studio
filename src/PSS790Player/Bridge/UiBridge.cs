@@ -246,7 +246,17 @@ namespace PSS790Player.Bridge
                             ? sProp.GetString()! : AppPaths.GmMidiDir;
                         var targetDir = root.TryGetProperty("targetDir", out var tProp) && !string.IsNullOrEmpty(tProp.GetString())
                             ? tProp.GetString()! : AppPaths.Pss790MidiDir;
-                        StartBatchConversion(sourceDir, targetDir);
+
+                        var batchOptions = new RemapperOptions
+                        {
+                            EmulateSustainPedal = !root.TryGetProperty("emulateSustain", out var susProp) || susProp.GetBoolean(),
+                            NeutralizeAcousticPitchBends = !root.TryGetProperty("neutralizePitch", out var pitProp) || pitProp.GetBoolean(),
+                            AutoCenterDanglingPitchBends = true,
+                            EnablePolyphonyGuard = !root.TryGetProperty("polyphonyGuard", out var polProp) || polProp.GetBoolean(),
+                            DefaultReverbBoost = !root.TryGetProperty("reverbBoost", out var revProp) || revProp.GetBoolean()
+                        };
+
+                        StartBatchConversion(sourceDir, targetDir, batchOptions);
                         break;
                     case "cancel_batch":
                         _batchCts?.Cancel();
@@ -1514,8 +1524,9 @@ namespace PSS790Player.Bridge
             });
         }
 
-        private void StartBatchConversion(string sourceDir, string targetDir)
+        private void StartBatchConversion(string sourceDir, string targetDir, RemapperOptions? options = null)
         {
+            options ??= _options;
             _batchCts?.Cancel();
             _batchCts = new CancellationTokenSource();
 
@@ -1537,7 +1548,7 @@ namespace PSS790Player.Bridge
 
                 try
                 {
-                    int count = await BatchConverter.ConvertDirectoryAsync(resolvedSource, resolvedTarget, _options, progress, _batchCts.Token);
+                    int count = await BatchConverter.ConvertDirectoryAsync(resolvedSource, resolvedTarget, options, progress, _batchCts.Token);
                     SendToJs("batch_complete", new
                     {
                         convertedCount = count,

@@ -94,6 +94,69 @@ namespace PSS790Player.Core
                 }
             }
 
+            // 3. Dynamic Polyphony Protection: Cull Incidental Percussion & Trim Melodic Accompaniment Peaks
+            var notesToCull = new HashSet<(FourBitNumber, SevenBitNumber, long)>();
+            var sortedNotes = allNotes.OrderBy(n => n.Time).ToList();
+            var activeNotes = new List<Note>();
+
+            foreach (var currentNote in sortedNotes)
+            {
+                var currentTime = currentNote.Time;
+                activeNotes.RemoveAll(n => n.EndTime <= currentTime);
+                activeNotes.Add(currentNote);
+
+                while (activeNotes.Count >= _threshold)
+                {
+                    // Step A: Cull incidental low-priority percussion on Channel 15 first
+                    var incidentalDrum = activeNotes
+                        .Where(n => n.Channel == (FourBitNumber)15 && Constants.IncidentalDrums.Contains((byte)n.NoteNumber))
+                        .OrderBy(n => n.Velocity)
+                        .FirstOrDefault();
+
+                    if (incidentalDrum != null)
+                    {
+                        var key = (incidentalDrum.Channel, incidentalDrum.NoteNumber, incidentalDrum.Time);
+                        if (!notesToCull.Contains(key))
+                        {
+                            notesToCull.Add(key);
+                            activeNotes.Remove(incidentalDrum);
+                            continue;
+                        }
+                    }
+
+                    // Step B: Protect lead melody and bass notes, while gently releasing sustained background chord/pad notes
+                    var melodicActive = activeNotes.Where(n => n.Channel != (FourBitNumber)15).ToList();
+                    if (melodicActive.Count <= 2)
+                    {
+                        break; // Keep at least 2 voices (lead and bass) untouched
+                    }
+
+                    byte maxPitch = melodicActive.Max(n => (byte)n.NoteNumber);
+                    var bassNote = melodicActive.Where(n => (byte)n.NoteNumber < 48).OrderBy(n => (byte)n.NoteNumber).FirstOrDefault();
+
+                    // Candidate: an active background accompaniment note that started before currentTime
+                    var cullCandidate = melodicActive
+                        .Where(n => (byte)n.NoteNumber != maxPitch && n != bassNote && n.Time < currentTime)
+                        .OrderBy(n => n.Velocity)
+                        .FirstOrDefault();
+
+                    if (cullCandidate != null)
+                    {
+                        var key = (cullCandidate.Channel, cullCandidate.NoteNumber, cullCandidate.Time);
+                        var clampedLen = Math.Max(1, currentTime - cullCandidate.Time);
+                        if (!clampedLengths.ContainsKey(key) || clampedLen < clampedLengths[key])
+                        {
+                            clampedLengths[key] = clampedLen;
+                        }
+                        activeNotes.Remove(cullCandidate);
+                    }
+                    else
+                    {
+                        break; // No further safe candidates to trim
+                    }
+                }
+            }
+
             bool hasClamped = clampedLengths.Count > 0;
             bool hasZeroDuration = allNotes.Any(n => n.Length == 0);
             if (hasClamped || hasZeroDuration)
@@ -116,51 +179,12 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 2. Dynamic Culling of Incidental Percussion during High Polyphony Peaks
-            var notesToCull = CullIncidentalDuringPeaks(allNotes);
             if (notesToCull.Count > 0)
             {
                 resultFile.RemoveNotes(n => notesToCull.Contains((n.Channel, n.NoteNumber, n.Time)));
             }
 
             return resultFile;
-        }
-
-        private HashSet<(FourBitNumber Channel, SevenBitNumber NoteNumber, long Time)> CullIncidentalDuringPeaks(List<Note> notes)
-        {
-            var notesToRemove = new HashSet<(FourBitNumber, SevenBitNumber, long)>();
-            if (notes.Count == 0) return notesToRemove;
-
-            var sortedNotes = notes.OrderBy(n => n.Time).ToList();
-            var activeNotes = new List<Note>();
-
-            foreach (var currentNote in sortedNotes)
-            {
-                var currentTime = currentNote.Time;
-
-                activeNotes.RemoveAll(n => n.EndTime <= currentTime);
-                activeNotes.Add(currentNote);
-
-                if (activeNotes.Count >= _threshold)
-                {
-                    var incidentalDrum = activeNotes
-                        .Where(n => n.Channel == (FourBitNumber)15 && Constants.IncidentalDrums.Contains((byte)n.NoteNumber))
-                        .OrderBy(n => n.Velocity)
-                        .FirstOrDefault();
-
-                    if (incidentalDrum != null)
-                    {
-                        var key = (incidentalDrum.Channel, incidentalDrum.NoteNumber, incidentalDrum.Time);
-                        if (!notesToRemove.Contains(key))
-                        {
-                            notesToRemove.Add(key);
-                            activeNotes.Remove(incidentalDrum);
-                        }
-                    }
-                }
-            }
-
-            return notesToRemove;
         }
     }
 }

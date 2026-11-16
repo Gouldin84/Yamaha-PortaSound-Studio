@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.6] - 2026-11-16
+## [1.8.7] - 2026-11-16
+
+### Added
+- **Automated Converter Intelligence & Multi-File Optimization Engine**:
+  - Upgraded the core remapping engine (`Remapper.cs`, `RemapperOptions.cs`, and `PolyphonyOptimizer.cs`) to eliminate common MIDI translation flaws automatically across entire libraries:
+    1. **Sustain Pedal Note Emulation (CC 64)**: PSS-790 hardware lacks sustain pedal circuitry, causing piano ballads (e.g. *Children*, *Everytime*) to sound staccato, empty, and clipped. The converter now automatically extends note durations while CC 64 is held, preventing abrupt voice cuts and delivering natural, lush sustain.
+    2. **Acoustic Auto-Tune & Detune Protection**: Automatically neutralizes micro-pitch bends and negative pitch drift on acoustic instruments (Pianos, Organs, Strings, Bells, Choirs, Pads) to pure concert pitch (8192), while preserving scaled pitch bends on solo instruments (Guitars, Synth Leads, Bass).
+    3. **Auto-Centering Dangling Pitch Bends**: Guarantees that any channel that experienced pitch bends receives an explicit center bend event (`PitchValue = 8192`) at track end, eliminating persistent out-of-tune hardware oscillator drift.
+    4. **Dynamic 28-Voice Polyphony Guard with Melodic Preservation**: Enhanced polyphony optimization to track total simultaneous sounding notes. When active voices approach the hardware limit (24+), the engine culls incidental percussion on Ch 16 and gently trims older background accompaniment/pad notes while strictly protecting the lead melody note (highest pitch) and bass root note (lowest pitch).
+    5. **Yamaha DSP Reverb Boost (CC 91)**: Injects default CC 91 reverb levels (value 54 for melodic voices, value 32 for drums) on channels lacking reverb events, ensuring tracks never play back bone-dry.
+    6. **Acoustic Sweet-Spot Octave Clamping**: Folds harsh outlier notes above note 88 (E6) down by 1 octave for acoustic piano, organ, and string samples, avoiding shrill FM aliasing.
+    7. **Sluggish Tempo Normalization**: Configurable `TempoMultiplier` and `AutoNormalizeSluggishTempo` to double half-time or dragging tempos (< 68 BPM) on dense rhythmic sequences.
+- **Batch Converter Intelligence Controls**:
+  - Added "Automated Remapping Engine" toggles directly in the Batch Remap modal (`index.html` & `app.js`) with all protections enabled by default.
+
+### Fixed
+- **ASUS ROG Ally Header Bar Clearance**:
+  - Permanently removed the obsolete `Quick:` GM dropdown from the top navigation bar, guaranteeing that all buttons (`Library`, `Load`, `Folder`, `Export`, `Batch`, `About`) fit cleanly without clipping or wrapping on ASUS ROG Ally at 100%, 125%, and 150% scaling.
 
 ### Fixed
 - **Top Header Bar Fit for ASUS ROG Ally & Handheld Displays**:

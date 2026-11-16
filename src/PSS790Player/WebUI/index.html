@@ -88,8 +88,8 @@
                 <span class="hidden sm:inline">Load</span>
             </button>
 
-            <!-- Quick General MIDI Library Picker (Large screens only >= 1536px) -->
-            <div class="hidden 2xl:flex items-center space-x-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0">
+            <!-- Quick General MIDI Library Picker (Hidden - superseded by Library Sidebar) -->
+            <div class="hidden items-center space-x-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0">
                 <label for="librarySelect" class="text-[11px] font-medium text-slate-400">Quick:</label>
                 <select id="librarySelect" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[130px]">
                     <option value="" selected disabled>Library Loading...</option>
@@ -529,6 +529,27 @@
                     <label class="block text-slate-400 font-medium mb-1">Target Directory:</label>
                     <input type="text" id="batchTargetDir" value="Remapped" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
                 </div>
+            </div>
+
+            <!-- Intelligent Remapping Safeguards -->
+            <div class="space-y-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
+                <span class="block text-slate-300 font-bold mb-1 text-[11px] uppercase tracking-wider text-cyan-400">Automated Remapping Engine</span>
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
+                    <input type="checkbox" id="chkBatchSustain" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                    <span><strong>Sustain Pedal Emulation (CC 64):</strong> Extends staccato piano notes naturally</span>
+                </label>
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
+                    <input type="checkbox" id="chkBatchPitchTune" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                    <span><strong>Acoustic Auto-Tune:</strong> Neutralizes micro-pitch bends & detune drift on piano/strings</span>
+                </label>
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
+                    <input type="checkbox" id="chkBatchPolyphony" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                    <span><strong>28-Voice Polyphony Guard:</strong> Protects lead melody from voice stealing</span>
+                </label>
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
+                    <input type="checkbox" id="chkBatchReverb" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                    <span><strong>Yamaha DSP Reverb Boost:</strong> Engages PSS-790 digital reverb (CC 91)</span>
+                </label>
             </div>
 
             <!-- Progress Bar -->
