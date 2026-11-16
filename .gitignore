@@ -23,6 +23,14 @@ scratch/
 Remapped/
 General MIDI/
 Manuals/
+*.mid
+*.midi
+*.MID
+*.MIDI
+*.wav
+*.mp3
+overrides.json
+*.bak
 
 # Package Directories
 packages/
