@@ -162,3 +162,22 @@ input[type="range"]::-webkit-slider-thumb:hover {
     color: #38bdf8 !important;
     font-weight: 600;
 }
+
+/* Context Menu & Action Modal Styles */
+#libraryContextMenu {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(51, 65, 85, 0.7);
+    animation: ctxFadeIn 0.12s ease-out;
+}
+
+@keyframes ctxFadeIn {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.ctx-menu-item {
+    transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.ctx-menu-item:hover {
+    background-color: rgba(30, 41, 59, 0.9);
+}

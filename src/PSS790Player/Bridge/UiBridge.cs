@@ -106,6 +106,24 @@ namespace PSS790Player.Bridge
                     case "open_explorer":
                         AppPaths.OpenFolderInExplorer();
                         break;
+                    case "reveal_in_explorer":
+                        HandleRevealInExplorer(root);
+                        break;
+                    case "create_folder":
+                        HandleCreateFolder(root);
+                        break;
+                    case "rename_item":
+                        HandleRenameItem(root);
+                        break;
+                    case "move_file":
+                        HandleMoveFile(root);
+                        break;
+                    case "check_linked_file":
+                        HandleCheckLinkedFile(root);
+                        break;
+                    case "delete_item":
+                        HandleDeleteItem(root);
+                        break;
                     case "refresh_library":
                         SendLibraryUpdate();
                         break;
@@ -320,6 +338,298 @@ namespace PSS790Player.Bridge
             }
         }
 
+        private void HandleCreateFolder(JsonElement root)
+        {
+            var category = root.TryGetProperty("category", out var catProp) ? catProp.GetString() : "gm";
+            var parentSubFolder = root.TryGetProperty("parentSubFolder", out var pProp) ? pProp.GetString() ?? "" : "";
+            var folderName = root.TryGetProperty("folderName", out var fnProp) ? fnProp.GetString()?.Trim() : null;
+
+            if (string.IsNullOrWhiteSpace(folderName))
+            {
+                SendToJs("error", new { message = "Folder name cannot be empty." });
+                return;
+            }
+
+            var invalid = Path.GetInvalidFileNameChars();
+            if (folderName.IndexOfAny(invalid) >= 0)
+            {
+                SendToJs("error", new { message = "Folder name contains invalid characters." });
+                return;
+            }
+
+            var baseDir = string.Equals(category, "pss790", StringComparison.OrdinalIgnoreCase)
+                ? AppPaths.Pss790MidiDir
+                : AppPaths.GmMidiDir;
+
+            var targetDir = Path.Combine(baseDir, parentSubFolder, folderName);
+
+            if (!AppPaths.IsPathInsideLibrary(targetDir))
+            {
+                SendToJs("error", new { message = "Invalid directory path." });
+                return;
+            }
+
+            if (Directory.Exists(targetDir))
+            {
+                SendToJs("error", new { message = $"Folder '{folderName}' already exists." });
+                return;
+            }
+
+            Directory.CreateDirectory(targetDir);
+            SendLibraryUpdate();
+            SendToJs("notification", new { message = $"Created folder: {folderName}" });
+        }
+
+        private void HandleRenameItem(JsonElement root)
+        {
+            var fullPath = root.TryGetProperty("fullPath", out var fp) ? fp.GetString() : null;
+            var newName = root.TryGetProperty("newName", out var nn) ? nn.GetString()?.Trim() : null;
+            var isFolder = root.TryGetProperty("isFolder", out var ifProp) && ifProp.GetBoolean();
+
+            if (string.IsNullOrWhiteSpace(fullPath) || string.IsNullOrWhiteSpace(newName))
+            {
+                SendToJs("error", new { message = "Invalid path or name." });
+                return;
+            }
+
+            if (!AppPaths.IsPathInsideLibrary(fullPath))
+            {
+                SendToJs("error", new { message = "Cannot rename items outside library." });
+                return;
+            }
+
+            var invalid = Path.GetInvalidFileNameChars();
+            if (newName.IndexOfAny(invalid) >= 0)
+            {
+                SendToJs("error", new { message = "Name contains invalid characters." });
+                return;
+            }
+
+            var parentDir = Path.GetDirectoryName(fullPath) ?? "";
+
+            if (isFolder)
+            {
+                if (!Directory.Exists(fullPath))
+                {
+                    SendToJs("error", new { message = "Folder not found." });
+                    return;
+                }
+
+                var newPath = Path.Combine(parentDir, newName);
+                if (Directory.Exists(newPath))
+                {
+                    SendToJs("error", new { message = $"Folder '{newName}' already exists." });
+                    return;
+                }
+
+                Directory.Move(fullPath, newPath);
+                VoiceOverrideStore.Instance.RenameFolder(fullPath, newPath);
+
+                if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + "\\", StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentFilePath = newPath + _currentFilePath.Substring(fullPath.Length);
+                }
+
+                SendLibraryUpdate();
+                SendToJs("notification", new { message = $"Renamed folder to: {newName}" });
+            }
+            else
+            {
+                if (!File.Exists(fullPath))
+                {
+                    SendToJs("error", new { message = "File not found." });
+                    return;
+                }
+
+                if (!newName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) &&
+                    !newName.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                {
+                    newName += ".mid";
+                }
+
+                var newPath = Path.Combine(parentDir, newName);
+                if (File.Exists(newPath))
+                {
+                    SendToJs("error", new { message = $"File '{newName}' already exists." });
+                    return;
+                }
+
+                File.Move(fullPath, newPath);
+                VoiceOverrideStore.Instance.RenameFile(fullPath, newPath);
+
+                if (string.Equals(_currentFilePath, fullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentFilePath = newPath;
+                }
+
+                SendLibraryUpdate();
+                SendToJs("notification", new { message = $"Renamed song to: {newName}" });
+            }
+        }
+
+        private void HandleMoveFile(JsonElement root)
+        {
+            var sourcePath = root.TryGetProperty("sourcePath", out var sp) ? sp.GetString() : null;
+            var targetCategory = root.TryGetProperty("targetCategory", out var tc) ? tc.GetString() : "gm";
+            var targetSubFolder = root.TryGetProperty("targetSubFolder", out var tsf) ? tsf.GetString() ?? "" : "";
+
+            if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
+            {
+                SendToJs("error", new { message = "Source file not found." });
+                return;
+            }
+
+            if (!AppPaths.IsPathInsideLibrary(sourcePath))
+            {
+                SendToJs("error", new { message = "Cannot move files outside library." });
+                return;
+            }
+
+            var baseDir = string.Equals(targetCategory, "pss790", StringComparison.OrdinalIgnoreCase)
+                ? AppPaths.Pss790MidiDir
+                : AppPaths.GmMidiDir;
+
+            var destDir = Path.Combine(baseDir, targetSubFolder);
+            if (!AppPaths.IsPathInsideLibrary(destDir) && !string.Equals(Path.GetFullPath(destDir), Path.GetFullPath(baseDir), StringComparison.OrdinalIgnoreCase))
+            {
+                SendToJs("error", new { message = "Invalid destination folder." });
+                return;
+            }
+
+            if (!Directory.Exists(destDir))
+            {
+                Directory.CreateDirectory(destDir);
+            }
+
+            var fileName = Path.GetFileName(sourcePath);
+            var destPath = Path.Combine(destDir, fileName);
+
+            if (string.Equals(sourcePath, destPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (File.Exists(destPath))
+            {
+                SendToJs("error", new { message = $"A file named '{fileName}' already exists in the destination folder." });
+                return;
+            }
+
+            File.Move(sourcePath, destPath);
+            VoiceOverrideStore.Instance.RenameFile(sourcePath, destPath);
+
+            if (string.Equals(_currentFilePath, sourcePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _currentFilePath = destPath;
+            }
+
+            SendLibraryUpdate();
+            var folderLabel = string.IsNullOrEmpty(targetSubFolder) ? "(Root)" : targetSubFolder;
+            SendToJs("notification", new { message = $"Moved '{fileName}' to {folderLabel}" });
+        }
+
+        private void HandleCheckLinkedFile(JsonElement root)
+        {
+            var filePath = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : null;
+            if (string.IsNullOrWhiteSpace(filePath))
+            {
+                SendToJs("linked_file_checked", new { filePath = "", hasLinked = false, linkedPath = (string?)null, linkedName = (string?)null });
+                return;
+            }
+
+            var linked = AppPaths.FindMatchingOptimizedFile(filePath);
+            SendToJs("linked_file_checked", new
+            {
+                filePath,
+                hasLinked = linked != null,
+                linkedPath = linked,
+                linkedName = linked != null ? AppPaths.GetRelativeLibraryPath(linked) : null
+            });
+        }
+
+        private void HandleDeleteItem(JsonElement root)
+        {
+            var fullPath = root.TryGetProperty("fullPath", out var fp) ? fp.GetString() : null;
+            var isFolder = root.TryGetProperty("isFolder", out var ifProp) && ifProp.GetBoolean();
+            var alsoDeleteLinked = root.TryGetProperty("alsoDeleteLinked", out var adl) && adl.GetBoolean();
+            var linkedPath = root.TryGetProperty("linkedPath", out var lp) ? lp.GetString() : null;
+
+            if (string.IsNullOrWhiteSpace(fullPath))
+            {
+                SendToJs("error", new { message = "Invalid path." });
+                return;
+            }
+
+            if (!AppPaths.IsPathInsideLibrary(fullPath))
+            {
+                SendToJs("error", new { message = "Cannot delete files outside library." });
+                return;
+            }
+
+            if (isFolder)
+            {
+                if (Directory.Exists(fullPath))
+                {
+                    if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + "\\", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _player.Stop();
+                        _currentFilePath = null;
+                        _loadedOriginalMidi = null;
+                        _loadedRemappedMidi = null;
+                    }
+
+                    VoiceOverrideStore.Instance.RemoveFolderOverrides(fullPath);
+                    Directory.Delete(fullPath, recursive: true);
+                    SendLibraryUpdate();
+                    SendToJs("notification", new { message = $"Deleted folder: {Path.GetFileName(fullPath)}" });
+                }
+            }
+            else
+            {
+                if (File.Exists(fullPath))
+                {
+                    if (string.Equals(_currentFilePath, fullPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _player.Stop();
+                        _currentFilePath = null;
+                        _loadedOriginalMidi = null;
+                        _loadedRemappedMidi = null;
+                    }
+
+                    VoiceOverrideStore.Instance.RemoveOverrides(fullPath);
+                    File.Delete(fullPath);
+
+                    var deletedBoth = false;
+                    if (alsoDeleteLinked && !string.IsNullOrWhiteSpace(linkedPath) && File.Exists(linkedPath) && AppPaths.IsPathInsideLibrary(linkedPath))
+                    {
+                        if (string.Equals(_currentFilePath, linkedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _player.Stop();
+                            _currentFilePath = null;
+                            _loadedOriginalMidi = null;
+                            _loadedRemappedMidi = null;
+                        }
+
+                        VoiceOverrideStore.Instance.RemoveOverrides(linkedPath);
+                        File.Delete(linkedPath);
+                        deletedBoth = true;
+                    }
+
+                    SendLibraryUpdate();
+                    SendToJs("notification", new { message = deletedBoth ? "Deleted both GM and PSS-790 versions." : $"Deleted: {Path.GetFileName(fullPath)}" });
+                }
+            }
+        }
+
+        private void HandleRevealInExplorer(JsonElement root)
+        {
+            var fullPath = root.TryGetProperty("fullPath", out var fp) ? fp.GetString() : null;
+            if (!string.IsNullOrWhiteSpace(fullPath))
+            {
+                AppPaths.RevealInExplorer(fullPath);
+            }
+        }
+
         private void SendInputDevices()
         {
             var inputDevices = MidiRecorder.GetInputDeviceNames();
@@ -364,14 +674,25 @@ namespace PSS790Player.Bridge
         {
             if (!Directory.Exists(rootDir))
             {
-                return new { name = categoryName, format, folders = new List<object>(), files = new List<object>(), count = 0 };
+                return new { name = categoryName, fullPath = rootDir, format, folders = new List<object>(), files = new List<object>(), count = 0 };
+            }
+
+            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
+            // Pre-populate with all directories so empty folders are visible and targets for move/add
+            foreach (var dir in Directory.GetDirectories(rootDir, "*", SearchOption.AllDirectories))
+            {
+                var relDir = Path.GetRelativePath(rootDir, dir);
+                if (!folderGroups.ContainsKey(relDir))
+                {
+                    folderGroups[relDir] = new List<object>();
+                }
             }
 
             var files = Directory.GetFiles(rootDir, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
             var rootFiles = new List<object>();
 
             foreach (var file in files)
@@ -412,6 +733,7 @@ namespace PSS790Player.Bridge
                 .Select(kvp => new
                 {
                     name = kvp.Key,
+                    fullPath = Path.Combine(rootDir, kvp.Key),
                     files = kvp.Value.OrderBy(f => ((dynamic)f).fileName).ToList(),
                     count = kvp.Value.Count
                 })
@@ -420,6 +742,7 @@ namespace PSS790Player.Bridge
             return new
             {
                 name = categoryName,
+                fullPath = rootDir,
                 format,
                 folders = foldersList,
                 files = rootFiles.OrderBy(f => ((dynamic)f).fileName).ToList(),

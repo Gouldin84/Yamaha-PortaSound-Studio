@@ -236,6 +236,10 @@ function handleHostMessage(msg) {
             showToast(`Saved to ${msg.data.isPss790 ? 'PSS-790 Midi' : 'GM Midi'}: ${msg.data.fileName}`);
             break;
 
+        case "linked_file_checked":
+            handleLinkedFileChecked(msg.data);
+            break;
+
         case "switch_tab":
             if (msg.data.tab) switchTab(msg.data.tab);
             break;
@@ -429,6 +433,257 @@ function clearSearchFilter() {
     renderLibraryTree();
 }
 
+let activeContextTarget = null;
+let activeModalAction = null;
+
+function showContextMenu(e, target) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    activeContextTarget = target;
+    const menu = document.getElementById("libraryContextMenu");
+    if (!menu) return;
+
+    const itemNewFolder = document.getElementById("ctxItemNewFolder");
+    const itemMove = document.getElementById("ctxItemMove");
+    const itemRename = document.getElementById("ctxItemRename");
+    const itemReveal = document.getElementById("ctxItemReveal");
+    const separator = document.getElementById("ctxSeparator");
+    const itemDelete = document.getElementById("ctxItemDelete");
+
+    if (target.type === "song") {
+        itemNewFolder.classList.add("hidden");
+        itemMove.classList.remove("hidden");
+        itemRename.classList.remove("hidden");
+        itemReveal.classList.remove("hidden");
+        separator.classList.remove("hidden");
+        itemDelete.classList.remove("hidden");
+    } else if (target.type === "folder") {
+        itemNewFolder.classList.remove("hidden");
+        itemMove.classList.add("hidden");
+        itemRename.classList.remove("hidden");
+        itemReveal.classList.remove("hidden");
+        separator.classList.remove("hidden");
+        itemDelete.classList.remove("hidden");
+    } else if (target.type === "category" || target.type === "empty") {
+        itemNewFolder.classList.remove("hidden");
+        itemMove.classList.add("hidden");
+        itemRename.classList.add("hidden");
+        itemReveal.classList.remove("hidden");
+        separator.classList.add("hidden");
+        itemDelete.classList.add("hidden");
+    }
+
+    menu.classList.remove("hidden");
+    const menuWidth = 195;
+    const menuHeight = menu.offsetHeight || 165;
+
+    let posX = e.clientX;
+    let posY = e.clientY;
+
+    if (posX + menuWidth > window.innerWidth) {
+        posX = Math.max(10, window.innerWidth - menuWidth - 10);
+    }
+    if (posY + menuHeight > window.innerHeight) {
+        posY = Math.max(10, window.innerHeight - menuHeight - 10);
+    }
+
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+}
+
+function hideContextMenu() {
+    const menu = document.getElementById("libraryContextMenu");
+    if (menu) menu.classList.add("hidden");
+}
+
+function openActionModal(actionType, target) {
+    activeModalAction = { actionType, target };
+
+    const modal = document.getElementById("fileActionModal");
+    const icon = document.getElementById("actionModalIcon");
+    const title = document.getElementById("actionModalTitle");
+    const desc = document.getElementById("actionModalDesc");
+    const inputContainer = document.getElementById("actionModalInputContainer");
+    const inputLabel = document.getElementById("actionModalInputLabel");
+    const input = document.getElementById("actionModalInput");
+    const moveContainer = document.getElementById("actionModalMoveContainer");
+    const linkedContainer = document.getElementById("actionModalLinkedDeleteContainer");
+    const chkLinked = document.getElementById("chkAlsoDeleteLinked");
+    const btnConfirm = document.getElementById("btnConfirmActionModal");
+
+    if (!modal) return;
+
+    inputContainer.classList.remove("hidden");
+    moveContainer.classList.add("hidden");
+    linkedContainer.classList.add("hidden");
+    if (chkLinked) chkLinked.checked = false;
+
+    btnConfirm.className = "px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition";
+    btnConfirm.textContent = "Confirm";
+
+    if (actionType === "new_folder") {
+        icon.textContent = "📁";
+        title.textContent = "Create New Folder";
+        const catLabel = target.category === "pss790" ? "PSS-790 Midi" : "GM Midi";
+        desc.textContent = target.type === "folder"
+            ? `Create a new subfolder inside "${target.name}":`
+            : `Create a new folder in ${catLabel}:`;
+        inputLabel.textContent = "Folder Name:";
+        input.value = "";
+        input.placeholder = "e.g. Doom, Monkey Island, Soundtracks";
+        modal.classList.remove("hidden");
+        setTimeout(() => input.focus(), 50);
+    } else if (actionType === "rename") {
+        icon.textContent = "✏️";
+        const isFolder = target.type === "folder";
+        title.textContent = isFolder ? "Rename Folder" : "Rename Song";
+        desc.textContent = isFolder
+            ? `Enter a new name for folder "${target.name}":`
+            : `Enter a new song title for "${target.name}":`;
+        inputLabel.textContent = isFolder ? "Folder Name:" : "Song Title:";
+
+        let initialVal = target.name || "";
+        if (!isFolder) {
+            initialVal = initialVal.replace(/\.(midi?|MID|MIDI)$/i, "");
+        }
+        input.value = initialVal;
+        input.placeholder = "New name";
+        modal.classList.remove("hidden");
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 50);
+    } else if (actionType === "move") {
+        icon.textContent = "📦";
+        title.textContent = "Move Song to Folder";
+        desc.textContent = `Select destination folder for "${target.name}":`;
+        inputContainer.classList.add("hidden");
+        moveContainer.classList.remove("hidden");
+        populateMoveFolderSelect(target.category, target.subFolder);
+        modal.classList.remove("hidden");
+    } else if (actionType === "delete") {
+        icon.textContent = "🗑️";
+        const isFolder = target.type === "folder";
+        title.textContent = isFolder ? "Delete Folder" : "Delete Song";
+        desc.textContent = isFolder
+            ? `Are you sure you want to permanently delete the folder "${target.name}" and all files inside it?`
+            : `Are you sure you want to permanently delete "${target.name}"?`;
+        inputContainer.classList.add("hidden");
+
+        btnConfirm.className = "px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition";
+        btnConfirm.textContent = "Delete Forever";
+
+        modal.classList.remove("hidden");
+
+        if (!isFolder && target.category === "gm") {
+            sendToHost("check_linked_file", { filePath: target.fullPath });
+        }
+    }
+}
+
+function populateMoveFolderSelect(category, currentSubFolder) {
+    const sel = document.getElementById("actionModalFolderSelect");
+    if (!sel) return;
+    sel.innerHTML = "";
+
+    const tree = category === "pss790" ? state.library.pssTree : state.library.gmTree;
+    const catLabel = category === "pss790" ? "PSS-790 Midi" : "GM Midi";
+
+    const rootOpt = document.createElement("option");
+    rootOpt.value = "";
+    rootOpt.textContent = `📁 (Root) - ${catLabel}`;
+    if (!currentSubFolder) rootOpt.selected = true;
+    sel.appendChild(rootOpt);
+
+    if (tree && tree.folders) {
+        tree.folders.forEach(f => {
+            const opt = document.createElement("option");
+            opt.value = f.name;
+            opt.textContent = `📁 ${f.name} (${f.count || (f.files ? f.files.length : 0)} songs)`;
+            if (currentSubFolder && currentSubFolder.toLowerCase() === f.name.toLowerCase()) {
+                opt.selected = true;
+            }
+            sel.appendChild(opt);
+        });
+    }
+}
+
+function handleLinkedFileChecked(data) {
+    if (activeModalAction && activeModalAction.actionType === "delete" && activeModalAction.target) {
+        const target = activeModalAction.target;
+        if (target.fullPath === data.filePath && data.hasLinked) {
+            const container = document.getElementById("actionModalLinkedDeleteContainer");
+            const label = document.getElementById("actionModalLinkedPathLabel");
+            const chk = document.getElementById("chkAlsoDeleteLinked");
+
+            if (container && label && chk) {
+                target.linkedPath = data.linkedPath;
+                label.textContent = data.linkedName || data.linkedPath;
+                chk.checked = true;
+                container.classList.remove("hidden");
+            }
+        }
+    }
+}
+
+function closeActionModal() {
+    const modal = document.getElementById("fileActionModal");
+    if (modal) modal.classList.add("hidden");
+    activeModalAction = null;
+}
+
+function confirmActionModal() {
+    if (!activeModalAction) return;
+
+    const { actionType, target } = activeModalAction;
+    const input = document.getElementById("actionModalInput");
+    const folderSelect = document.getElementById("actionModalFolderSelect");
+    const chkLinked = document.getElementById("chkAlsoDeleteLinked");
+
+    if (actionType === "new_folder") {
+        const val = input.value.trim();
+        if (!val) {
+            showToast("Please enter a folder name.", true);
+            return;
+        }
+        const parentSub = target.type === "folder" ? target.folderName : "";
+        sendToHost("create_folder", {
+            category: target.category || "gm",
+            parentSubFolder: parentSub,
+            folderName: val
+        });
+    } else if (actionType === "rename") {
+        const val = input.value.trim();
+        if (!val) {
+            showToast("Please enter a name.", true);
+            return;
+        }
+        sendToHost("rename_item", {
+            fullPath: target.fullPath,
+            newName: val,
+            isFolder: target.type === "folder"
+        });
+    } else if (actionType === "move") {
+        const selectedSubFolder = folderSelect ? folderSelect.value : "";
+        sendToHost("move_file", {
+            sourcePath: target.fullPath,
+            targetCategory: target.category || "gm",
+            targetSubFolder: selectedSubFolder
+        });
+    } else if (actionType === "delete") {
+        const alsoDelete = chkLinked && chkLinked.checked && !!target.linkedPath;
+        sendToHost("delete_item", {
+            fullPath: target.fullPath,
+            isFolder: target.type === "folder",
+            alsoDeleteLinked: alsoDelete,
+            linkedPath: target.linkedPath || null
+        });
+    }
+
+    closeActionModal();
+}
+
 function renderLibraryTree() {
     const container = document.getElementById("treeContainer");
     const countBadge = document.getElementById("sidebarSongCount");
@@ -522,6 +777,14 @@ function renderLibraryTree() {
             <span class="text-[10px] font-mono text-slate-500 font-medium">(${catSongCount})</span>
         `;
         catHeader.addEventListener("click", () => toggleCategory(cat.key));
+        catHeader.addEventListener("contextmenu", (e) => {
+            showContextMenu(e, {
+                type: "category",
+                category: cat.key,
+                fullPath: tree.fullPath,
+                name: cat.title
+            });
+        });
         catGroup.appendChild(catHeader);
 
         // Category Content (Folders + Root Files)
@@ -548,6 +811,15 @@ function renderLibraryTree() {
                     <span class="text-[9px] font-mono text-slate-500 ml-1">(${folder.files.length})</span>
                 `;
                 folderHeader.addEventListener("click", () => toggleFolder(folderKey));
+                folderHeader.addEventListener("contextmenu", (e) => {
+                    showContextMenu(e, {
+                        type: "folder",
+                        category: cat.key,
+                        folderName: folder.name,
+                        fullPath: folder.fullPath,
+                        name: folder.name
+                    });
+                });
                 folderGroup.appendChild(folderHeader);
 
                 if (isFolderExpanded) {
@@ -579,6 +851,17 @@ function renderLibraryTree() {
 
         container.appendChild(catGroup);
     });
+
+    container.oncontextmenu = (e) => {
+        if (e.target === container || e.target.id === "treeContainer") {
+            showContextMenu(e, {
+                type: "empty",
+                category: "gm",
+                fullPath: state.library.baseDir,
+                name: "Library"
+            });
+        }
+    };
 
     if (totalRenderedSongs === 0 && query) {
         container.innerHTML = `
@@ -627,6 +910,19 @@ function createSongItemElement(file) {
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_and_play", { path: file.fullPath });
+    });
+
+    div.addEventListener("contextmenu", (e) => {
+        state.selectedSongPath = file.fullPath;
+        highlightActiveSongInTree();
+        showContextMenu(e, {
+            type: "song",
+            category: file.format,
+            file: file,
+            fullPath: file.fullPath,
+            name: file.fileName,
+            subFolder: file.subFolder
+        });
     });
 
     return div;
@@ -704,6 +1000,30 @@ function setupKeyboardShortcuts() {
     window.addEventListener("keydown", (e) => {
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
         const isInputFocused = activeTag === "input" || activeTag === "textarea" || activeTag === "select";
+
+        // Dismiss context menu on Escape
+        const ctxMenu = document.getElementById("libraryContextMenu");
+        if (ctxMenu && !ctxMenu.classList.contains("hidden") && e.key === "Escape") {
+            e.preventDefault();
+            hideContextMenu();
+            return;
+        }
+
+        // Action modal keyboard shortcuts
+        const actionModal = document.getElementById("fileActionModal");
+        if (actionModal && !actionModal.classList.contains("hidden")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeActionModal();
+                return;
+            }
+            if (e.key === "Enter" && document.activeElement && document.activeElement.id === "actionModalInput") {
+                e.preventDefault();
+                confirmActionModal();
+                return;
+            }
+            return;
+        }
 
         // Global shortcut: Ctrl+B to toggle quick-pick sidebar anywhere
         if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
@@ -1212,6 +1532,53 @@ if (btnSidebarRefresh) {
         showToast("Scanning MIDI library...");
     });
 }
+
+// --- Library Context Menu & Action Modal Event Listeners ---
+
+document.getElementById("ctxItemNewFolder")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget) openActionModal("new_folder", activeContextTarget);
+});
+
+document.getElementById("ctxItemMove")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget) openActionModal("move", activeContextTarget);
+});
+
+document.getElementById("ctxItemRename")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget) openActionModal("rename", activeContextTarget);
+});
+
+document.getElementById("ctxItemReveal")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget && activeContextTarget.fullPath) {
+        sendToHost("reveal_in_explorer", { fullPath: activeContextTarget.fullPath });
+    }
+});
+
+document.getElementById("ctxItemDelete")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget) openActionModal("delete", activeContextTarget);
+});
+
+document.getElementById("btnCloseActionModal")?.addEventListener("click", closeActionModal);
+document.getElementById("btnCancelActionModal")?.addEventListener("click", closeActionModal);
+document.getElementById("btnConfirmActionModal")?.addEventListener("click", confirmActionModal);
+
+document.getElementById("fileActionModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "fileActionModal") closeActionModal();
+});
+
+// Dismiss context menu on click outside, blur, or resize
+document.addEventListener("click", (e) => {
+    const menu = document.getElementById("libraryContextMenu");
+    if (menu && !menu.contains(e.target)) {
+        hideContextMenu();
+    }
+});
+window.addEventListener("blur", hideContextMenu);
+window.addEventListener("resize", hideContextMenu);
 
 // --- MIDI Studio / Recorder Event Listeners ---
 

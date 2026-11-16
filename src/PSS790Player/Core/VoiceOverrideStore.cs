@@ -131,6 +131,87 @@ namespace PSS790Player.Core
             }
         }
 
+        public void RemoveOverrides(string filePath) => ResetOverrides(filePath);
+
+        public void RemoveFolderOverrides(string folderPath)
+        {
+            EnsureLoaded();
+            var prefix = NormalizeKey(folderPath).TrimEnd('\\') + "\\";
+
+            lock (_lock)
+            {
+                var keysToRemove = new List<string>();
+                foreach (var k in _overrides.Keys)
+                {
+                    if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        keysToRemove.Add(k);
+                    }
+                }
+
+                if (keysToRemove.Count > 0)
+                {
+                    foreach (var k in keysToRemove)
+                    {
+                        _overrides.Remove(k);
+                    }
+                    SaveInternal();
+                }
+            }
+        }
+
+        public void RenameFile(string oldFilePath, string newFilePath)
+        {
+            EnsureLoaded();
+            var oldKey = NormalizeKey(oldFilePath);
+            var newKey = NormalizeKey(newFilePath);
+
+            if (string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase)) return;
+
+            lock (_lock)
+            {
+                if (_overrides.TryGetValue(oldKey, out var songOverrides))
+                {
+                    _overrides[newKey] = songOverrides;
+                    _overrides.Remove(oldKey);
+                    SaveInternal();
+                }
+            }
+        }
+
+        public void RenameFolder(string oldFolderFullPath, string newFolderFullPath)
+        {
+            EnsureLoaded();
+            var oldPrefix = NormalizeKey(oldFolderFullPath).TrimEnd('\\') + "\\";
+            var newPrefix = NormalizeKey(newFolderFullPath).TrimEnd('\\') + "\\";
+
+            if (string.Equals(oldPrefix, newPrefix, StringComparison.OrdinalIgnoreCase)) return;
+
+            lock (_lock)
+            {
+                var keysToMigrate = new List<string>();
+                foreach (var k in _overrides.Keys)
+                {
+                    if (k.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        keysToMigrate.Add(k);
+                    }
+                }
+
+                if (keysToMigrate.Count > 0)
+                {
+                    foreach (var oldKey in keysToMigrate)
+                    {
+                        var suffix = oldKey.Substring(oldPrefix.Length);
+                        var newKey = newPrefix + suffix;
+                        _overrides[newKey] = _overrides[oldKey];
+                        _overrides.Remove(oldKey);
+                    }
+                    SaveInternal();
+                }
+            }
+        }
+
         public bool HasOverrides(string filePath)
         {
             EnsureLoaded();

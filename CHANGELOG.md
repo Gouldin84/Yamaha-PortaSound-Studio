@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-16
+
+### Added
+- **Right-Click Library File Management & Context Menu**:
+  - Floating dark-mode context menu accessible via right-click across all songs, folders, category headers, and empty space in the Quick-Pick tree.
+  - **Add Folder**: Create new subdirectories directly within `GM Midi` or `PSS-790 Midi` (or nested inside existing folders). Empty folders are preserved and visible in the tree for easy organization.
+  - **Move to Folder**: Reorganize songs into any existing subfolder or back to the category root via a dedicated destination picker modal.
+  - **Rename (Songs & Folders)**: Fast in-place renaming dialog. For song files, the `.mid` extension is hidden during editing to prevent accidental loss, automatically re-attaching upon save.
+  - **Delete with Linked PSS-790 Pair Detection**:
+    - Delete songs and folders with clear confirmation dialogs.
+    - When deleting a General MIDI song, the system automatically checks `PSS-790 Midi` for matching optimized counterparts (exact name or `_PSS790` suffix) and presents a checkbox: `[x] Also delete matching PSS-790 version`.
+    - Deleting purges corresponding custom voice assignments from `overrides.json` to prevent orphaned metadata.
+  - **Automatic Voice Override Migration**:
+    - Moving or renaming songs or folders dynamically transposes relative library keys in `Music\Midi\.pss790\overrides.json`, ensuring custom instrument tweaks are never lost during reorganization.
+  - **Reveal in File Explorer**:
+    - Context menu option instantly opens Windows Explorer with the target file or folder selected.
+
 ## [1.4.0] - 2026-11-16
 
 ### Added
