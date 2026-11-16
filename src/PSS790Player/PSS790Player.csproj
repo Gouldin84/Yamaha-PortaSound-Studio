@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <EmbeddedResource Include="Assets\app.ico" />
     <EmbeddedResource Include="WebUI\**\*" />
     <Content Include="WebUI\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

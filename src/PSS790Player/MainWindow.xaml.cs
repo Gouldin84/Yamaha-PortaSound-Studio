@@ -13,6 +13,17 @@ namespace PSS790Player
         public MainWindow()
         {
             InitializeComponent();
+            try
+            {
+                var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+                using var stream = assembly.GetManifestResourceStream("PSS790Player.Assets.app.ico")
+                                ?? assembly.GetManifestResourceStream("Assets.app.ico");
+                if (stream != null)
+                {
+                    Icon = System.Windows.Media.Imaging.BitmapFrame.Create(stream);
+                }
+            }
+            catch { }
             Loaded += MainWindow_Loaded;
             Closed += MainWindow_Closed;
         }
