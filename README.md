@@ -32,6 +32,17 @@ This application provides a complete bidirectional workstation:
   - **Linked PSS Deletion & Move**: Symmetrically moves or deletes matching PSS-790 optimized versions in the mirrored counterpart library with a single confirmation.
   - **Split-Click Interaction**: Single-click loads song metadata and channel strips in idle mode for inspection and tweaking; double-click or `Enter` starts playback immediately.
   - **Portable Per-Song Voice Memory**: Custom voice selections persist in `Music\Midi\.pss790\overrides.json` and automatically recall when reloading songs. Moving or renaming files/folders dynamically migrates voice assignments without data loss. Dedicated "Reset to GM Voices" button resets overrides back to defaults.
+- **Library Alignment & Sync System (Sync Folders)**:
+  - Dedicated **Sync** button in the sidebar footer right beside **Refresh**.
+  - Interactive diff analysis modal scanning both directories to detect:
+    - 📥 **Missing PSS Files**: Newly added GM songs awaiting conversion.
+    - 🔄 **Outdated PSS Files**: GM source files modified after their PSS conversion.
+    - 🗑️ **Orphan PSS Files**: Ghost files in `PSS-790 Midi` whose GM original was renamed or deleted.
+  - Incremental, non-destructive execution with live progress reporting, automatic pruning of orphaned keys in `VoiceOverrideStore`, and cleanup of empty orphan directories.
+  - Optional checkbox to force re-convert the entire library with the latest hardware rules.
+- **Format-Aware 16-Channel Mixer & Voice Inspector**:
+  - Live channel strips with volume sliders, mute/solo buttons, and voice override dropdowns.
+  - Inspecting native PSS-790 files correctly displays true Chart 2 hardware voices (e.g., `PIANO`, `VIOLIN 1`, `ELEC BASS 1`) and identifies Channel 16 as fixed rhythm, while GM files display General MIDI instrument labels.
 - **Media Player Keyboard Shortcuts**:
   | Key | Action |
   |---|---|
@@ -42,17 +53,25 @@ This application provides a complete bidirectional workstation:
   | `Arrow Left` / `Arrow Right` | Seek backward / forward 5 seconds |
   | `Ctrl + B` | Toggle quick-pick sidebar |
 - **Automatic Channel Routing**: Shifts GM percussion from Channel 10 to Channel 16 (PSS-790's fixed rhythm channel) and safely moves any melodic data on Channel 16 to free melodic channels.
-- **Percussion Note Translation**: Converts GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1) so kick, snare, toms, hi-hats, and cymbals trigger the correct instruments.
+- **Percussion Note Translation & Extended Fallbacks**:
+  - Converts standard GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1).
+  - Musical fallbacks for extended Roland GS / GM drum notes outside the standard range (slaps &rarr; rimshots, sticks &rarr; woodblocks, shakers &rarr; maracas, bell trees &rarr; triangles, surdos &rarr; bass drums).
 - **Non-Linear Voice Translation**: Converts GM Program Change events to the specific non-linear MIDI program numbers required by the PSS-790 (Chart 2) to trigger appropriate voices (00–99).
-- **16-Channel Voice Selector**: Real-time combobox selector on every channel to manually override voice assignments on the fly during playback or before saving.
-- **Pitch Bend Scaling**: Scales GM pitch bend values by 1/6 (~0.1667) to match the PSS-790's fixed $\pm 1$ octave ($\pm 12$ semitones) hardware pitch wheel range.
+- **Dynamic RPN 0,0 Pitch Bend Sensitivity & Scaling**:
+  - Pre-scans controller streams for Registered Parameter Number (RPN 0,0) pitch bend range sensitivity declarations.
+  - Retains full 1:1 scale factor for $\pm 12$-semitone octave slides (e.g., *The Moon.mid* intro), while standard $\pm 2$-semitone GM bends are scaled by 1/6 for the PSS-790's fixed 12-semitone hardware pitch wheel.
+- **Real-Hardware Serial DIN Buffer & Voice Protections**:
+  - **Foreign SysEx Stripping**: Filters Roland GS and Yamaha XG System Exclusive reset dumps (which can burst 250+ messages at once), preventing receive FIFO buffer overruns (`bu full` lockups) across 31,250 baud serial cables.
+  - **Active Channel Missing Program Change Auto-Initialization**: Injects `ProgramChangeEvent(3)` (Voice 00: `PIANO`) at Tick 0 on active channels lacking an initial voice assignment, preventing voice bleeding from prior songs.
+  - **Overlapping Same-Pitch Note Clamping**: Automatically truncates earlier same-pitch notes on identical channels if their duration overlaps a subsequent Note-On, preventing vintage voice-stealing circuit desynchronization.
+  - **Zero-Duration Clamping**: Enforces a minimum note length of 1 tick to prevent hardware hanging notes.
 - **Smart Polyphony Optimizer**:
   - Clamps lingering percussion note durations to free up AWM sound generator elements.
   - Implements hi-hat choke grouping (closed hi-hat truncates open hi-hat).
   - During peak polyphony congestion ($\ge 22$ notes), automatically sheds incidental background percussion and high-density subdivisions while strictly protecting melody, vocal, bass, and kick/snare parts.
 - **Buffer Overrun Protection**: Filters unhandled Control Changes (keeping CC 1, 7, and 91) and strips Aftertouch to protect the synthesizer's internal microcomputer buffer (`bu full`).
 - **Individual Note-Off Panic**: Sends explicit Note-Off commands across all active notes upon stop or seek, eliminating hanging notes.
-- **Batch Converter**: 1-click batch converter for folders of MIDI files with real-time progress tracking.
+- **Recursive Batch Converter**: 1-click batch converter for folders and nested subdirectories of MIDI files with relaxed vintage MIDI chunk parsing and real-time progress tracking.
 
 ### 🎙️ Tab 2: MIDI Recording Studio
 - **Direct PSS-790 Recording**: Captures live performances, vector synthesis sweeps, and built-in auto-accompaniment styles directly from the keyboard's MIDI OUT.
