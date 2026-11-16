@@ -8,6 +8,10 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>PSS790Player</RootNamespace>
     <AssemblyName>PSS790Player</AssemblyName>
+    <Authors>Gouldin84</Authors>
+    <Company>Gouldin84</Company>
+    <Product>Yamaha PSS-790 MIDI Workstation</Product>
+    <Copyright>Copyright © 2026 Gouldin84</Copyright>
     
     <!-- Standalone Single-File Configuration -->
     <Version>1.8.1</Version>
