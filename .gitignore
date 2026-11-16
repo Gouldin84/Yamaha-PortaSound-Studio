@@ -1,6 +1,7 @@
 # Build and Output Directories
 bin/
 obj/
+dist/
 publish/
 release_output/
 TestResults/
