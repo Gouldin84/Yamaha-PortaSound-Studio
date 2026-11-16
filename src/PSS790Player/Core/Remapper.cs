@@ -4,27 +4,90 @@ using System.IO;
 using System.Linq;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Interaction;
 
 namespace PSS790Player.Core
 {
+    public enum MidiFormat
+    {
+        GeneralMidi,
+        Pss790Native
+    }
+
     public class RemapperOptions
     {
         public bool EnablePolyphonyGuard { get; set; } = true;
         public bool ScalePitchBend { get; set; } = true;
         public bool FilterUnsupportedControllers { get; set; } = true;
+        public bool ForceRemap { get; set; } = false;
         public Dictionary<int, int?> ChannelVoiceOverrides { get; set; } = new(); // Channel (0-15) -> VoiceNumber (0-99) or null (auto)
     }
 
     public class Remapper
     {
+        public const string Pss790MarkerText = "PSS790_REMAPPED:v1";
+
+        public static MidiFormat DetectMidiFormat(MidiFile midiFile)
+        {
+            // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is TextEvent textEvent && textEvent.Text.Contains("PSS790_REMAPPED"))
+                        return MidiFormat.Pss790Native;
+                    if (evt is MarkerEvent markerEvent && markerEvent.Text.Contains("PSS790_REMAPPED"))
+                        return MidiFormat.Pss790Native;
+                }
+            }
+
+            // 2. Heuristic Check: Channel 15 has percussion notes and Channel 9 has no events
+            var usedChannels = new HashSet<int>();
+            bool hasChannel15DrumNotes = false;
+
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is ChannelEvent ce)
+                    {
+                        usedChannels.Add(ce.Channel);
+                        if (ce.Channel == 15 && ce is NoteOnEvent noteOn && (byte)noteOn.Velocity > 0)
+                        {
+                            byte note = (byte)noteOn.NoteNumber;
+                            if (Constants.Pss790Drums.ContainsKey(note))
+                            {
+                                hasChannel15DrumNotes = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!usedChannels.Contains(9) && usedChannels.Contains(15) && hasChannel15DrumNotes)
+            {
+                return MidiFormat.Pss790Native;
+            }
+
+            return MidiFormat.GeneralMidi;
+        }
+
         public static MidiFile Remap(MidiFile sourceMidi, RemapperOptions? options = null)
         {
             options ??= new RemapperOptions();
             var remapped = sourceMidi.Clone();
+            var format = DetectMidiFormat(remapped);
 
-            // Detect channels used in source
+            // If already PSS-790 converted and not forced, run in Passthrough Mode
+            if (format == MidiFormat.Pss790Native && !options.ForceRemap)
+            {
+                ApplyVoiceOverridesOnly(remapped, options.ChannelVoiceOverrides);
+                EnsureMarkerEmbedded(remapped);
+                return remapped;
+            }
+
+            // Full GM to PSS-790 Remapping Pipeline
             var usedChannels = new HashSet<int>();
-
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 foreach (var evt in trackChunk.Events)
@@ -36,9 +99,6 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Determine Channel Relocation
-            // GM Drums: Channel 9 (10 in 1-based display) -> PSS-790 Channel 15 (16)
-            // If Channel 15 already has melodic events, shift to lowest unused channel 0-14
             int? relocatedMelodicChannel = null;
             if (usedChannels.Contains(15) && usedChannels.Contains(9))
             {
@@ -55,14 +115,14 @@ namespace PSS790Player.Core
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
-                // 1. Filter out unsupported SysEx, Aftertouch, and non-whitelisted CCs
+                // Filter unsupported events
                 trackChunk.Events.RemoveAll(e =>
                     e is ChannelAftertouchEvent or NoteAftertouchEvent ||
                     (e is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
-                    (e is ProgramChangeEvent pc && pc.Channel == (FourBitNumber)9) // Will be drum channel 15
+                    (e is ProgramChangeEvent pc && pc.Channel == (FourBitNumber)9)
                 );
 
-                // 2. Process Channel Events in-place
+                // Process channel events in-place
                 foreach (var evt in trackChunk.Events)
                 {
                     if (evt is ChannelEvent chEvt)
@@ -82,7 +142,6 @@ namespace PSS790Player.Core
 
                         if (currentChannel == 15)
                         {
-                            // Drum Channel Note Translation
                             if (chEvt is NoteOnEvent noteOn)
                             {
                                 noteOn.NoteNumber = (SevenBitNumber)TranslateDrumNote((byte)noteOn.NoteNumber);
@@ -94,7 +153,6 @@ namespace PSS790Player.Core
                         }
                         else
                         {
-                            // Melodic Channel Processing
                             if (chEvt is ProgramChangeEvent pc)
                             {
                                 if (options.ChannelVoiceOverrides.TryGetValue(currentChannel, out var overrideVoice) && overrideVoice.HasValue)
@@ -124,14 +182,56 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 3. Run Smart Polyphony Optimizer
+            // Run Smart Polyphony Optimizer
             if (options.EnablePolyphonyGuard)
             {
                 var optimizer = new PolyphonyOptimizer(enabled: true);
                 remapped = optimizer.Optimize(remapped);
             }
 
+            // Embed metadata marker
+            EnsureMarkerEmbedded(remapped);
+
             return remapped;
+        }
+
+        private static void ApplyVoiceOverridesOnly(MidiFile midi, Dictionary<int, int?> overrides)
+        {
+            if (overrides == null || overrides.Count == 0) return;
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is ProgramChangeEvent pc && pc.Channel != (FourBitNumber)15)
+                    {
+                        int ch = pc.Channel;
+                        if (overrides.TryGetValue(ch, out var overrideVoice) && overrideVoice.HasValue)
+                        {
+                            if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
+                            {
+                                pc.ProgramNumber = (SevenBitNumber)voiceInfo.MidiProgram;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void EnsureMarkerEmbedded(MidiFile midi)
+        {
+            var firstTrack = midi.GetTrackChunks().FirstOrDefault();
+            if (firstTrack == null)
+            {
+                firstTrack = new TrackChunk();
+                midi.Chunks.Add(firstTrack);
+            }
+
+            bool markerExists = firstTrack.Events.Any(e => e is TextEvent t && t.Text.Contains("PSS790_REMAPPED"));
+            if (!markerExists)
+            {
+                firstTrack.Events.Insert(0, new TextEvent(Pss790MarkerText) { DeltaTime = 0 });
+            }
         }
 
         public static byte TranslateDrumNote(byte gmNote)
@@ -154,6 +254,7 @@ namespace PSS790Player.Core
                 Directory.CreateDirectory(dir);
             }
 
+            EnsureMarkerEmbedded(remapped);
             remapped.Write(destinationPath, overwriteFile: true);
         }
     }

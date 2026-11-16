@@ -122,9 +122,46 @@ namespace PSS790Player.Tests
             var remapped = Remapper.Remap(midiFile);
 
             var events = remapped.GetTimedEvents().Select(te => te.Event).ToList();
-            Assert.Equal(2, events.Count);
-            Assert.All(events.OfType<ControlChangeEvent>(), cc => Assert.True((byte)cc.ControlNumber is 1 or 7));
-            Assert.Empty(events.OfType<ChannelAftertouchEvent>());
+            Assert.Contains(events, e => e is TextEvent t && t.Text.Contains("PSS790_REMAPPED"));
+            var channelEvents = events.OfType<ChannelEvent>().ToList();
+            Assert.Equal(2, channelEvents.Count);
+            Assert.All(channelEvents.OfType<ControlChangeEvent>(), cc => Assert.True((byte)cc.ControlNumber is 1 or 7));
+            Assert.Empty(channelEvents.OfType<ChannelAftertouchEvent>());
+        }
+
+        [Fact]
+        public void DetectMidiFormat_IdentifiesGeneralMidiAndPss790Native()
+        {
+            // Standard GM file
+            var gmMidi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)38, (SevenBitNumber)90) { Channel = (FourBitNumber)9 });
+            gmMidi.Chunks.Add(track);
+
+            Assert.Equal(MidiFormat.GeneralMidi, Remapper.DetectMidiFormat(gmMidi));
+
+            // Remap and verify marker is embedded and detected as Pss790Native
+            var remapped = Remapper.Remap(gmMidi);
+            Assert.Equal(MidiFormat.Pss790Native, Remapper.DetectMidiFormat(remapped));
+        }
+
+        [Fact]
+        public void Remap_IsIdempotent_PreventsDoublePitchBendScaling()
+        {
+            var gmMidi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new PitchBendEvent(16383) { Channel = (FourBitNumber)0 });
+            gmMidi.Chunks.Add(track);
+
+            // First pass: scaled down by 1/6 (~9557)
+            var pass1 = Remapper.Remap(gmMidi);
+            var pb1 = pass1.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
+            Assert.InRange(pb1.PitchValue, 9550, 9565);
+
+            // Second pass: should NOT scale down again by another 1/6 (would be ~8419 if double-scaled)
+            var pass2 = Remapper.Remap(pass1);
+            var pb2 = pass2.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
+            Assert.Equal(pb1.PitchValue, pb2.PitchValue); // Exactly identical, no double scaling!
         }
     }
 }

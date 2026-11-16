@@ -29,6 +29,8 @@ namespace PSS790Player.Bridge
             _webView = webView;
             _player = new MidiPlayer();
 
+            AppPaths.EnsureDirectoriesExist();
+
             _player.ChannelActivity += (s, e) =>
             {
                 SendToJs("channel_activity", new
@@ -63,6 +65,12 @@ namespace PSS790Player.Bridge
                 {
                     case "get_initial_data":
                         HandleGetInitialData();
+                        break;
+                    case "open_explorer":
+                        AppPaths.OpenFolderInExplorer();
+                        break;
+                    case "refresh_library":
+                        SendLibraryUpdate();
                         break;
                     case "select_device":
                         var dev = root.GetProperty("deviceName").GetString();
@@ -130,8 +138,10 @@ namespace PSS790Player.Bridge
                         SaveRemappedDialog();
                         break;
                     case "start_batch":
-                        var sourceDir = root.GetProperty("sourceDir").GetString() ?? "General MIDI";
-                        var targetDir = root.GetProperty("targetDir").GetString() ?? "Remapped";
+                        var sourceDir = root.TryGetProperty("sourceDir", out var sProp) && !string.IsNullOrEmpty(sProp.GetString())
+                            ? sProp.GetString()! : AppPaths.GmMidiDir;
+                        var targetDir = root.TryGetProperty("targetDir", out var tProp) && !string.IsNullOrEmpty(tProp.GetString())
+                            ? tProp.GetString()! : AppPaths.Pss790MidiDir;
                         StartBatchConversion(sourceDir, targetDir);
                         break;
                     case "cancel_batch":
@@ -159,31 +169,65 @@ namespace PSS790Player.Bridge
                 })
                 .ToList();
 
-            // Locate library files in General MIDI
-            var libraryFiles = new List<string>();
-            var gmDir = FindDirectory("General MIDI");
-            if (Directory.Exists(gmDir))
-            {
-                libraryFiles = Directory.GetFiles(gmDir, "*.mid")
-                    .Select(Path.GetFileName)
-                    .Where(f => !string.IsNullOrEmpty(f))
-                    .Cast<string>()
-                    .OrderBy(f => f)
-                    .ToList();
-            }
+            var libraryData = ScanLibraryFiles();
 
             SendToJs("initial_data", new
             {
                 devices,
                 voices,
-                libraryFiles,
-                defaultDevice = devices.FirstOrDefault()
+                library = libraryData,
+                defaultDevice = devices.FirstOrDefault(),
+                defaultBatchSource = AppPaths.GmMidiDir,
+                defaultBatchTarget = AppPaths.Pss790MidiDir
             });
 
             if (devices.Count > 0)
             {
                 _player.SetOutputDevice(devices[0]);
             }
+        }
+
+        private void SendLibraryUpdate()
+        {
+            var libraryData = ScanLibraryFiles();
+            SendToJs("library_updated", libraryData);
+        }
+
+        private object ScanLibraryFiles()
+        {
+            AppPaths.EnsureDirectoriesExist();
+
+            var gmFiles = Directory.GetFiles(AppPaths.GmMidiDir, "*.*")
+                .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                .Select(f => new
+                {
+                    fileName = Path.GetFileName(f),
+                    fullPath = f,
+                    format = "gm",
+                    category = "GM Midi"
+                })
+                .OrderBy(f => f.fileName)
+                .ToList();
+
+            var pssFiles = Directory.GetFiles(AppPaths.Pss790MidiDir, "*.*")
+                .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                .Select(f => new
+                {
+                    fileName = Path.GetFileName(f),
+                    fullPath = f,
+                    format = "pss790",
+                    category = "PSS-790 Midi"
+                })
+                .OrderBy(f => f.fileName)
+                .ToList();
+
+            return new
+            {
+                gmFiles,
+                pssFiles,
+                hasFiles = gmFiles.Count > 0 || pssFiles.Count > 0,
+                baseDir = AppPaths.BaseMidiDir
+            };
         }
 
         private void BrowseAndLoadFile()
@@ -193,6 +237,7 @@ namespace PSS790Player.Bridge
                 var dialog = new OpenFileDialog
                 {
                     Filter = "MIDI Files (*.mid;*.midi)|*.mid;*.midi|All Files (*.*)|*.*",
+                    InitialDirectory = AppPaths.BaseMidiDir,
                     Title = "Open Standard MIDI File"
                 };
 
@@ -210,9 +255,11 @@ namespace PSS790Player.Bridge
                 string resolvedPath = pathOrName;
                 if (!File.Exists(resolvedPath))
                 {
-                    var gmDir = FindDirectory("General MIDI");
-                    var candidate = Path.Combine(gmDir, pathOrName);
-                    if (File.Exists(candidate)) resolvedPath = candidate;
+                    var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
+                    var pssCandidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
+
+                    if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
+                    else if (File.Exists(pssCandidate)) resolvedPath = pssCandidate;
                 }
 
                 if (!File.Exists(resolvedPath))
@@ -224,9 +271,9 @@ namespace PSS790Player.Bridge
                 _currentFilePath = resolvedPath;
                 _loadedOriginalMidi = MidiFile.Read(resolvedPath);
 
+                var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                 ReapplyRemapping();
 
-                // Channel Analysis
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
 
@@ -234,6 +281,8 @@ namespace PSS790Player.Bridge
                 {
                     fileName = Path.GetFileName(resolvedPath),
                     filePath = resolvedPath,
+                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
+                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo
@@ -334,21 +383,25 @@ namespace PSS790Player.Bridge
 
             Application.Current.Dispatcher.Invoke(() =>
             {
-                var defaultName = _currentFilePath != null
-                    ? $"{Path.GetFileNameWithoutExtension(_currentFilePath)}_PSS790.mid"
-                    : "Remapped_PSS790.mid";
+                var originalName = _currentFilePath != null ? Path.GetFileNameWithoutExtension(_currentFilePath) : "Remapped";
+                if (!originalName.EndsWith("_PSS790", StringComparison.OrdinalIgnoreCase))
+                {
+                    originalName += "_PSS790";
+                }
 
                 var dialog = new SaveFileDialog
                 {
                     Filter = "MIDI File (*.mid)|*.mid",
-                    FileName = defaultName,
+                    InitialDirectory = AppPaths.Pss790MidiDir,
+                    FileName = $"{originalName}.mid",
                     Title = "Save Remapped PSS-790 MIDI File"
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
                     Remapper.SaveRemapped(_loadedRemappedMidi, dialog.FileName);
-                    SendToJs("notification", new { message = $"Saved successfully to: {dialog.FileName}" });
+                    SendToJs("notification", new { message = $"Saved to: {Path.GetFileName(dialog.FileName)}" });
+                    SendLibraryUpdate();
                 }
             });
         }
@@ -358,8 +411,8 @@ namespace PSS790Player.Bridge
             _batchCts?.Cancel();
             _batchCts = new CancellationTokenSource();
 
-            var resolvedSource = FindDirectory(sourceDir);
-            var resolvedTarget = Path.IsPathRooted(targetDir) ? targetDir : Path.Combine(Directory.GetCurrentDirectory(), targetDir);
+            var resolvedSource = Directory.Exists(sourceDir) ? sourceDir : AppPaths.GmMidiDir;
+            var resolvedTarget = Directory.Exists(targetDir) ? targetDir : AppPaths.Pss790MidiDir;
 
             Task.Run(async () =>
             {
@@ -382,25 +435,13 @@ namespace PSS790Player.Bridge
                         convertedCount = count,
                         targetDirectory = resolvedTarget
                     });
+                    SendLibraryUpdate();
                 }
                 catch (Exception ex)
                 {
                     SendToJs("error", new { message = $"Batch error: {ex.Message}" });
                 }
             });
-        }
-
-        private static string FindDirectory(string dirName)
-        {
-            if (Directory.Exists(dirName)) return Path.GetFullPath(dirName);
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var path = Path.Combine(baseDir, dirName);
-            if (Directory.Exists(path)) return path;
-
-            var parent = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", dirName));
-            if (Directory.Exists(parent)) return parent;
-
-            return dirName;
         }
 
         private void SendToJs(string type, object data)

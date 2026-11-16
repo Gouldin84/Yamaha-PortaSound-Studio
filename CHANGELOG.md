@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-11-16
+
+### Added
+- Dedicated User MIDI Library: Automatically creates and monitors `C:\Users\%USERNAME%\Music\Midi\` with subfolders:
+  - `GM Midi`: Input folder for raw General MIDI files.
+  - `PSS-790 Midi`: Output and storage folder for converted, PSS-790-ready files.
+- One-Click "Open Library" button in the application header to instantly launch Windows Explorer to the library folder.
+- Non-destructive MIDI marker (`PSS790_REMAPPED:v1`) embedded into converted files.
+- Smart Format Detection and Idempotent Passthrough: Automatically detects if a file is already formatted for the PSS-790, bypassing remapping to prevent destructive double pitch-bend scaling and voice translation.
+- UI Format Indicators & Badging:
+  - Song header displays format badges: `🎵 GM (Auto-Remapping Active)` or `⚡ PSS-790 Native (Direct Passthrough)`.
+  - Library dropdown categorizes songs into distinct optgroups with format icons.
+- Automated library rescan on launch and immediately following file conversions.
+
 ## [1.0.0] - 2026-11-16
 
 ### Added

@@ -3,7 +3,7 @@
 let state = {
     devices: [],
     voices: [],
-    libraryFiles: [],
+    library: { gmFiles: [], pssFiles: [], hasFiles: false, baseDir: "" },
     currentFile: null,
     isPlaying: false,
     isPaused: false,
@@ -47,10 +47,17 @@ function handleHostMessage(msg) {
         case "initial_data":
             state.devices = msg.data.devices || [];
             state.voices = msg.data.voices || [];
-            state.libraryFiles = msg.data.libraryFiles || [];
+            state.library = msg.data.library || { gmFiles: [], pssFiles: [], hasFiles: false };
+            if (msg.data.defaultBatchSource) document.getElementById("batchSourceDir").value = msg.data.defaultBatchSource;
+            if (msg.data.defaultBatchTarget) document.getElementById("batchTargetDir").value = msg.data.defaultBatchTarget;
             renderDeviceSelect();
             renderLibrarySelect();
             renderMixer();
+            break;
+
+        case "library_updated":
+            state.library = msg.data || { gmFiles: [], pssFiles: [], hasFiles: false };
+            renderLibrarySelect();
             break;
 
         case "file_loaded":
@@ -61,6 +68,16 @@ function handleHostMessage(msg) {
             document.getElementById("timeScrubber").max = state.durationSeconds;
             document.getElementById("timeScrubber").value = 0;
             document.getElementById("fileStatusBadge").textContent = "Loaded";
+
+            // Format Badge Rendering
+            const badgeContainer = document.getElementById("formatBadgeContainer");
+            if (badgeContainer) {
+                if (msg.data.format === "pss790") {
+                    badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha PSS-790. Direct passthrough active."><span>⚡</span><span>PSS-790 Ready</span></span>`;
+                } else {
+                    badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
+                }
+            }
 
             // Update channel analysis
             if (msg.data.channels) {
@@ -130,14 +147,46 @@ function renderDeviceSelect() {
 
 function renderLibrarySelect() {
     const sel = document.getElementById("librarySelect");
-    sel.innerHTML = `<option value="" selected disabled>Select Sample...</option>`;
-    state.libraryFiles.forEach(file => {
-        const opt = document.createElement("option");
-        opt.value = file;
-        opt.textContent = file;
-        opt.className = "bg-slate-900 text-white";
-        sel.appendChild(opt);
-    });
+    sel.innerHTML = "";
+
+    const lib = state.library;
+    const hasGm = lib.gmFiles && lib.gmFiles.length > 0;
+    const hasPss = lib.pssFiles && lib.pssFiles.length > 0;
+
+    if (!hasGm && !hasPss) {
+        sel.innerHTML = `<option value="" selected disabled>Library Empty (Click 'Open Folder')</option>`;
+        return;
+    }
+
+    sel.innerHTML = `<option value="" selected disabled>Select from Library...</option>`;
+
+    if (hasGm) {
+        const gmGroup = document.createElement("optgroup");
+        gmGroup.label = "🎵 GM Midi (Needs Conversion)";
+        gmGroup.className = "bg-slate-900 text-indigo-400 font-bold";
+        lib.gmFiles.forEach(f => {
+            const opt = document.createElement("option");
+            opt.value = f.fullPath;
+            opt.textContent = `🎵 ${f.fileName}`;
+            opt.className = "bg-slate-900 text-slate-200 font-normal";
+            gmGroup.appendChild(opt);
+        });
+        sel.appendChild(gmGroup);
+    }
+
+    if (hasPss) {
+        const pssGroup = document.createElement("optgroup");
+        pssGroup.label = "⚡ PSS-790 Midi (Converted - Ready)";
+        pssGroup.className = "bg-slate-900 text-emerald-400 font-bold";
+        lib.pssFiles.forEach(f => {
+            const opt = document.createElement("option");
+            opt.value = f.fullPath;
+            opt.textContent = `⚡ ${f.fileName}`;
+            opt.className = "bg-slate-900 text-slate-200 font-normal";
+            pssGroup.appendChild(opt);
+        });
+        sel.appendChild(pssGroup);
+    }
 }
 
 function renderMixer() {
@@ -351,6 +400,10 @@ document.getElementById("deviceSelect").addEventListener("change", (e) => {
 
 document.getElementById("btnBrowse").addEventListener("click", () => {
     sendToHost("browse_file");
+});
+
+document.getElementById("btnOpenFolder").addEventListener("click", () => {
+    sendToHost("open_explorer");
 });
 
 document.getElementById("librarySelect").addEventListener("change", (e) => {

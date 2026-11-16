@@ -66,10 +66,18 @@
             <!-- Quick General MIDI Library Picker -->
             <div class="flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800">
                 <label for="librarySelect" class="text-xs font-medium text-slate-400">Library:</label>
-                <select id="librarySelect" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[180px]">
-                    <option value="" selected disabled>Select Sample...</option>
+                <select id="librarySelect" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[220px]">
+                    <option value="" selected disabled>Library Loading...</option>
                 </select>
             </div>
+
+            <!-- Open Explorer Folder Button -->
+            <button id="btnOpenFolder" title="Open Music\Midi in Windows Explorer" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
+                <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                </svg>
+                <span>Open Folder</span>
+            </button>
 
             <!-- Save Remapped MIDI Button -->
             <button id="btnSaveRemapped" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-600/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
@@ -103,7 +111,10 @@
                         </svg>
                     </div>
                     <div>
-                        <h2 id="currentSongTitle" class="text-lg font-bold text-white tracking-tight">No File Loaded</h2>
+                        <div class="flex items-center space-x-2">
+                            <h2 id="currentSongTitle" class="text-lg font-bold text-white tracking-tight">No File Loaded</h2>
+                            <div id="formatBadgeContainer"></div>
+                        </div>
                         <div class="flex items-center space-x-3 text-xs text-slate-400">
                             <span id="fileStatusBadge" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">Idle</span>
                             <span id="channelSummary">16 Channels Ready</span>
