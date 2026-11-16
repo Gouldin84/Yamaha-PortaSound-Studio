@@ -1,6 +1,6 @@
-# Yamaha PSS-790 MIDI Player & Remapper
+# Yamaha PSS-790 MIDI Player, Remapper & Recording Studio
 
-A high-performance standalone MIDI player, voice remapper, and converter designed specifically for the **Yamaha PortaSound PSS-790** keyboard synthesizer.
+A high-performance standalone MIDI workstation, real-time voice remapper, and two-way recording studio designed specifically for the **Yamaha PortaSound PSS-790** keyboard synthesizer.
 
 [![Release](https://img.shields.io/github/v/release/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter)](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -11,58 +11,91 @@ A high-performance standalone MIDI player, voice remapper, and converter designe
 
 ## Overview
 
-The Yamaha PSS-790 (released in 1990) features a 28-voice polyphonic AWM tone generator with 100 preset voices, 50 rhythm styles, and 16-channel multi-timbral reception. However, because it predates the General MIDI (GM) standard, standard MIDI files sound unaligned or distorted without translation.
+The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polyphonic Advanced Wave Memory (AWM) tone generator with 100 preset voices, 50 built-in rhythm styles, a vector synth joystick pad, and 16-channel multi-timbral MIDI reception. However, because it predates the General MIDI (GM) standard, standard MIDI files sound distorted, transposed, or unaligned without translation.
 
-This application provides real-time translation, hardware playback, and offline file conversion to output cleanly onto the PSS-790.
+This application provides a complete bidirectional workstation:
+1. **Player & Voice Remapper**: Real-time translation, hardware playback, and batch file conversion for General MIDI files.
+2. **MIDI Recording Studio**: Direct capture from the PSS-790 keyboard, styles, and vector pad, with native 1:1 playback preservation and reverse export to standard General MIDI for modern DAWs.
 
-### Key Capabilities
+---
 
+## Key Features
+
+### 📻 Tab 1: Player & Voice Remapper
 - **Automatic Channel Routing**: Shifts GM percussion from Channel 10 to Channel 16 (PSS-790's fixed rhythm channel) and safely moves any melodic data on Channel 16 to free melodic channels.
 - **Percussion Note Translation**: Converts GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1) so kick, snare, toms, hi-hats, and cymbals trigger the correct instruments.
 - **Non-Linear Voice Translation**: Converts GM Program Change events to the specific non-linear MIDI program numbers required by the PSS-790 (Chart 2) to trigger appropriate voices (00–99).
 - **16-Channel Voice Selector**: Real-time combobox selector on every channel to manually override voice assignments on the fly during playback or before saving.
-- **Pitch Bend Scaling**: Scales GM pitch bend values by 1/6 (~0.1667) to match the PSS-790's fixed +/- 1 octave (12 semitones) hardware pitch wheel range.
+- **Pitch Bend Scaling**: Scales GM pitch bend values by 1/6 (~0.1667) to match the PSS-790's fixed $\pm 1$ octave ($\pm 12$ semitones) hardware pitch wheel range.
 - **Smart Polyphony Optimizer**:
   - Clamps lingering percussion note durations to free up AWM sound generator elements.
   - Implements hi-hat choke grouping (closed hi-hat truncates open hi-hat).
-  - During peak polyphony congestion (>= 22 notes), automatically sheds incidental background percussion and high-density subdivisions while strictly protecting melody, vocal, bass, and kick/snare parts.
+  - During peak polyphony congestion ($\ge 22$ notes), automatically sheds incidental background percussion and high-density subdivisions while strictly protecting melody, vocal, bass, and kick/snare parts.
 - **Buffer Overrun Protection**: Filters unhandled Control Changes (keeping CC 1, 7, and 91) and strips Aftertouch to protect the synthesizer's internal microcomputer buffer (`bu full`).
 - **Individual Note-Off Panic**: Sends explicit Note-Off commands across all active notes upon stop or seek, eliminating hanging notes.
-- **Standalone `.exe`**: Self-contained Windows x64 binary with zero external runtime dependencies.
-- **Modern DAW Interface**: Sleek dark aesthetic styled with Tailwind CSS, glowing real-time note meters, and custom volume faders.
-- **MIDI Recording Studio (2nd Tab)**: Real-time recording workstation capturing MIDI input from external controllers or the Yamaha PSS-790 itself, complete with 1-bar count-in, BPM control, metronome click track, anti-feedback loop guard, 16-channel live inbound activity meters, and instant 1-click export to PSS-790 format or handoff to the player.
-- **Dedicated User Library**: Automatically creates and manages `C:\Users\%USERNAME%\Music\Midi\` with subfolders for `GM Midi` (raw input) and `PSS-790 Midi` (converted files), complete with a 1-click "Open Library" folder button.
-- **Smart Format Detection & Visual Badging**: Recognizes native PSS-790 vs. GM MIDI files via non-destructive markers (`PSS790_REMAPPED:v1`). Displays `🎵 GM` and `⚡ PSS-790` badges and prevents destructive double-remapping.
-- **File Export & Batch Conversion**: Saves corrected `.mid` files with voice overrides preserved, plus a 1-click batch converter for directories of MIDI files.
+- **Batch Converter**: 1-click batch converter for folders of MIDI files with real-time progress tracking.
+
+### 🎙️ Tab 2: MIDI Recording Studio
+- **Direct PSS-790 Recording**: Captures live performances, vector synthesis sweeps, and built-in auto-accompaniment styles directly from the keyboard's MIDI OUT.
+- **Anti-Feedback Loop Guard**: Software MIDI Thru is disabled by default with an explicit opt-in toggle to safeguard against destructive feedback loops caused by the PSS-790's internal soft-thru merger.
+- **DAW Transport & Timing Assist**:
+  - Large digital timecode display (`00:00:00.0`) and musical bar/beat counter (`BAR 01 : 1`).
+  - Configurable tempo (40 to 240 BPM) with synchronized slider and number inputs.
+  - Visual 1-bar (4 beat) count-in countdown banner before capture begins.
+  - Built-in Web Audio metronome click track (accented high click on beat 1).
+- **16-Channel Inbound Signal Monitor**: Live DAW-style channel cards across all 16 MIDI channels illuminating glowing rose LEDs and displaying note names/velocities on incoming `NoteOnEvent`s.
+- **3 Post-Recording Take Actions**:
+  - **`⚡ Save Native (PSS-790 Ready)`**: Direct 1:1 capture without remapping. Embeds the `PSS790_REMAPPED:v1` marker and saves to `Music\Midi\PSS-790 Midi\`.
+  - **`🎵 Export to General MIDI (DAW/PC)`**: Reverse conversion translating Channel 16 &rarr; Channel 10 drums, Chart 1 notes &rarr; GM drum notes, and Chart 2 voices &rarr; GM instruments for use in Ableton, FL Studio, Logic, Reaper, or Windows media players.
+  - **`🎧 Send to Player (Audition)`**: Transfers the native take directly into Tab 1 in Passthrough Mode to play back on the keyboard immediately.
+
+### 📁 Standardized User Library (`C:\Users\%USERNAME%\Music\Midi\`)
+- **`GM Midi\` Subfolder**: Drop zone for raw General MIDI files (automatically remapped during playback and conversion).
+- **`PSS-790 Midi\` Subfolder**: Output destination for converted files and native PSS-790 takes (played in direct Passthrough Mode).
+- **1-Click "Open Folder"**: Top navigation button to instantly reveal the library directory in Windows Explorer.
+- **Visual Format Badging**:
+  - `🎵 GM`: General MIDI file requiring auto-remapping.
+  - `⚡ PSS-790`: Native PSS-790 file with direct passthrough engaged.
 
 ---
 
 ## Installation & Download
 
+### Running Pre-Built Binaries
 Download the latest standalone executable from the **[Releases](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)** page:
 1. Download `PSS790Player.exe` (or `PSS790Player-win-x64.zip`).
-2. Run `PSS790Player.exe` (no installation or setup required).
+2. Run `PSS790Player.exe` directly (no installation or .NET runtime installation required).
+
+### Running from Project Clone
+If you have cloned the repository, a pre-compiled standalone executable is ready in the root `dist` folder:
+```powershell
+.\dist\PSS790Player.exe
+```
 
 ---
 
 ## Hardware Setup Guide
 
-1. **Connect MIDI**:
-   - Connect your PC's USB-MIDI Interface `OUT` to the Yamaha PSS-790 `MIDI IN`.
-   - *Note*: Leave the PSS-790 `MIDI OUT` disconnected during computer playback to avoid feedback loops caused by the keyboard's internal soft-thru merger.
-2. **Configure PSS-790 Multi-Timbre Mode**:
-   - Press the `RECEIVE CH/CLOCK` button on the PSS-790.
-   - Verify that channels 1 through 16 are enabled (`<E 1>` through `<E 16>`).
-   - Set MIDI Clock to disabled (`<d c>`).
-3. **Launch Player**:
-   - Select your USB-MIDI interface in the application's MIDI Port dropdown.
-   - Load any standard MIDI file, customize voice assignments if desired, and click Play.
+### 1. Cabling
+- **For Playback**: Connect your PC's USB-MIDI Interface `OUT` &rarr; Yamaha PSS-790 `MIDI IN`.
+- **For Recording**: Connect Yamaha PSS-790 `MIDI OUT` &rarr; PC's USB-MIDI Interface `IN`.
+- *Caution*: Keep the application's **MIDI Thru Forward** switch disabled unless intentionally routing to a separate sound module; the PSS-790 automatically merges MIDI IN data into its MIDI OUT jack, which can create a loopback feedback storm if echoed by the PC.
+
+### 2. Configure PSS-790 Multi-Timbre Mode
+1. Press the `RECEIVE CH/CLOCK` button on the PSS-790.
+2. Verify that channels 1 through 16 are enabled (`<E 1>` through `<E 16>`).
+3. Set MIDI Clock to disabled (`<d c>`) for playback, or enabled (`<E c>`) if synchronizing keyboard rhythm styles with external software.
+
+### 3. Launch & Connect
+1. Select your USB-MIDI interface in the application's **MIDI Port** (Output) and **MIDI In** (Input) dropdowns.
+2. Drag and drop `.mid` files into `C:\Users\%USERNAME%\Music\Midi\GM Midi\` or click **Load File**.
+3. Customize voice assignments if desired, and click **Play**.
 
 ---
 
 ## Technical Documentation
 
-Detailed MIDI specification, voice matrices, and percussion tables are documented in:
+Detailed MIDI implementation tables, non-linear voice matrices, percussion mappings, and hardware quirks are documented in:
 - [docs/PSS-790_MIDI_Reference.md](docs/PSS-790_MIDI_Reference.md)
 
 ---
@@ -81,7 +114,7 @@ cd Yamaha-PSS-790-Midi-Player-Converter
 # Build solution
 dotnet build
 
-# Run unit tests
+# Run automated unit & integration tests
 dotnet test
 
 # Publish standalone single-file executable
