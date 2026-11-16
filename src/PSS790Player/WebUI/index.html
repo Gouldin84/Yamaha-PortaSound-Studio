@@ -128,9 +128,9 @@
         <div id="viewPlayer" class="flex gap-6 items-start">
 
             <!-- Quick-Pick Folder Tree Sidebar (Docked Left, ~290px) -->
-            <aside id="quickPickSidebar" class="w-[290px] shrink-0 glass-panel rounded-2xl border border-slate-800/80 shadow-xl p-4 flex flex-col space-y-3.5 transition-all duration-300">
+            <aside id="quickPickSidebar" class="w-[290px] shrink-0 glass-panel rounded-2xl border border-slate-800/80 shadow-xl p-4 flex flex-col space-y-3.5 sticky top-[80px] h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] transition-all duration-300">
                 <!-- Sidebar Header -->
-                <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5 shrink-0">
                     <div class="flex items-center space-x-2">
                         <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
@@ -150,7 +150,7 @@
                 </div>
 
                 <!-- Real-Time Search Filter -->
-                <div class="relative">
+                <div class="relative shrink-0">
                     <input type="text" id="sidebarSearchInput" placeholder="Search songs, games, folders..." class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 pl-8 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
                     <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
@@ -159,12 +159,12 @@
                 </div>
 
                 <!-- Tree View Container -->
-                <div id="treeContainer" class="flex-1 overflow-y-auto max-h-[640px] pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
+                <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
                     <div class="text-center py-8 text-slate-500 text-xs">Scanning MIDI library...</div>
                 </div>
 
                 <!-- Floating / Docked Batch Action Bar -->
-                <div id="sidebarBatchBar" class="hidden p-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-2 select-none">
+                <div id="sidebarBatchBar" class="hidden shrink-0 p-2.5 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-2 select-none">
                     <div class="flex items-center justify-between text-xs">
                         <span id="batchCountBadge" class="font-bold text-cyan-400 text-[11px]">0 selected</span>
                         <div class="space-x-2">
@@ -186,7 +186,7 @@
                 </div>
 
                 <!-- Bottom Quick Explorer Actions & Tip -->
-                <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
                     <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1" title="Rescan Music\Midi folders">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                         <span>Refresh</span>
@@ -454,13 +454,6 @@
                             <span>Send to Player (Audition)</span>
                         </div>
                         <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Loads native take into Tab 1 in Passthrough Mode to hear it on the keyboard immediately.</p>
-                    </button>
-                </div>
-                        <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-xs mb-1">
-                            <span>🎧</span>
-                            <span>Send to Player (Audition)</span>
-                        </div>
-                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Transfers take to Tab 1 to mix with 16-channel voice overrides live!</p>
                     </button>
                 </div>
             </section>

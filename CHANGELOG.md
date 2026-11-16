@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-11-16
+
+### Fixed
+- **Persistent Viewport-Pinned Quick-Pick Library & Batch Bar**:
+  - Pinned the quick-pick library file browser to viewport height (`h-[calc(100vh-6.5rem)] sticky top-[80px]`).
+  - Added flexbox shrink-protection (`shrink-0`) to the sidebar header, search bar, batch operations bar (`#sidebarBatchBar`), and bottom refresh/status footer.
+  - Set the tree container (`#treeContainer`) to `flex-1 min-h-0 overflow-y-auto`, ensuring the multi-select move and delete options and library footer are always immediately visible on screen regardless of monitor resolution, laptop screen height, or Windows display scaling, eliminating window scrolling.
+
 ## [1.7.0] - 2026-11-16
 
 ### Added
