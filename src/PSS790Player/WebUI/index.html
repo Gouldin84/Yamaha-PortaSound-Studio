@@ -71,6 +71,14 @@
                 </select>
             </div>
 
+            <!-- Quick-Pick Sidebar Toggle -->
+            <button id="btnToggleSidebar" title="Toggle Quick-Pick Library Tree (Ctrl+B)" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-semibold text-slate-200 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
+                <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
+                </svg>
+                <span>Quick-Pick</span>
+            </button>
+
             <!-- Browse & Library Buttons -->
             <button id="btnBrowse" class="flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]">
                 <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -117,7 +125,55 @@
     <main class="flex-1 p-6 max-w-[1700px] w-full mx-auto space-y-6">
 
         <!-- ================= TAB 1: PLAYER & REMAPPER ================= -->
-        <div id="viewPlayer" class="space-y-6">
+        <div id="viewPlayer" class="flex gap-6 items-start">
+
+            <!-- Quick-Pick Folder Tree Sidebar (Docked Left, ~290px) -->
+            <aside id="quickPickSidebar" class="w-[290px] shrink-0 glass-panel rounded-2xl border border-slate-800/80 shadow-xl p-4 flex flex-col space-y-3.5 transition-all duration-300">
+                <!-- Sidebar Header -->
+                <div class="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                    <div class="flex items-center space-x-2">
+                        <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Quick-Pick Library</h3>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span id="sidebarSongCount" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">0 songs</span>
+                        <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B)" class="text-slate-400 hover:text-white transition p-1 hover:bg-slate-800 rounded-lg">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Real-Time Search Filter -->
+                <div class="relative">
+                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, games, folders..." class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-xl px-3 py-2 pl-8 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
+                    <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <button id="btnClearSearch" class="hidden absolute right-2.5 top-2 text-slate-400 hover:text-white text-xs font-bold">×</button>
+                </div>
+
+                <!-- Tree View Container -->
+                <div id="treeContainer" class="flex-1 overflow-y-auto max-h-[640px] pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
+                    <div class="text-center py-8 text-slate-500 text-xs">Scanning MIDI library...</div>
+                </div>
+
+                <!-- Bottom Quick Explorer Actions & Tip -->
+                <div class="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                    <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1" title="Rescan Music\Midi folders">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        <span>Refresh</span>
+                    </button>
+                    <span class="text-slate-600">|</span>
+                    <span class="text-slate-500 text-[10px]">1x: Load • 2x: Play</span>
+                </div>
+            </aside>
+
+            <!-- Main Deck & 16-Channel Mixer Area -->
+            <div class="flex-1 min-w-0 space-y-6">
 
             <!-- Transport Deck & Song Header -->
             <section class="glass-panel p-5 rounded-2xl border border-slate-800/80 shadow-xl space-y-4">
@@ -204,7 +260,7 @@
                         <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400">16-Channel Mixer & Voice Selector</h3>
                         <p class="text-xs text-slate-500">Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)</p>
                     </div>
-                    <button id="btnResetOverrides" class="text-xs font-medium text-slate-400 hover:text-cyan-400 transition">Reset Overrides</button>
+                    <button id="btnResetOverrides" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
                 </div>
 
                 <!-- Mixer Grid (16 Channel Strips) -->
@@ -212,6 +268,7 @@
                     <!-- Dynamically generated channel cards -->
                 </div>
             </section>
+            </div>
         </div>
 
         <!-- ================= TAB 2: MIDI STUDIO / RECORDER ================= -->

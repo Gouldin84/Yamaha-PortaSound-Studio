@@ -5,8 +5,9 @@ let state = {
     devices: [],
     inputDevices: [],
     voices: [],
-    library: { gmFiles: [], pssFiles: [], hasFiles: false, baseDir: "" },
+    library: { gmTree: null, pssTree: null, gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false, baseDir: "" },
     currentFile: null,
+    currentFilePath: null,
     isPlaying: false,
     isPaused: false,
     durationSeconds: 0,
@@ -14,6 +15,13 @@ let state = {
     speed: 1.0,
     isLooping: false,
     polyphonyGuard: true,
+    // Jukebox & Quick-Pick Tree State
+    isSidebarCollapsed: false,
+    selectedSongPath: null,
+    searchQuery: "",
+    expandedFolders: new Set(),
+    collapsedCategories: new Set(),
+    visibleSongList: [],
     channels: Array.from({ length: 16 }, (_, i) => ({
         channel: i,
         channelDisplay: i + 1,
@@ -108,7 +116,7 @@ function handleHostMessage(msg) {
             state.devices = msg.data.devices || [];
             state.inputDevices = msg.data.inputDevices || [];
             state.voices = msg.data.voices || [];
-            state.library = msg.data.library || { gmFiles: [], pssFiles: [], hasFiles: false };
+            state.library = msg.data.library || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
             if (msg.data.recorderBpm) {
                 state.recorderBpm = msg.data.recorderBpm;
                 document.getElementById("recorderBpmInput").value = state.recorderBpm;
@@ -122,8 +130,10 @@ function handleHostMessage(msg) {
             renderDeviceSelect();
             renderInputDeviceSelect();
             renderLibrarySelect();
+            renderLibraryTree();
             renderMixer();
             renderRecorderChannels();
+            initSidebarState();
             break;
 
         case "input_devices_updated":
@@ -132,12 +142,32 @@ function handleHostMessage(msg) {
             break;
 
         case "library_updated":
-            state.library = msg.data || { gmFiles: [], pssFiles: [], hasFiles: false };
+            state.library = msg.data || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
             renderLibrarySelect();
+            renderLibraryTree();
+            break;
+
+        case "channels_updated":
+            if (msg.data.channels) {
+                msg.data.channels.forEach(chInfo => {
+                    const ch = state.channels[chInfo.channel];
+                    if (ch) {
+                        ch.hasNotes = chInfo.hasNotes;
+                        ch.isDrum = chInfo.isDrum;
+                        ch.detectedInstrument = chInfo.detectedInstrument;
+                        ch.defaultPssVoice = chInfo.defaultPssVoice;
+                        ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
+                        ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                    }
+                });
+                renderMixer();
+            }
             break;
 
         case "file_loaded":
             state.currentFile = msg.data.fileName;
+            state.currentFilePath = msg.data.filePath;
+            state.selectedSongPath = msg.data.filePath;
             state.durationSeconds = msg.data.durationSeconds || 0;
             document.getElementById("currentSongTitle").textContent = msg.data.fileName;
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
@@ -155,7 +185,7 @@ function handleHostMessage(msg) {
                 }
             }
 
-            // Update channel analysis
+            // Update channel analysis & restored voice overrides
             if (msg.data.channels) {
                 msg.data.channels.forEach(chInfo => {
                     const ch = state.channels[chInfo.channel];
@@ -165,10 +195,12 @@ function handleHostMessage(msg) {
                         ch.detectedInstrument = chInfo.detectedInstrument;
                         ch.defaultPssVoice = chInfo.defaultPssVoice;
                         ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
+                        ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
                     }
                 });
                 renderMixer();
             }
+            highlightActiveSongInTree();
             break;
 
         case "channel_activity":
@@ -180,6 +212,7 @@ function handleHostMessage(msg) {
             state.isPaused = msg.data.isPaused;
             state.currentSeconds = msg.data.currentSeconds || 0;
             updatePlaybackUi();
+            highlightActiveSongInTree();
             break;
 
         // --- Recorder Events ---
@@ -311,6 +344,440 @@ function renderLibrarySelect() {
         });
         sel.appendChild(pssGroup);
     }
+}
+
+function escapeHtml(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function initSidebarState() {
+    try {
+        const saved = localStorage.getItem("pss790_sidebar_collapsed");
+        if (saved !== null) {
+            state.isSidebarCollapsed = saved === "true";
+        }
+    } catch (e) {}
+
+    // Auto-expand all folders on first run if not already set
+    if (state.expandedFolders.size === 0 && state.library) {
+        ["pssTree", "gmTree"].forEach(key => {
+            const tree = state.library[key];
+            if (tree && tree.folders) {
+                tree.folders.forEach(f => {
+                    state.expandedFolders.add(`${tree.format}:${f.name}`);
+                });
+            }
+        });
+    }
+
+    updateSidebarVisibility();
+}
+
+function toggleSidebar() {
+    state.isSidebarCollapsed = !state.isSidebarCollapsed;
+    try {
+        localStorage.setItem("pss790_sidebar_collapsed", state.isSidebarCollapsed);
+    } catch (e) {}
+    updateSidebarVisibility();
+}
+
+function updateSidebarVisibility() {
+    const sidebar = document.getElementById("quickPickSidebar");
+    if (sidebar) {
+        sidebar.classList.toggle("sidebar-collapsed", state.isSidebarCollapsed);
+    }
+    const btnToggle = document.getElementById("btnToggleSidebar");
+    if (btnToggle) {
+        if (!state.isSidebarCollapsed) {
+            btnToggle.classList.add("bg-cyan-500/20", "text-cyan-400", "border-cyan-500/40");
+        } else {
+            btnToggle.classList.remove("bg-cyan-500/20", "text-cyan-400", "border-cyan-500/40");
+        }
+    }
+}
+
+function toggleFolder(folderKey) {
+    if (state.expandedFolders.has(folderKey)) {
+        state.expandedFolders.delete(folderKey);
+    } else {
+        state.expandedFolders.add(folderKey);
+    }
+    renderLibraryTree();
+}
+
+function toggleCategory(catKey) {
+    if (state.collapsedCategories.has(catKey)) {
+        state.collapsedCategories.delete(catKey);
+    } else {
+        state.collapsedCategories.add(catKey);
+    }
+    renderLibraryTree();
+}
+
+function clearSearchFilter() {
+    state.searchQuery = "";
+    const input = document.getElementById("sidebarSearchInput");
+    const btnClear = document.getElementById("btnClearSearch");
+    if (input) input.value = "";
+    if (btnClear) btnClear.classList.add("hidden");
+    renderLibraryTree();
+}
+
+function renderLibraryTree() {
+    const container = document.getElementById("treeContainer");
+    const countBadge = document.getElementById("sidebarSongCount");
+    if (!container) return;
+
+    state.visibleSongList = [];
+
+    const lib = state.library;
+    const flatFiles = lib.flatFiles || [];
+    const totalFiles = flatFiles.length;
+
+    if (countBadge) {
+        countBadge.textContent = `${totalFiles} song${totalFiles === 1 ? '' : 's'}`;
+    }
+
+    if (!lib.hasFiles || totalFiles === 0) {
+        container.innerHTML = `
+            <div class="text-center py-8 px-3 text-slate-500 space-y-2">
+                <div class="text-2xl">📂</div>
+                <div class="text-xs font-semibold text-slate-400">Library Empty</div>
+                <p class="text-[10px] text-slate-500">Put .mid files in Music\\Midi\\GM Midi or PSS-790 Midi</p>
+                <button id="btnTreeOpenFolder" class="mt-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 font-medium transition border border-slate-700">Open Music Folder</button>
+            </div>
+        `;
+        const btn = document.getElementById("btnTreeOpenFolder");
+        if (btn) btn.addEventListener("click", () => sendToHost("open_explorer"));
+        return;
+    }
+
+    const query = (state.searchQuery || "").toLowerCase();
+    container.innerHTML = "";
+
+    // Categories to render: PSS-790 Ready first, then GM Midi
+    const categories = [
+        { tree: lib.pssTree, title: "PSS-790 Ready", badge: "⚡", key: "pss790", colorClass: "text-emerald-400" },
+        { tree: lib.gmTree, title: "GM (Auto-Remap)", badge: "🎵", key: "gm", colorClass: "text-indigo-400" }
+    ];
+
+    let totalRenderedSongs = 0;
+
+    categories.forEach(cat => {
+        const tree = cat.tree;
+        if (!tree) return;
+
+        let filteredFolders = [];
+        let filteredRootFiles = [];
+
+        if (query) {
+            if (tree.folders) {
+                tree.folders.forEach(f => {
+                    const folderMatches = f.name.toLowerCase().includes(query);
+                    const matchingFiles = (f.files || []).filter(file =>
+                        folderMatches || file.fileName.toLowerCase().includes(query)
+                    );
+                    if (matchingFiles.length > 0) {
+                        filteredFolders.push({
+                            name: f.name,
+                            files: matchingFiles,
+                            count: matchingFiles.length
+                        });
+                    }
+                });
+            }
+            if (tree.files) {
+                filteredRootFiles = tree.files.filter(f => f.fileName.toLowerCase().includes(query));
+            }
+        } else {
+            filteredFolders = tree.folders || [];
+            filteredRootFiles = tree.files || [];
+        }
+
+        const catSongCount = filteredFolders.reduce((acc, f) => acc + f.files.length, 0) + filteredRootFiles.length;
+        if (catSongCount === 0) return;
+
+        totalRenderedSongs += catSongCount;
+
+        // Category Group Container
+        const catGroup = document.createElement("div");
+        catGroup.className = "tree-category-group mb-2 select-none";
+
+        const isCatCollapsed = state.collapsedCategories.has(cat.key) && !query;
+
+        // Category Header
+        const catHeader = document.createElement("div");
+        catHeader.className = "flex items-center justify-between px-2 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800/80 cursor-pointer border border-slate-800/80 transition-all text-xs";
+        catHeader.innerHTML = `
+            <div class="flex items-center space-x-1.5 font-bold ${cat.colorClass}">
+                <span class="text-[9px] text-slate-400 transform transition-transform">${isCatCollapsed ? '▶' : '▼'}</span>
+                <span>${cat.badge} ${cat.title}</span>
+            </div>
+            <span class="text-[10px] font-mono text-slate-500 font-medium">(${catSongCount})</span>
+        `;
+        catHeader.addEventListener("click", () => toggleCategory(cat.key));
+        catGroup.appendChild(catHeader);
+
+        // Category Content (Folders + Root Files)
+        if (!isCatCollapsed) {
+            const catContent = document.createElement("div");
+            catContent.className = "pl-1.5 pt-1 space-y-1";
+
+            // Render Subfolders
+            filteredFolders.forEach(folder => {
+                const folderKey = `${cat.key}:${folder.name}`;
+                const isFolderExpanded = query.length > 0 || state.expandedFolders.has(folderKey);
+
+                const folderGroup = document.createElement("div");
+                folderGroup.className = "tree-folder-group space-y-0.5";
+
+                const folderHeader = document.createElement("div");
+                folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
+                folderHeader.innerHTML = `
+                    <div class="flex items-center space-x-1.5 truncate">
+                        <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
+                        <span class="text-amber-400 text-xs">📁</span>
+                        <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
+                    </div>
+                    <span class="text-[9px] font-mono text-slate-500 ml-1">(${folder.files.length})</span>
+                `;
+                folderHeader.addEventListener("click", () => toggleFolder(folderKey));
+                folderGroup.appendChild(folderHeader);
+
+                if (isFolderExpanded) {
+                    const folderContent = document.createElement("div");
+                    folderContent.className = "pl-3 space-y-0.5 border-l border-slate-800/80 ml-2.5";
+                    folder.files.forEach(file => {
+                        state.visibleSongList.push(file);
+                        folderContent.appendChild(createSongItemElement(file));
+                    });
+                    folderGroup.appendChild(folderContent);
+                }
+
+                catContent.appendChild(folderGroup);
+            });
+
+            // Render Category Root Files
+            if (filteredRootFiles.length > 0) {
+                const rootGroup = document.createElement("div");
+                rootGroup.className = "space-y-0.5 pt-0.5";
+                filteredRootFiles.forEach(file => {
+                    state.visibleSongList.push(file);
+                    rootGroup.appendChild(createSongItemElement(file));
+                });
+                catContent.appendChild(rootGroup);
+            }
+
+            catGroup.appendChild(catContent);
+        }
+
+        container.appendChild(catGroup);
+    });
+
+    if (totalRenderedSongs === 0 && query) {
+        container.innerHTML = `
+            <div class="text-center py-8 px-3 text-slate-500 space-y-2">
+                <div class="text-xl">🔍</div>
+                <div class="text-xs font-semibold text-slate-400">No matching songs</div>
+                <p class="text-[10px] text-slate-500">No songs match "${escapeHtml(query)}"</p>
+                <button id="btnTreeClearSearch" class="mt-2 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 font-medium transition border border-slate-700">Clear Filter</button>
+            </div>
+        `;
+        const btnClear = document.getElementById("btnTreeClearSearch");
+        if (btnClear) btnClear.addEventListener("click", clearSearchFilter);
+    }
+}
+
+function createSongItemElement(file) {
+    const isSelected = file.fullPath === state.selectedSongPath;
+    const isPlaying = file.fullPath === state.currentFilePath && state.isPlaying;
+    const isPss = file.format === "pss790";
+
+    const div = document.createElement("div");
+    div.className = `tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''}`;
+    div.dataset.fullPath = file.fullPath;
+    div.dataset.fileName = file.fileName;
+    div.title = `${file.fileName}\nFolder: ${file.subFolder || '(Root)'}\nClick: Load & inspect\nDouble-click: Play immediately`;
+
+    div.innerHTML = `
+        <div class="flex items-center space-x-1.5 min-w-0 flex-1">
+            <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}">
+                ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
+            </span>
+            <span class="song-title truncate font-medium">${escapeHtml(file.fileName)}</span>
+        </div>
+        <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${isPss ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' : 'bg-indigo-950 text-indigo-400 border border-indigo-800/60'}">
+            ${isPss ? 'PSS' : 'GM'}
+        </span>
+    `;
+
+    div.addEventListener("click", () => {
+        state.selectedSongPath = file.fullPath;
+        highlightActiveSongInTree();
+        sendToHost("load_midi_metadata", { path: file.fullPath });
+    });
+
+    div.addEventListener("dblclick", () => {
+        state.selectedSongPath = file.fullPath;
+        highlightActiveSongInTree();
+        sendToHost("load_midi_and_play", { path: file.fullPath });
+    });
+
+    return div;
+}
+
+function highlightActiveSongInTree() {
+    const items = document.querySelectorAll(".tree-song-item");
+    items.forEach(el => {
+        const path = el.dataset.fullPath;
+        const isSelected = path === state.selectedSongPath;
+        const isPlayingThis = path === state.currentFilePath && state.isPlaying;
+
+        el.classList.toggle("selected", isSelected);
+        el.classList.toggle("playing", isPlayingThis);
+
+        const iconEl = el.querySelector(".song-icon");
+        if (iconEl) {
+            if (isPlayingThis) {
+                iconEl.textContent = "🔊";
+                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+            } else if (isSelected) {
+                iconEl.textContent = "▶";
+                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
+            } else {
+                iconEl.textContent = "🎵";
+                iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+            }
+        }
+    });
+}
+
+function navigateSongList(direction) {
+    if (!state.visibleSongList || state.visibleSongList.length === 0) return;
+
+    let currentIndex = state.visibleSongList.findIndex(f => f.fullPath === state.selectedSongPath);
+    let targetIndex;
+    if (currentIndex === -1) {
+        targetIndex = direction > 0 ? 0 : state.visibleSongList.length - 1;
+    } else {
+        targetIndex = currentIndex + direction;
+        if (targetIndex < 0) targetIndex = 0;
+        if (targetIndex >= state.visibleSongList.length) targetIndex = state.visibleSongList.length - 1;
+    }
+
+    selectSongByIndex(targetIndex);
+}
+
+function selectSongByIndex(index) {
+    if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
+    const song = state.visibleSongList[index];
+    state.selectedSongPath = song.fullPath;
+    highlightActiveSongInTree();
+    sendToHost("load_midi_metadata", { path: song.fullPath });
+
+    const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
+    if (el) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+}
+
+function playSongByIndex(index) {
+    if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
+    const song = state.visibleSongList[index];
+    state.selectedSongPath = song.fullPath;
+    highlightActiveSongInTree();
+    sendToHost("load_midi_and_play", { path: song.fullPath });
+
+    const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
+    if (el) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+}
+
+function setupKeyboardShortcuts() {
+    window.addEventListener("keydown", (e) => {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+        const isInputFocused = activeTag === "input" || activeTag === "textarea" || activeTag === "select";
+
+        // Global shortcut: Ctrl+B to toggle quick-pick sidebar anywhere
+        if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+            e.preventDefault();
+            toggleSidebar();
+            return;
+        }
+
+        // If user is focused on an input element
+        if (isInputFocused) {
+            if (document.activeElement && document.activeElement.id === "sidebarSearchInput") {
+                if (e.key === "ArrowDown") {
+                    e.preventDefault();
+                    if (state.visibleSongList && state.visibleSongList.length > 0) {
+                        selectSongByIndex(0);
+                    }
+                } else if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (state.visibleSongList && state.visibleSongList.length > 0) {
+                        playSongByIndex(0);
+                    }
+                } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    clearSearchFilter();
+                    document.activeElement.blur();
+                }
+            }
+            return;
+        }
+
+        // Media player shortcuts
+        switch (e.key) {
+            case " ": // Space: Play/Pause
+                e.preventDefault();
+                if (state.isPlaying) {
+                    sendToHost("pause");
+                } else {
+                    sendToHost("play");
+                }
+                break;
+
+            case "Escape": // Esc: Panic / Stop
+                e.preventDefault();
+                sendToHost("stop");
+                break;
+
+            case "ArrowDown": // Next song in visible list
+                e.preventDefault();
+                navigateSongList(1);
+                break;
+
+            case "ArrowUp": // Previous song in visible list
+                e.preventDefault();
+                navigateSongList(-1);
+                break;
+
+            case "Enter": // Play selected song
+                e.preventDefault();
+                if (state.selectedSongPath) {
+                    sendToHost("load_midi_and_play", { path: state.selectedSongPath });
+                }
+                break;
+
+            case "ArrowLeft": // Seek backward 5s
+                e.preventDefault();
+                sendToHost("seek", { seconds: Math.max(0, state.currentSeconds - 5) });
+                break;
+
+            case "ArrowRight": // Seek forward 5s
+                e.preventDefault();
+                sendToHost("seek", { seconds: Math.min(state.durationSeconds, state.currentSeconds + 5) });
+                break;
+        }
+    });
 }
 
 function renderMixer() {
@@ -702,15 +1169,49 @@ document.getElementById("btnSaveRemapped").addEventListener("click", () => {
 });
 
 document.getElementById("btnResetOverrides").addEventListener("click", () => {
-    state.channels.forEach(ch => {
-        if (!ch.isDrum) {
-            ch.selectedVoice = null;
-            sendToHost("override_voice", { channel: ch.channel, voice: null });
-        }
-    });
-    renderMixer();
-    showToast("Voice overrides reset to automatic GM mapping.");
+    sendToHost("reset_voice_overrides");
 });
+
+// --- Quick-Pick Sidebar Event Listeners ---
+
+const btnToggleSidebar = document.getElementById("btnToggleSidebar");
+if (btnToggleSidebar) {
+    btnToggleSidebar.addEventListener("click", toggleSidebar);
+}
+
+const btnCloseSidebar = document.getElementById("btnCloseSidebar");
+if (btnCloseSidebar) {
+    btnCloseSidebar.addEventListener("click", toggleSidebar);
+}
+
+const sidebarSearchInput = document.getElementById("sidebarSearchInput");
+const btnClearSearch = document.getElementById("btnClearSearch");
+
+if (sidebarSearchInput) {
+    sidebarSearchInput.addEventListener("input", (e) => {
+        state.searchQuery = e.target.value.trim();
+        if (state.searchQuery.length > 0) {
+            if (btnClearSearch) btnClearSearch.classList.remove("hidden");
+        } else {
+            if (btnClearSearch) btnClearSearch.classList.add("hidden");
+        }
+        renderLibraryTree();
+    });
+}
+
+if (btnClearSearch) {
+    btnClearSearch.addEventListener("click", () => {
+        clearSearchFilter();
+    });
+}
+
+const btnSidebarRefresh = document.getElementById("btnSidebarRefresh");
+if (btnSidebarRefresh) {
+    btnSidebarRefresh.addEventListener("click", () => {
+        sendToHost("refresh_library");
+        showToast("Scanning MIDI library...");
+    });
+}
 
 // --- MIDI Studio / Recorder Event Listeners ---
 
@@ -802,7 +1303,9 @@ document.getElementById("btnStartBatch").addEventListener("click", () => {
     sendToHost("start_batch", { sourceDir: src, targetDir: tgt });
 });
 
-// Trigger initial handshake
+// Trigger initial handshake and keyboard shortcuts
 window.addEventListener("DOMContentLoaded", () => {
+    setupKeyboardShortcuts();
+    initSidebarState();
     sendToHost("get_initial_data");
 });

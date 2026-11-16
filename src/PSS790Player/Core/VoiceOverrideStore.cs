@@ -1,0 +1,145 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+
+namespace PSS790Player.Core
+{
+    public class VoiceOverrideStore
+    {
+        private static VoiceOverrideStore? _instance;
+        public static VoiceOverrideStore Instance => _instance ??= new VoiceOverrideStore();
+
+        private readonly string _storagePath;
+        private readonly object _lock = new();
+        private Dictionary<string, Dictionary<int, int>> _overrides = new(StringComparer.OrdinalIgnoreCase);
+        private bool _isLoaded;
+
+        public VoiceOverrideStore(string? customPath = null)
+        {
+            _storagePath = customPath ?? AppPaths.OverridesFilePath;
+        }
+
+        private void EnsureLoaded()
+        {
+            lock (_lock)
+            {
+                if (_isLoaded) return;
+                _isLoaded = true;
+
+                try
+                {
+                    if (File.Exists(_storagePath))
+                    {
+                        var json = File.ReadAllText(_storagePath);
+                        var data = JsonSerializer.Deserialize<Dictionary<string, Dictionary<int, int>>>(json);
+                        if (data != null)
+                        {
+                            _overrides = new Dictionary<string, Dictionary<int, int>>(data, StringComparer.OrdinalIgnoreCase);
+                        }
+                    }
+                }
+                catch
+                {
+                    _overrides = new Dictionary<string, Dictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
+                }
+            }
+        }
+
+        private void SaveInternal()
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(_storagePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var json = JsonSerializer.Serialize(_overrides, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(_storagePath, json);
+            }
+            catch { }
+        }
+
+        private static string NormalizeKey(string filePath)
+        {
+            return AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+        }
+
+        public Dictionary<int, int?> GetOverrides(string filePath)
+        {
+            EnsureLoaded();
+            var result = new Dictionary<int, int?>();
+            var key = NormalizeKey(filePath);
+
+            lock (_lock)
+            {
+                if (_overrides.TryGetValue(key, out var songOverrides))
+                {
+                    foreach (var (ch, voice) in songOverrides)
+                    {
+                        result[ch] = voice;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public void SetOverride(string filePath, int channel, int? voiceNumber)
+        {
+            EnsureLoaded();
+            var key = NormalizeKey(filePath);
+
+            lock (_lock)
+            {
+                if (!_overrides.TryGetValue(key, out var songOverrides))
+                {
+                    songOverrides = new Dictionary<int, int>();
+                    _overrides[key] = songOverrides;
+                }
+
+                if (voiceNumber.HasValue)
+                {
+                    songOverrides[channel] = voiceNumber.Value;
+                }
+                else
+                {
+                    songOverrides.Remove(channel);
+                    if (songOverrides.Count == 0)
+                    {
+                        _overrides.Remove(key);
+                    }
+                }
+
+                SaveInternal();
+            }
+        }
+
+        public void ResetOverrides(string filePath)
+        {
+            EnsureLoaded();
+            var key = NormalizeKey(filePath);
+
+            lock (_lock)
+            {
+                if (_overrides.Remove(key))
+                {
+                    SaveInternal();
+                }
+            }
+        }
+
+        public bool HasOverrides(string filePath)
+        {
+            EnsureLoaded();
+            var key = NormalizeKey(filePath);
+
+            lock (_lock)
+            {
+                return _overrides.TryGetValue(key, out var map) && map.Count > 0;
+            }
+        }
+    }
+}

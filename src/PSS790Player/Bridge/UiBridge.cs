@@ -114,8 +114,24 @@ namespace PSS790Player.Bridge
                         if (dev != null) _player.SetOutputDevice(dev);
                         break;
                     case "load_file":
-                        var path = root.GetProperty("filePath").GetString();
-                        if (!string.IsNullOrEmpty(path)) LoadFile(path);
+                    case "load_midi_metadata":
+                        var path = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : (root.TryGetProperty("path", out var p) ? p.GetString() : null);
+                        if (!string.IsNullOrEmpty(path)) LoadFile(path, autoPlay: false);
+                        break;
+                    case "load_midi_and_play":
+                        var playPath = root.TryGetProperty("filePath", out var fpp) ? fpp.GetString() : (root.TryGetProperty("path", out var pp) ? pp.GetString() : null);
+                        if (!string.IsNullOrEmpty(playPath)) LoadFile(playPath, autoPlay: true);
+                        break;
+                    case "reset_voice_overrides":
+                        if (_currentFilePath != null && _loadedOriginalMidi != null)
+                        {
+                            VoiceOverrideStore.Instance.ResetOverrides(_currentFilePath);
+                            _options.ChannelVoiceOverrides.Clear();
+                            ReapplyRemapping();
+                            var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
+                            SendToJs("channels_updated", new { channels = channelInfo });
+                            SendToJs("notification", new { message = "Reset voices to default GM mapping." });
+                        }
                         break;
                     case "browse_file":
                         BrowseAndLoadFile();
@@ -145,6 +161,10 @@ namespace PSS790Player.Bridge
                         var ch = root.GetProperty("channel").GetInt32();
                         int? voice = root.GetProperty("voice").ValueKind == JsonValueKind.Null ? null : root.GetProperty("voice").GetInt32();
                         _options.ChannelVoiceOverrides[ch] = voice;
+                        if (_currentFilePath != null)
+                        {
+                            VoiceOverrideStore.Instance.SetOverride(_currentFilePath, ch, voice);
+                        }
                         if (voice.HasValue)
                         {
                             _player.SendVoiceOverride(ch, voice.Value);
@@ -320,36 +340,90 @@ namespace PSS790Player.Bridge
         {
             AppPaths.EnsureDirectoriesExist();
 
-            var gmFiles = Directory.GetFiles(AppPaths.GmMidiDir, "*.*")
+            var allFlat = new List<object>();
+
+            var gmTree = BuildCategoryTree(AppPaths.GmMidiDir, "GM Midi", "gm", allFlat);
+            var pssTree = BuildCategoryTree(AppPaths.Pss790MidiDir, "PSS-790 Midi", "pss790", allFlat);
+
+            var gmFiles = allFlat.Where(f => ((dynamic)f).format == "gm").ToList();
+            var pssFiles = allFlat.Where(f => ((dynamic)f).format == "pss790").ToList();
+
+            return new
+            {
+                gmTree,
+                pssTree,
+                gmFiles,
+                pssFiles,
+                flatFiles = allFlat,
+                hasFiles = allFlat.Count > 0,
+                baseDir = AppPaths.BaseMidiDir
+            };
+        }
+
+        private static object BuildCategoryTree(string rootDir, string categoryName, string format, List<object> flatCollector)
+        {
+            if (!Directory.Exists(rootDir))
+            {
+                return new { name = categoryName, format, folders = new List<object>(), files = new List<object>(), count = 0 };
+            }
+
+            var files = Directory.GetFiles(rootDir, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
-                .Select(f => new
-                {
-                    fileName = Path.GetFileName(f),
-                    fullPath = f,
-                    format = "gm",
-                    category = "GM Midi"
-                })
-                .OrderBy(f => f.fileName)
                 .ToList();
 
-            var pssFiles = Directory.GetFiles(AppPaths.Pss790MidiDir, "*.*")
-                .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
-                .Select(f => new
+            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+            var rootFiles = new List<object>();
+
+            foreach (var file in files)
+            {
+                var rel = Path.GetRelativePath(rootDir, file);
+                var dirName = Path.GetDirectoryName(rel) ?? "";
+                var fileName = Path.GetFileName(file);
+
+                var fileItem = new
                 {
-                    fileName = Path.GetFileName(f),
-                    fullPath = f,
-                    format = "pss790",
-                    category = "PSS-790 Midi"
+                    fileName,
+                    fullPath = file,
+                    relativePath = rel,
+                    subFolder = dirName,
+                    category = categoryName,
+                    format
+                };
+
+                flatCollector.Add(fileItem);
+
+                if (string.IsNullOrEmpty(dirName))
+                {
+                    rootFiles.Add(fileItem);
+                }
+                else
+                {
+                    if (!folderGroups.TryGetValue(dirName, out var list))
+                    {
+                        list = new List<object>();
+                        folderGroups[dirName] = list;
+                    }
+                    list.Add(fileItem);
+                }
+            }
+
+            var foldersList = folderGroups
+                .OrderBy(kvp => kvp.Key)
+                .Select(kvp => new
+                {
+                    name = kvp.Key,
+                    files = kvp.Value.OrderBy(f => ((dynamic)f).fileName).ToList(),
+                    count = kvp.Value.Count
                 })
-                .OrderBy(f => f.fileName)
                 .ToList();
 
             return new
             {
-                gmFiles,
-                pssFiles,
-                hasFiles = gmFiles.Count > 0 || pssFiles.Count > 0,
-                baseDir = AppPaths.BaseMidiDir
+                name = categoryName,
+                format,
+                folders = foldersList,
+                files = rootFiles.OrderBy(f => ((dynamic)f).fileName).ToList(),
+                count = files.Count
             };
         }
 
@@ -388,11 +462,13 @@ namespace PSS790Player.Bridge
                 {
                     fileName = title,
                     filePath = virtualPath ?? title,
+                    relativeDir = "",
                     format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
                     formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
-                    channels = channelInfo
+                    channels = channelInfo,
+                    hasCustomOverrides = false
                 });
             }
             catch (Exception ex)
@@ -401,7 +477,7 @@ namespace PSS790Player.Bridge
             }
         }
 
-        public void LoadFile(string pathOrName)
+        public void LoadFile(string pathOrName, bool autoPlay = false)
         {
             try
             {
@@ -424,6 +500,14 @@ namespace PSS790Player.Bridge
                 _currentFilePath = resolvedPath;
                 _loadedOriginalMidi = MidiFile.Read(resolvedPath);
 
+                // Restore saved per-song voice overrides from VoiceOverrideStore!
+                _options.ChannelVoiceOverrides.Clear();
+                var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath);
+                foreach (var (ch, voice) in savedOverrides)
+                {
+                    _options.ChannelVoiceOverrides[ch] = voice;
+                }
+
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                 ReapplyRemapping();
 
@@ -434,12 +518,19 @@ namespace PSS790Player.Bridge
                 {
                     fileName = Path.GetFileName(resolvedPath),
                     filePath = resolvedPath,
+                    relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
                     format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
                     formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
-                    channels = channelInfo
+                    channels = channelInfo,
+                    hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath)
                 });
+
+                if (autoPlay)
+                {
+                    _player.Play();
+                }
             }
             catch (Exception ex)
             {
@@ -464,7 +555,7 @@ namespace PSS790Player.Bridge
             }
         }
 
-        private static List<object> AnalyzeChannels(MidiFile midi)
+        private List<object> AnalyzeChannels(MidiFile midi)
         {
             var channelPrograms = new Dictionary<int, byte>();
             var channelNotes = new HashSet<int>();
@@ -498,6 +589,7 @@ namespace PSS790Player.Bridge
                     : (prog.HasValue ? GetGmInstrumentName(prog.Value) : "Default Piano");
 
                 int defaultPssVoice = isDrum ? 96 : (prog.HasValue ? Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0) : 0);
+                int? voiceOverride = _options.ChannelVoiceOverrides.TryGetValue(ch, out var vo) ? vo : null;
 
                 list.Add(new
                 {
@@ -509,7 +601,8 @@ namespace PSS790Player.Bridge
                     gmProgram = prog,
                     detectedInstrument,
                     defaultPssVoice,
-                    defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO"
+                    defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO",
+                    voiceOverride
                 });
             }
 

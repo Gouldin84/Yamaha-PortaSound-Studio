@@ -13,6 +13,8 @@ namespace PSS790Player.Core
 
         public static string GmMidiDir => Path.Combine(BaseMidiDir, "GM Midi");
         public static string Pss790MidiDir => Path.Combine(BaseMidiDir, "PSS-790 Midi");
+        public static string MetadataDir => Path.Combine(BaseMidiDir, ".pss790");
+        public static string OverridesFilePath => Path.Combine(MetadataDir, "overrides.json");
 
         public static void EnsureDirectoriesExist()
         {
@@ -24,6 +26,35 @@ namespace PSS790Player.Core
 
             if (!Directory.Exists(Pss790MidiDir))
                 Directory.CreateDirectory(Pss790MidiDir);
+
+            if (!Directory.Exists(MetadataDir))
+            {
+                var dirInfo = Directory.CreateDirectory(MetadataDir);
+                // Optionally mark hidden on Windows
+                try
+                {
+                    dirInfo.Attributes |= FileAttributes.Hidden;
+                }
+                catch { }
+            }
+        }
+
+        public static string GetRelativeLibraryPath(string fullPath)
+        {
+            if (string.IsNullOrEmpty(fullPath)) return string.Empty;
+
+            try
+            {
+                var fullNorm = Path.GetFullPath(fullPath);
+                var baseNorm = Path.GetFullPath(BaseMidiDir);
+                if (fullNorm.StartsWith(baseNorm, StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.GetRelativePath(baseNorm, fullNorm);
+                }
+            }
+            catch { }
+
+            return Path.GetFileName(fullPath);
         }
 
         public static void OpenFolderInExplorer(string? path = null)

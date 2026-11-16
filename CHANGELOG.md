@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-16
+
+### Added
+- **Quick-Pick Folder Tree Sidebar & Jukebox Mode**:
+  - Docked collapsible folder tree sidebar (290px) docked to the left of the Player & Remapper tab, with smooth animated transitions.
+  - Recursive library scanning of both `Music\Midi\GM Midi` and `Music\Midi\PSS-790 Midi`, supporting game OST folders and nested subdirectories (e.g., `Doom\`, `Monkey Island\`, `Duke Nukem\`).
+  - Real-time search filter with instant matching across song titles and subfolder names, automatic expansion of folders containing matches, and a 1-click clear button.
+  - Split-click interaction: Single-click loads song metadata, duration, and channel strips in idle state for inspection/tweaking; double-click or `Enter` plays immediately.
+  - Visual status cues: Active song highlighted with playing indicator (`🔊`), selected song with inspection indicator (`▶`), and format tags (`[PSS]` emerald / `[GM]` indigo).
+- **Portable Per-Song Voice Override Memory**:
+  - Persistent storage in `Music\Midi\.pss790\overrides.json`, keeping custom instrument assignments portable alongside the user's MIDI library.
+  - Saved voice overrides automatically restore to the mixer dropdowns whenever a song is loaded.
+  - "Reset to GM Voices" action in the mixer header to instantly clear custom overrides on disk and return to automatic GM-to-PSS-790 voice remapping.
+- **Media Player Keyboard Navigation**:
+  - `Space`: Play / Pause toggle.
+  - `Escape`: Stop & Panic (kills sounding voices and sends All Notes Off).
+  - `Arrow Up` / `Arrow Down`: Browse previous/next song in the visible library tree.
+  - `Enter`: Play currently selected song.
+  - `Arrow Left` / `Arrow Right`: Seek backward/forward 5 seconds.
+  - `Ctrl+B`: Toggle quick-pick sidebar open/closed from anywhere.
+  - Smart input guard: Arrow keys, Space, and Enter remain functional inside text fields without triggering media playback.
+
 ## [1.3.2] - 2026-11-16
 
 ### Fixed

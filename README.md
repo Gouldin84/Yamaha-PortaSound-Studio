@@ -22,6 +22,20 @@ This application provides a complete bidirectional workstation:
 ## Key Features
 
 ### 📻 Tab 1: Player & Voice Remapper
+- **Quick-Pick Folder Tree Sidebar (Jukebox Mode)**:
+  - Docked collapsible 290px library browser with real-time search, folder expand/collapse toggles, and item badges.
+  - Recursive scanning of `Music\Midi\GM Midi` and `Music\Midi\PSS-790 Midi` with full support for nested game directories (e.g., `Doom\`, `Monkey Island\`).
+  - **Split-Click Interaction**: Single-click loads song metadata and channel strips in idle mode for inspection and tweaking; double-click or `Enter` starts playback immediately.
+  - **Portable Per-Song Voice Memory**: Custom voice selections persist in `Music\Midi\.pss790\overrides.json` and automatically recall when reloading songs. Dedicated "Reset to GM Voices" button resets overrides back to defaults.
+- **Media Player Keyboard Shortcuts**:
+  | Key | Action |
+  |---|---|
+  | `Space` | Play / Pause toggle |
+  | `Esc` | Stop & All-Notes-Off Panic |
+  | `Arrow Up` / `Arrow Down` | Browse songs in visible library list |
+  | `Enter` | Play selected song immediately |
+  | `Arrow Left` / `Arrow Right` | Seek backward / forward 5 seconds |
+  | `Ctrl + B` | Toggle quick-pick sidebar |
 - **Automatic Channel Routing**: Shifts GM percussion from Channel 10 to Channel 16 (PSS-790's fixed rhythm channel) and safely moves any melodic data on Channel 16 to free melodic channels.
 - **Percussion Note Translation**: Converts GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1) so kick, snare, toms, hi-hats, and cymbals trigger the correct instruments.
 - **Non-Linear Voice Translation**: Converts GM Program Change events to the specific non-linear MIDI program numbers required by the PSS-790 (Chart 2) to trigger appropriate voices (00–99).
