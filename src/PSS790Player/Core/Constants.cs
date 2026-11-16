@@ -292,14 +292,14 @@ namespace PSS790Player.Core
         // Reverse Percussion Map: PSS-790 Chart 1 (36-85) to General MIDI Drum (35-81)
         public static readonly ReadOnlyDictionary<byte, byte> Pss790ToGmDrumMap = new(new Dictionary<byte, byte>
         {
-            { 36, 37 }, // RIM SHOT 2 -> Side Stick (37)
+            { 36, 35 }, // BASS DRUM REVERB -> Acoustic Bass Drum (35)
             { 37, 80 }, // TRIANGLE MUTE -> Mute Triangle (80)
             { 38, 40 }, // SYNTH SNARE -> Electric Snare (40)
             { 39, 81 }, // TRIANGLE OPEN -> Open Triangle (81)
-            { 40, 38 }, // SNARE LO -> Acoustic Snare (38)
-            { 41, 38 }, // SNARE MID -> Acoustic Snare (38)
-            { 42, 38 }, // SNARE ECHO -> Acoustic Snare (38)
-            { 43, 38 }, // SNARE BRUSH -> Acoustic Snare (38)
+            { 40, 41 }, // SYNTH TOM BASS -> Low Floor Tom (41)
+            { 41, 45 }, // SYNTH TOM LO -> Low Tom (45)
+            { 42, 47 }, // SYNTH TOM MID -> Low-Mid Tom (47)
+            { 43, 50 }, // SYNTH TOM HI -> High Tom (50)
             { 44, 35 }, // BASS DRUM LO -> Acoustic Bass Drum (35)
             { 45, 36 }, // BASS DRUM HI -> Bass Drum 1 (36)
             { 46, 37 }, // RIM SHOT 1 -> Side Stick (37)
@@ -307,18 +307,18 @@ namespace PSS790Player.Core
             { 48, 45 }, // TOM LO -> Low Tom (45)
             { 49, 38 }, // SNARE HI -> Acoustic Snare (38)
             { 50, 47 }, // TOM MID -> Low-Mid Tom (47)
-            { 51, 38 }, // SNARE FLANGE -> Acoustic Snare (38)
-            { 52, 45 }, // SYNTH TOM -> Low Tom (45)
+            { 51, 37 }, // RIM SHOT 2 -> Side Stick (37)
+            { 52, 38 }, // SNARE LO -> Acoustic Snare (38)
             { 53, 50 }, // TOM HI -> High Tom (50)
             { 54, 39 }, // HAND CLAPS -> Hand Clap (39)
             { 55, 56 }, // COWBELL -> Cowbell (56)
-            { 56, 70 }, // CABASA -> Maracas (70)
+            { 56, 69 }, // CABASA -> Cabasa (69)
             { 57, 42 }, // HI HAT CLOSED -> Closed Hi-Hat (42)
-            { 58, 42 }, // BRASH HIT -> Closed Hi-Hat (42)
+            { 58, 42 }, // BRASH HIT -> Closed Hi-Hat / Brush (42)
             { 59, 46 }, // HI HAT OPEN -> Open Hi-Hat (46)
             { 60, 49 }, // CRASH CYMBAL -> Crash Cymbal 1 (49)
             { 61, 55 }, // SPLASH CYMBAL -> Splash Cymbal (55)
-            { 62, 51 }, // RIDE CYMBAL CUP -> Ride Cymbal 1 (51)
+            { 62, 53 }, // RIDE CYMBAL CUP -> Ride Bell (53)
             { 63, 59 }, // RIDE CYMBAL EDGE -> Ride Cymbal 2 (59)
             { 64, 64 }, // CONGA LO -> Low Conga (64)
             { 65, 63 }, // CONGA HI -> Open Hi Conga (63)
@@ -338,10 +338,10 @@ namespace PSS790Player.Core
             { 79, 73 }, // BRASH SQUEEZE -> Short Guiro (73)
             { 80, 44 }, // HI HAT FOOT -> Pedal Hi-Hat (44)
             { 81, 38 }, // SNARE GATED REVERB -> Acoustic Snare (38)
-            { 82, 38 }, // ONE -> Snare/Percussion (38)
-            { 83, 38 }, // TWO -> Snare/Percussion (38)
-            { 84, 38 }, // THREE -> Snare/Percussion (38)
-            { 85, 38 }  // FOUR -> Snare/Percussion (38)
+            { 82, 76 }, // ONE -> Hi Wood Block / Click (76)
+            { 83, 76 }, // TWO -> Hi Wood Block / Click (76)
+            { 84, 76 }, // THREE -> Hi Wood Block / Click (76)
+            { 85, 76 }  // FOUR -> Hi Wood Block / Click (76)
         });
 
         // Reverse Voice Map: PSS-790 Voice Number (0-99) to General MIDI Instrument (0-127)
@@ -383,70 +383,70 @@ namespace PSS790Player.Core
             { 33, 42 }, // CELLO -> Cello
             { 34, 48 }, // STRINGS 1 -> String Ensemble 1
             { 35, 49 }, // STRINGS 2 -> String Ensemble 2
-            { 36, 44 }, // TREMOLO STRINGS -> Tremolo Strings
-            { 37, 49 }, // SLOW STRINGS -> String Ensemble 2
-            { 38, 48 }, // OCTAVE STRINGS -> String Ensemble 1
-            { 39, 50 }, // SYNTH STRINGS -> Synth Strings 1
-            { 40, 61 }, // BRASS ENSEMBLE 1 -> Brass Section
-            { 41, 61 }, // BRASS ENSEMBLE 2 -> Brass Section
-            { 42, 62 }, // SYNTH BRASS 1 -> Synth Brass 1
-            { 43, 63 }, // SYNTH BRASS 2 -> Synth Brass 2
+            { 36, 45 }, // PIZZICATO STRINGS -> Pizzicato Strings
+            { 37, 46 }, // HARP -> Orchestral Harp
+            { 38, 24 }, // UKULELE -> Acoustic Guitar (nylon)
+            { 39, 105 }, // BANJO -> Banjo
+            { 40, 11 }, // VIBRAPHONE -> Vibraphone
+            { 41, 12 }, // MARIMBA -> Marimba
+            { 42, 13 }, // XYLOPHONE -> Xylophone
+            { 43, 9 },  // GLOCKENSPIEL -> Glockenspiel
             { 44, 56 }, // TRUMPET -> Trumpet
             { 45, 59 }, // MUTE TRUMPET -> Muted Trumpet
-            { 46, 57 }, // TROMBONE -> Trombone
-            { 47, 60 }, // FRENCH HORN -> French Horn
-            { 48, 58 }, // TUBA -> Tuba
-            { 49, 61 }, // BRASS SLAP -> Brass Section
-            { 50, 71 }, // CLARINET -> Clarinet
-            { 51, 68 }, // OBOE -> Oboe
-            { 52, 70 }, // BASSOON -> Bassoon
-            { 53, 73 }, // FLUTE -> Flute
-            { 54, 75 }, // PANFLUTE -> Pan Flute
-            { 55, 74 }, // RECORDER -> Recorder
-            { 56, 78 }, // WHISTLE -> Whistle
-            { 57, 65 }, // SAXOPHONE -> Alto Sax
-            { 58, 64 }, // SOPRANO SAX -> Soprano Sax
-            { 59, 66 }, // BREATH SAX -> Tenor Sax
-            { 60, 22 }, // HARMONICA -> Harmonica
-            { 61, 109 }, // BAGPIPE -> Bagpipe
-            { 62, 10 }, // MUSIC BOX -> Music Box
-            { 63, 9 },  // GLOCKENSPIEL -> Glockenspiel
-            { 64, 11 }, // VIBRAPHONE -> Vibraphone
-            { 65, 12 }, // MARIMBA -> Marimba
-            { 66, 13 }, // XYLOPHONE -> Xylophone
-            { 67, 14 }, // TUBULAR BELL -> Tubular Bells
-            { 68, 114 }, // STEEL DRUM -> Steel Drums
-            { 69, 47 }, // TIMPANI -> Timpani
-            { 70, 108 }, // KALIMBA -> Kalimba
-            { 71, 115 }, // WOOD BLOCK -> Woodblock
-            { 72, 7 },  // SYNTH CLAVI -> Clavinet
-            { 73, 38 }, // SYNTH BASS 1 -> Synth Bass 1
-            { 74, 39 }, // SYNTH BASS 2 -> Synth Bass 2
-            { 75, 32 }, // WOOD BASS -> Acoustic Bass
-            { 76, 33 }, // ELECTRIC BASS -> Electric Bass (finger)
-            { 77, 36 }, // SLAP BASS -> Slap Bass 1
-            { 78, 35 }, // FRETLESS BASS -> Fretless Bass
-            { 79, 37 }, // FUNK BASS -> Slap Bass 2
-            { 80, 105 }, // BANJO -> Banjo
-            { 81, 104 }, // SITAR -> Sitar
-            { 82, 106 }, // SHAMISEN -> Koto
-            { 83, 107 }, // KOTO -> Koto
-            { 84, 25 }, // MANDOLIN -> Acoustic Guitar (steel)
-            { 85, 46 }, // HARP -> Orchestral Harp
-            { 86, 116 }, // TAIKO -> Taiko Drum
-            { 87, 80 }, // SYNTH LEAD 1 -> Lead 1 (square)
-            { 88, 81 }, // SYNTH LEAD 2 -> Lead 2 (sawtooth)
-            { 89, 87 }, // SYNTH LEAD 3 -> Lead 8 (bass + lead)
-            { 90, 82 }, // SYNTH LEAD 4 -> Lead 3 (calliope)
-            { 91, 88 }, // SYNTH PAD 1 -> Pad 1 (new age)
-            { 92, 89 }, // SYNTH PAD 2 -> Pad 2 (warm)
-            { 93, 90 }, // SYNTH PAD 3 -> Pad 3 (polysynth)
-            { 94, 91 }, // SYNTH PAD 4 -> Pad 4 (choir)
-            { 95, 99 }, // FANTASY -> FX 4 (atmosphere)
+            { 46, 56 }, // TRUMPET ECHO -> Trumpet
+            { 47, 59 }, // MUTE TRUMPET ECHO -> Muted Trumpet
+            { 48, 60 }, // FLUGELHORN -> French Horn
+            { 49, 57 }, // TROMBONE -> Trombone
+            { 50, 60 }, // HORN -> French Horn
+            { 51, 58 }, // TUBA -> Tuba
+            { 52, 61 }, // BRASS ENSEMBLE -> Brass Section
+            { 53, 55 }, // BRASS HIT -> Orchestra Hit
+            { 54, 71 }, // CLARINET -> Clarinet
+            { 55, 73 }, // FLUTE -> Flute
+            { 56, 72 }, // PICCOLO -> Piccolo
+            { 57, 64 }, // SOPRANO SAX -> Soprano Sax
+            { 58, 65 }, // ALTO SAX -> Alto Sax
+            { 59, 66 }, // TENOR SAX -> Tenor Sax
+            { 60, 70 }, // BASSOON -> Bassoon
+            { 61, 74 }, // RECORDER -> Recorder
+            { 62, 78 }, // SAMBA WHISTLE -> Whistle
+            { 63, 68 }, // WOODWIND ENSEMBLE -> Oboe
+            { 64, 52 }, // CHORUS -> Choir Aahs
+            { 65, 62 }, // SYNTH BRASS 1 -> Synth Brass 1
+            { 66, 63 }, // SYNTH BRASS 2 -> Synth Brass 2
+            { 67, 62 }, // SYNTH BRASS 3 -> Synth Brass 1
+            { 68, 53 }, // SYNTH CHORUS -> Voice Oohs
+            { 69, 82 }, // SYNTH FLUTE 1 -> Lead 3 (calliope)
+            { 70, 82 }, // SYNTH FLUTE 2 -> Lead 3 (calliope)
+            { 71, 80 }, // SYNTH REED 1 -> Lead 1 (square)
+            { 72, 84 }, // SYNTH REED 2 -> Lead 5 (charang)
+            { 73, 86 }, // SYNTH REED 3 -> Lead 7 (fifths)
+            { 74, 50 }, // SYNTH STRINGS 1 -> Synth Strings 1
+            { 75, 51 }, // SYNTH STRINGS 2 -> Synth Strings 2
+            { 76, 93 }, // SYNTH STRINGS 3 -> Pad 6 (metallic)
+            { 77, 4 },  // SYNTH PIANO 1 -> Electric Piano 1
+            { 78, 5 },  // SYNTH PIANO 2 -> Electric Piano 2
+            { 79, 4 },  // SYNTH PIANO 3 -> Electric Piano 1
+            { 80, 5 },  // SYNTH PIANO 4 -> Electric Piano 2
+            { 81, 75 }, // SYNTH PAN VOICE -> Pan Flute
+            { 82, 89 }, // FANTASY -> Pad 2 (warm)
+            { 83, 33 }, // ELECTRIC BASS -> Electric Bass (finger)
+            { 84, 36 }, // SLAP BASS -> Slap Bass 1
+            { 85, 35 }, // FRETLESS BASS -> Fretless Bass
+            { 86, 34 }, // PICK BASS -> Electric Bass (pick)
+            { 87, 33 }, // MUTE BASS -> Electric Bass (finger)
+            { 88, 33 }, // MUTE BASS ECHO -> Electric Bass (finger)
+            { 89, 32 }, // WOOD BASS 1 -> Acoustic Bass
+            { 90, 32 }, // WOOD BASS 2 -> Acoustic Bass
+            { 91, 38 }, // SYNTH BASS 1 -> Synth Bass 1
+            { 92, 39 }, // SYNTH BASS 2 -> Synth Bass 2
+            { 93, 43 }, // BOWED BASS -> Contrabass
+            { 94, 114 }, // STEEL DRUM -> Steel Drums
+            { 95, 47 }, // TIMPANI -> Timpani
             { 96, 0 },  // PERCUSSIONS -> Standard Kit
-            { 97, 126 }, // SOUND EFFECT 1 -> Applause
-            { 98, 125 }, // SOUND EFFECT 2 -> Helicopter
-            { 99, 127 }  // SOUND EFFECT 3 -> Gunshot
+            { 97, 22 }, // HARMONICA -> Harmonica
+            { 98, 10 }, // MUSIC BOX -> Music Box
+            { 99, 55 }  // ORCHESTRA HIT -> Orchestra Hit
         });
 
         // Reverse Chart 2 Program byte to GM Instrument Number (0-127)

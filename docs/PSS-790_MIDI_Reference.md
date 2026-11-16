@@ -67,15 +67,12 @@ This document provides a comprehensive technical reference for the **Yamaha Port
   - Scale all incoming MIDI Pitch Bend values by a factor of **1/6 (~0.1667)** when playing GM files:
     $$\text{PSS790\_Bend} = \text{round}\left(\frac{\text{GM\_Bend}}{6}\right)$$
 
-### Limitation 5: Lack of All Notes Off / Reset Controllers Support
-* **Symptom**: When pausing, stopping, or seeking in a MIDI player, notes hang indefinitely on the PSS-790.
-* **Cause**: The PSS-790 does **NOT** recognize Channel Mode Messages:
-  - CC 120 (All Sound Off): **Ignored**
-  - CC 121 (Reset All Controllers): **Ignored**
-  - CC 123 (All Notes Off): **Ignored**
+### Limitation 5: All Notes Off & Panic Handling
+* **Symptom**: When pausing, stopping, or seeking in a MIDI player, notes can hang indefinitely on the PSS-790 if only standard CC 123 is used or if note buffers desynchronize.
+* **Cause**: While the MIDI Implementation Chart lists `All Notes OFF: Recognized: O` (CC 123), vintage Yamaha microcomputers often fail to silence notes if note buffers experienced dense traffic or if voices were sustained across multiple elements.
 * **Mitigation**:
-  - The player cannot rely on CC 123 for "Panic" or Stop.
-  - To stop playback cleanly, the engine must send explicit `Note Off` (`0x8n` or `0x9n v=0`) messages for all active notes on all 16 channels.
+  - The player sends explicit `Note Off` (`0x8n` or `0x9n v=0`) messages for all active sounding notes tracked by the engine across all channels.
+  - In addition, the engine broadcasts CC 123 (`All Notes Off`) across all 16 channels to ensure any untracked hardware voices are completely silenced.
 
 ### Limitation 6: Unsupported Sustain Pedal (CC 64) & Stereo Pan (CC 10)
 * **Symptom**: Piano pieces that rely on sustain pedal sound dry and staccato; stereo panning automation does not pan instruments.
@@ -460,3 +457,36 @@ When connecting the PSS-790 as a sound module for playback from a PC sequencer o
 3. **MIDI Cabling**:
    - PC USB-MIDI Interface `OUT` &rarr; Yamaha PSS-790 `MIDI IN`.
    - Leave Yamaha PSS-790 `MIDI OUT` disconnected during playback to prevent MIDI feedback loopback.
+
+---
+
+## 8. PSS-790 Hardware Transmission Channel Architecture (Recording Reference)
+
+When recording live performances or playing back the internal 8-track Song Memory from the PSS-790 into the computer, the hardware transmits over specific MIDI channels as defined on Owner's Manual pages 35–37:
+
+| Source / Track | Transmit Channel | Description |
+| :--- | :---: | :--- |
+| **Manual Keyboard Play** | Channel 1 (default, 1–16 selectable) | Normal single-voice performance |
+| **Vector Synthesizer (Manual)** | Channels 1–4 | 4-way vector mix components |
+| **Song Memory: Melody 1** | Channel 5 | Melodic track 1 playback |
+| **Song Memory: Melody 2** | Channel 6 | Melodic track 2 playback |
+| **Song Memory: Melody 3** | Channel 7 | Melodic track 3 playback |
+| **Song Memory: Melody 4** | Channel 8 | Melodic track 4 playback |
+| **Song Memory: Melody 5** | Channel 9 | Melodic track 5 playback |
+| **Song Memory: Vector Synth** | Channels 1–4 | Recorded vector synth playback |
+| **Accompaniment: Chord/Arp** | Channels 10–14 | Auto-accompaniment backing parts |
+| **Accompaniment: Bass Part** | Channel 15 | Auto-accompaniment bass line |
+| **Song Memory: Drum Pads** | Channel 16 | Manual pad performance |
+| **Accompaniment: Rhythm Part** | Channel 16 | Auto-accompaniment drum patterns |
+
+> [!NOTE]
+> When the PSS-790 transmits manual key presses, velocity is fixed at `127` (`0x7F`). However, when Song Memory plays back, recorded dynamic velocities are transmitted.
+
+---
+
+## 9. Reverse Remapping Matrix (PSS-790 &rarr; General MIDI)
+
+When exporting recorded takes from the PSS-790 to standard General MIDI:
+1. **Drums**: Channel 16 is moved to GM Drum Channel 10 (0-indexed 9). All 50 Chart 1 drum notes (36–85) are remapped to standard General MIDI percussion note numbers (e.g. Note 36 Bass Drum Reverb &rarr; GM 35 Acoustic Bass Drum; Note 38 Synth Snare &rarr; GM 40 Electric Snare; Note 57 Closed HH &rarr; GM 42 Closed Hi-Hat).
+2. **Melodic Programs**: Chart 2 Program Change numbers are mapped to standard General MIDI instruments (0–127) using `Constants.Pss790MidiProgramToGmMap`.
+3. **Pitch Bend**: Since PSS-790 pitch wheel transmits $\pm 12$ semitones and standard GM assumes $\pm 2$ semitones, pitch bend deflection is multiplied by $6.0$ (clamped to $[0, 16383]$) to preserve exact pitch bend depth on standard GM sound modules.

@@ -136,5 +136,41 @@ namespace PSS790Player.Tests
                 if (File.Exists(savedPath)) File.Delete(savedPath);
             }
         }
+
+        [Fact]
+        public void ExportTakeToGeneralMidi_ReverseRemapsVoicesAndDrums_Accurately()
+        {
+            var pssMidi = new MidiFile();
+            var drumTrack = new TrackChunk();
+            // PSS-790 drum notes on Ch 15: Note 36 (BASS DRUM REVERB), Note 38 (SYNTH SNARE)
+            drumTrack.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)15 });
+            drumTrack.Events.Add(new NoteOnEvent((SevenBitNumber)38, (SevenBitNumber)90) { DeltaTime = 120, Channel = (FourBitNumber)15 });
+            pssMidi.Chunks.Add(drumTrack);
+
+            var melodicTrack = new TrackChunk();
+            // Voice 99 ORCHESTRA HIT -> MIDI Prog 90
+            melodicTrack.Events.Add(new ProgramChangeEvent((SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+            // Voice 97 HARMONICA -> MIDI Prog 22
+            melodicTrack.Events.Add(new ProgramChangeEvent((SevenBitNumber)22) { Channel = (FourBitNumber)1 });
+            // Voice 95 TIMPANI -> MIDI Prog 66
+            melodicTrack.Events.Add(new ProgramChangeEvent((SevenBitNumber)66) { Channel = (FourBitNumber)2 });
+            // Voice 83 ELECTRIC BASS -> MIDI Prog 38
+            melodicTrack.Events.Add(new ProgramChangeEvent((SevenBitNumber)38) { Channel = (FourBitNumber)3 });
+            pssMidi.Chunks.Add(melodicTrack);
+
+            var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pssMidi);
+
+            var pcs = gmMidi.GetTimedEvents().Select(te => te.Event).OfType<ProgramChangeEvent>().ToList();
+            Assert.Equal(4, pcs.Count);
+            Assert.Equal((byte)55, (byte)pcs.First(p => p.Channel == 0).ProgramNumber); // GM Orchestra Hit
+            Assert.Equal((byte)22, (byte)pcs.First(p => p.Channel == 1).ProgramNumber); // GM Harmonica
+            Assert.Equal((byte)47, (byte)pcs.First(p => p.Channel == 2).ProgramNumber); // GM Timpani
+            Assert.Equal((byte)33, (byte)pcs.First(p => p.Channel == 3).ProgramNumber); // GM Electric Bass (finger)
+
+            var drumNotes = gmMidi.GetTimedEvents().Select(te => te.Event).OfType<NoteOnEvent>().Where(n => n.Channel == 9).ToList();
+            Assert.Equal(2, drumNotes.Count);
+            Assert.Equal((byte)35, (byte)drumNotes[0].NoteNumber); // GM Acoustic Bass Drum
+            Assert.Equal((byte)40, (byte)drumNotes[1].NoteNumber); // GM Electric Snare
+        }
     }
 }

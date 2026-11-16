@@ -364,7 +364,20 @@ namespace PSS790Player.Core
                     _activeNotes.Clear();
                 }
 
-                // 2. Clear all 16 channel activity callbacks
+                // 2. Also send All Notes Off (CC 123) across all channels (recognized by PSS-790 per MIDI Implementation Chart)
+                for (int ch = 0; ch < 16; ch++)
+                {
+                    try
+                    {
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0)
+                        {
+                            Channel = (FourBitNumber)ch
+                        });
+                    }
+                    catch { }
+                }
+
+                // 3. Clear all 16 channel activity callbacks
                 for (int ch = 0; ch < 16; ch++)
                 {
                     ChannelActivity?.Invoke(this, new ChannelActivityEventArgs

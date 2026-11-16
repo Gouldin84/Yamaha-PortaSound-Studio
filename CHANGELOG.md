@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-11-16
+
+### Fixed
+- **Fine-Tooth Comb MIDI Audit & Reverse Remapping Corrections**:
+  - Corrected `Constants.Pss790VoiceToGmMap` for Voices 36–99 against Page 41 Chart 2: Fixed critical discrepancy where Voices 36–99 previously mapped to incorrect instruments (e.g., Orchestra Hit mapping to Gunshot, Harmonica mapping to Applause, Timpani mapping to Atmosphere, Electric Bass mapping to Koto).
+  - Corrected `Constants.Pss790ToGmDrumMap` for all 50 percussion sounds (Chart 1 Notes 36–85): Fixed note offsets where Note 36 (Bass Drum Reverb) and Notes 40–43 (Synth Toms) mapped to acoustic snares instead of proper kicks and toms.
+  - Symmetrical Pitch Bend Scaling in ReverseRemapper: Added reverse scaling factor (6.0x, clamped to 0–16383) so recorded pitch bends from the PSS-790's +/- 1 octave wheel reproduce with standard depth on General MIDI synths (+/- 2 semitones).
+  - Dual-Action Panic & Silence: Augmented `SendPanicNoteOff` with broadcast of CC 123 (All Notes Off) across all 16 channels alongside explicit Note-Off commands for active sounding voices.
+
 ## [1.3.1] - 2026-11-16
 
 ### Changed
