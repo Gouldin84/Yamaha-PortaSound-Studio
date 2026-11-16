@@ -212,11 +212,17 @@ function handleHostMessage(msg) {
             break;
 
         case "playback_state":
+            const playStateChanged = state.isPlaying !== msg.data.isPlaying || state.isPaused !== msg.data.isPaused;
             state.isPlaying = msg.data.isPlaying;
             state.isPaused = msg.data.isPaused;
             state.currentSeconds = msg.data.currentSeconds || 0;
+            if (msg.data.totalSeconds && msg.data.totalSeconds > 0) {
+                state.durationSeconds = msg.data.totalSeconds;
+            }
             updatePlaybackUi();
-            highlightActiveSongInTree();
+            if (playStateChanged) {
+                highlightActiveSongInTree();
+            }
             break;
 
         // --- Recorder Events ---
@@ -1568,29 +1574,29 @@ function renderMixer() {
         const card = document.createElement("div");
         const isDrum = ch.channel === 15;
 
-        card.className = `glass-card p-3 rounded-2xl flex flex-col justify-between space-y-3 transition-all duration-200 ${
-            ch.hasNotes ? 'border-cyan-500/30' : 'border-slate-800'
+        card.className = `glass-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${
+            ch.hasNotes ? 'border-cyan-500/30 bg-slate-900/60' : 'border-slate-800/80'
         }`;
 
         card.innerHTML = `
-            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                <span class="text-xs font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}">CH ${ch.channelDisplay}</span>
-                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700"></span>
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
+                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}">CH ${ch.channelDisplay}</span>
+                <span id="led-${ch.channel}" class="meter-led w-2 h-2 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700"></span>
             </div>
 
-            <div class="space-y-1">
-                <div class="text-[11px] font-medium text-slate-300 truncate" title="${ch.detectedInstrument}">
+            <div class="space-y-0.5">
+                <div class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
                     ${ch.detectedInstrument}
                 </div>
-                <div class="text-[10px] text-slate-500">
+                <div class="text-[9px] text-slate-400 truncate">
                     ${isDrum ? 'Chart 1 Fixed' : (ch.defaultPssVoiceName ? `Auto: ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
                 </div>
             </div>
 
             <!-- Voice Override Combobox -->
-            <div class="space-y-1">
-                <label class="text-[10px] font-semibold text-slate-400 uppercase">Voice Override</label>
-                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+            <div class="space-y-0.5">
+                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight">Voice Override</label>
+                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
                     <option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>
                     ${state.voices.map(v => `
                         <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
@@ -1601,18 +1607,18 @@ function renderMixer() {
             </div>
 
             <!-- Fader & Controls -->
-            <div class="flex items-center justify-between space-x-2 pt-1">
-                <div class="flex-1 space-y-1">
-                    <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1.5 bg-slate-800">
-                    <div class="flex justify-between text-[9px] text-slate-500 font-mono">
+            <div class="flex items-center justify-between space-x-1.5 pt-0.5">
+                <div class="flex-1 space-y-0.5">
+                    <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800">
+                    <div class="flex justify-between text-[8px] text-slate-500 font-mono">
                         <span>VOL</span>
                         <span id="vol-val-${ch.channel}">${ch.volume}</span>
                     </div>
                 </div>
 
-                <div class="flex space-x-1">
-                    <button id="mute-${ch.channel}" class="w-6 h-6 rounded-md text-[10px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">M</button>
-                    <button id="solo-${ch.channel}" class="w-6 h-6 rounded-md text-[10px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">S</button>
+                <div class="flex space-x-0.5">
+                    <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">M</button>
+                    <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">S</button>
                 </div>
             </div>
         `;
@@ -1825,6 +1831,7 @@ function updatePlaybackUi() {
     const pauseIcon = document.getElementById("pauseIcon");
     const scrubber = document.getElementById("timeScrubber");
     const currTime = document.getElementById("currentTimeDisplay");
+    const totalTime = document.getElementById("totalTimeDisplay");
 
     if (state.isPlaying) {
         playIcon.classList.add("hidden");
@@ -1835,6 +1842,9 @@ function updatePlaybackUi() {
     }
 
     if (scrubber && !scrubber.matches(":active")) {
+        if (state.durationSeconds > 0) {
+            scrubber.max = state.durationSeconds;
+        }
         scrubber.value = state.currentSeconds;
     }
 
@@ -1842,6 +1852,12 @@ function updatePlaybackUi() {
         const mins = Math.floor(state.currentSeconds / 60);
         const secs = Math.floor(state.currentSeconds % 60);
         currTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    if (totalTime && state.durationSeconds > 0) {
+        const mins = Math.floor(state.durationSeconds / 60);
+        const secs = Math.floor(state.durationSeconds % 60);
+        totalTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 }
 
@@ -1912,6 +1928,16 @@ document.getElementById("btnStop").addEventListener("click", () => {
 });
 
 document.getElementById("timeScrubber").addEventListener("input", (e) => {
+    const val = parseFloat(e.target.value);
+    const currTime = document.getElementById("currentTimeDisplay");
+    if (currTime) {
+        const mins = Math.floor(val / 60);
+        const secs = Math.floor(val % 60);
+        currTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+});
+
+document.getElementById("timeScrubber").addEventListener("change", (e) => {
     sendToHost("seek", { seconds: parseFloat(e.target.value) });
 });
 

@@ -74,5 +74,15 @@ namespace PSS790Player.Tests
             var extRel = AppPaths.GetRelativeLibraryPath(externalPath);
             Assert.Equal("D_E1M1.mid", extRel);
         }
+
+        [Fact]
+        public void MidiPlayer_InitialStateAndProgressReporting_IsConfiguredProperly()
+        {
+            using var player = new MidiPlayer();
+            Assert.False(player.IsPlaying);
+            Assert.False(player.IsPaused);
+            Assert.Equal(TimeSpan.Zero, player.CurrentPosition);
+            Assert.Equal(TimeSpan.Zero, player.TotalDuration);
+        }
     }
 }

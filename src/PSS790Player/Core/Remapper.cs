@@ -113,6 +113,8 @@ namespace PSS790Player.Core
                 }
             }
 
+            // Pre-scan for Drum Channels (GM Channel 9 is standard percussion; GS/XG channels use Bank Select CC 0 == 127 or 128)
+            var drumChannels = new HashSet<int> { 9 };
             var usedChannels = new HashSet<int>();
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
@@ -122,31 +124,36 @@ namespace PSS790Player.Core
                     {
                         usedChannels.Add(channelEvent.Channel);
                     }
+                    if (evt is ControlChangeEvent cc && cc.ControlNumber == 0 && (cc.ControlValue == 127 || cc.ControlValue == 128))
+                    {
+                        drumChannels.Add(cc.Channel);
+                    }
                 }
             }
 
             int? relocatedMelodicChannel = null;
-            if (usedChannels.Contains(15) && usedChannels.Contains(9))
+            // Only relocate Channel 15 if Channel 15 is MELODIC (not a drum channel) and another channel is used for drums
+            if (usedChannels.Contains(15) && !drumChannels.Contains(15) && drumChannels.Any(d => usedChannels.Contains(d)))
             {
                 for (int ch = 0; ch < 15; ch++)
                 {
-                    if (ch != 9 && !usedChannels.Contains(ch))
+                    if (!drumChannels.Contains(ch) && !usedChannels.Contains(ch))
                     {
                         relocatedMelodicChannel = ch;
                         break;
                     }
                 }
-                relocatedMelodicChannel ??= 9;
+                relocatedMelodicChannel ??= drumChannels.FirstOrDefault(d => d != 15);
             }
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
-                // Filter unsupported events and foreign GS/XG SysEx to protect 31.25k baud hardware buffers
+                // Filter unsupported events, foreign GS/XG SysEx, and any Program Change on drum channels
                 trackChunk.Events.RemoveAll(e =>
                     e is ChannelAftertouchEvent or NoteAftertouchEvent ||
                     e is NormalSysExEvent or EscapeSysExEvent ||
                     (e is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
-                    (e is ProgramChangeEvent pc && pc.Channel == (FourBitNumber)9)
+                    (e is ProgramChangeEvent pc && drumChannels.Contains(pc.Channel))
                 );
 
                 // Process channel events in-place
@@ -160,7 +167,7 @@ namespace PSS790Player.Core
                         {
                             chEvt.Channel = (FourBitNumber)relocatedMelodicChannel.Value;
                         }
-                        else if (originalChannel == 9)
+                        else if (drumChannels.Contains(originalChannel))
                         {
                             chEvt.Channel = (FourBitNumber)15; // Relocate drums to Channel 16
                         }
@@ -180,6 +187,16 @@ namespace PSS790Player.Core
                         }
                         else
                         {
+                            // Melodic octave folding for PSS-790 hardware multisample range (36 to 96)
+                            if (chEvt is NoteOnEvent melodicNoteOn)
+                            {
+                                melodicNoteOn.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOn.NoteNumber);
+                            }
+                            else if (chEvt is NoteOffEvent melodicNoteOff)
+                            {
+                                melodicNoteOff.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOff.NoteNumber);
+                            }
+
                             if (chEvt is ProgramChangeEvent pc)
                             {
                                 if (options.ChannelVoiceOverrides.TryGetValue(currentChannel, out var overrideVoice) && overrideVoice.HasValue)
@@ -315,6 +332,14 @@ namespace PSS790Player.Core
             if (gmNote < 35) return 44; // Bass drum lo
             if (gmNote > 81) return 58; // Default high percussion -> Maracas
             return 49;                  // Snare hi
+        }
+
+        public static byte ClampMelodicNote(byte note)
+        {
+            // PSS-790 keyboard and tone generator physical multisample range: C2 (36) to C7 (96)
+            while (note < 36) note += 12;
+            while (note > 96) note -= 12;
+            return Math.Clamp(note, (byte)36, (byte)96);
         }
 
         public static void SaveRemapped(MidiFile remapped, string destinationPath)

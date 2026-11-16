@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.3] - 2026-11-16
+
+### Fixed
+- **Real-Time Playback Progress Scrubber & Time Display**:
+  - Implemented 100ms high-resolution timer (`_progressTimer`) in `MidiPlayer.cs` providing continuous, butter-smooth position updates during playback.
+  - Resolved frozen progress slider and `00:00` timer display during MIDI output.
+  - Enhanced scrubber interaction with live time previews while dragging and clean seek-on-release to prevent MIDI serial buffer congestion.
+- **Asus ROG Ally & Handheld Viewport Fit (Complete 16-Channel Visibility)**:
+  - Compact, height-optimized Transport Deck and 16-Channel Mixer cards saving over 220px of vertical screen space.
+  - All 16 channels (CH 1 through CH 16) now fit gracefully on 720p, 800p (Steam Deck), and 1080p @ 150% Windows scaling without slicing off Channels 9–16.
+  - High-visibility, touch-friendly scrollbar styling with cyan hover glow.
+- **Roland GS & Yamaha XG Drum Bank Detection (Fixes *Children*)**:
+  - Pre-scans for Bank Select `CC 0 == 127` or `128` (standard GS/XG drum bank declaration).
+  - Prevents auxiliary drum channels (such as Channel 16 TR-909 dance kits in *Children.mid*) from being misclassified as melodic tracks and converted into twangy steel guitar notes.
+  - Automatically merges auxiliary drum tracks onto Channel 16 with Chart 1 note translation (punchy kick & snare drums).
+- **Physical Multisample Range Octave Folding (C2–C7 / Notes 36–96)**:
+  - Folds melodic notes outside the PSS-790's physical 61-key multisample range by octaves (`note < 36` folds up, `note > 96` folds down).
+  - Preserves harmonic pitch class while preventing sub-audible dropouts on low bass notes (e.g., note 29 in *Everytime* & *Children*) and high-frequency FM aliasing squeals (e.g., note 115 in *Everytime*).
+- **Acoustic Orchestral Celesta Voicing (Fixes *Everytime*)**:
+  - Remapped GM 8 (Celesta) to PSS-790 Voice 43 (`GLOCKENSPIEL`), eliminating the harsh 2-operator FM buzzer of Voice 7 and providing a warm, delicate acoustic chime for piano ballad intros.
+
 ## [1.8.2] - 2026-11-16
 
 ### Added

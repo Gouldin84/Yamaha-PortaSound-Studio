@@ -421,5 +421,65 @@ namespace PSS790Player.Tests
             Assert.Equal((byte)58, Remapper.TranslateDrumNote(82)); // Shaker -> Maracas
             Assert.Equal((byte)76, Remapper.TranslateDrumNote(84)); // Bell Tree -> Triangle Open
         }
+
+        [Fact]
+        public void Remap_GsXgChannel16Drums_KeepsOnChannel16AndTranslatesNotes()
+        {
+            var midi = new MidiFile();
+            var tr10 = new TrackChunk();
+            tr10.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)9 });
+            tr10.Events.Add(new NoteOnEvent((SevenBitNumber)35, (SevenBitNumber)100) { Channel = (FourBitNumber)9 }); // Ch 10 Kick
+            midi.Chunks.Add(tr10);
+
+            var tr16 = new TrackChunk();
+            tr16.Events.Add(new ControlChangeEvent((SevenBitNumber)0, (SevenBitNumber)127) { Channel = (FourBitNumber)15 }); // Drum Bank 127
+            tr16.Events.Add(new ProgramChangeEvent((SevenBitNumber)25) { Channel = (FourBitNumber)15 }); // TR-909 Kit
+            tr16.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { Channel = (FourBitNumber)15 }); // Kick
+            tr16.Events.Add(new NoteOnEvent((SevenBitNumber)40, (SevenBitNumber)100) { Channel = (FourBitNumber)15 }); // Snare
+            midi.Chunks.Add(tr16);
+
+            var remapped = Remapper.Remap(midi);
+            var events = remapped.GetTimedEvents().Select(te => te.Event).ToList();
+
+            // Channel 15 must NOT have ProgramChangeEvent 29 (Steel Guitar)
+            var ch15Pcs = events.OfType<ProgramChangeEvent>().Where(p => p.Channel == (FourBitNumber)15).ToList();
+            Assert.Empty(ch15Pcs);
+
+            // Channel 9 (Ch 10) and Channel 15 notes must both end up on Channel 15 as PSS-790 Chart 1 drums
+            var ch15Notes = events.OfType<NoteOnEvent>().Where(n => n.Channel == (FourBitNumber)15).Select(n => (byte)n.NoteNumber).ToList();
+            Assert.Contains((byte)45, ch15Notes); // GM 36 -> PSS 45 (BASS DRUM HI)
+            Assert.Contains((byte)38, ch15Notes); // GM 40 -> PSS 38 (SYNTH SNARE)
+            Assert.Contains((byte)44, ch15Notes); // GM 35 -> PSS 44 (BASS DRUM LO)
+
+            // Channel 9 should have zero notes
+            var ch9Notes = events.OfType<NoteOnEvent>().Where(n => n.Channel == (FourBitNumber)9).ToList();
+            Assert.Empty(ch9Notes);
+        }
+
+        [Fact]
+        public void Remap_OutOfRangeMelodicNotes_FoldsOctavesWithinPhysicalMultisampleRange()
+        {
+            Assert.Equal((byte)41, Remapper.ClampMelodicNote(29)); // F0 -> F1 (36-96 range)
+            Assert.Equal((byte)46, Remapper.ClampMelodicNote(34)); // Bb0 -> Bb1
+            Assert.Equal((byte)91, Remapper.ClampMelodicNote(115)); // G8 -> G6
+            Assert.Equal((byte)37, Remapper.ClampMelodicNote(1)); // Note 1 -> Note 37
+            Assert.Equal((byte)60, Remapper.ClampMelodicNote(60)); // C4 stays 60
+        }
+
+        [Fact]
+        public void Remap_CelestaGm8_MapsToGlockenspielAcousticVoice()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)8) { Channel = (FourBitNumber)0 }); // GM 8 Celesta
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi);
+            var pc = remapped.GetTimedEvents().Select(te => te.Event).OfType<ProgramChangeEvent>().First();
+
+            // Must map to PSS-790 Voice 43: GLOCKENSPIEL (MidiProgram 32)
+            Assert.Equal((SevenBitNumber)32, pc.ProgramNumber);
+        }
     }
 }

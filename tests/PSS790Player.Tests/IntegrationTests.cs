@@ -1,10 +1,12 @@
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
 using PSS790Player.Core;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace PSS790Player.Tests
 {

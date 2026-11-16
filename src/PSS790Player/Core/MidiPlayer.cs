@@ -34,6 +34,7 @@ namespace PSS790Player.Core
         private readonly bool[] _channelMutes = new bool[16];
         private readonly bool[] _channelSolos = new bool[16];
         private readonly byte[] _channelVolumes = new byte[16];
+        private readonly System.Timers.Timer _progressTimer;
 
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
         public event EventHandler<PlaybackStateEventArgs>? PlaybackStateChanged;
@@ -49,6 +50,15 @@ namespace PSS790Player.Core
             {
                 _channelVolumes[i] = 100;
             }
+
+            _progressTimer = new System.Timers.Timer(100);
+            _progressTimer.Elapsed += (s, e) =>
+            {
+                if (IsPlaying)
+                {
+                    NotifyState();
+                }
+            };
         }
 
         public static List<string> GetOutputDeviceNames()
@@ -182,6 +192,7 @@ namespace PSS790Player.Core
 
             _playback.Finished += (s, e) =>
             {
+                _progressTimer.Stop();
                 SendPanicNoteOff();
                 NotifyState();
             };
@@ -194,6 +205,7 @@ namespace PSS790Player.Core
                 if (_playback != null && !_playback.IsRunning)
                 {
                     _playback.Start();
+                    _progressTimer.Start();
                     NotifyState();
                 }
             }
@@ -205,6 +217,7 @@ namespace PSS790Player.Core
             {
                 if (_playback != null && _playback.IsRunning)
                 {
+                    _progressTimer.Stop();
                     _playback.Stop();
                     SendPanicNoteOff();
                     NotifyState();
@@ -216,6 +229,7 @@ namespace PSS790Player.Core
         {
             lock (_lock)
             {
+                _progressTimer.Stop();
                 if (_playback != null)
                 {
                     _playback.Stop();
@@ -432,6 +446,8 @@ namespace PSS790Player.Core
 
         public void Dispose()
         {
+            _progressTimer.Stop();
+            _progressTimer.Dispose();
             Stop();
             _playback?.Dispose();
             _outputDevice?.Dispose();
