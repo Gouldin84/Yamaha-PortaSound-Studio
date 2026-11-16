@@ -1,0 +1,13 @@
+﻿<Window x:Class="PSS790Player.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Yamaha PSS-790 MIDI Player &amp; Remapper"
+        Height="880" Width="1380"
+        MinHeight="720" MinWidth="1100"
+        WindowStartupLocation="CenterScreen"
+        Background="#020617">
+    <Grid>
+        <wv2:WebView2 Name="MainWebView" DefaultBackgroundColor="#020617" />
+    </Grid>
+</Window>

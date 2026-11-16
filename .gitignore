@@ -1,0 +1,28 @@
+# Build and Output Directories
+bin/
+obj/
+publish/
+release_output/
+TestResults/
+*.log
+
+# Visual Studio & IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Temporary / Scratch Files
+scratch/
+*.tmp
+
+# User Output Directories & Third-Party Assets
+Remapped/
+General MIDI/
+Manuals/
+
+# Package Directories
+packages/
+*.nupkg

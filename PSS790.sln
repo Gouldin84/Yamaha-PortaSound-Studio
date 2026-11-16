@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{2CE8FBF7-9565-4BC9-A03F-C08C1060DB24}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSS790Player", "src\PSS790Player\PSS790Player.csproj", "{34E9A825-340F-4D66-9FFE-68E8500CBCE0}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{6F6C7383-9AC2-4156-93EA-DD3C51AC5F9E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PSS790Player.Tests", "tests\PSS790Player.Tests\PSS790Player.Tests.csproj", "{CECC6460-19A7-4CBB-AAC7-437204BD50EA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{34E9A825-340F-4D66-9FFE-68E8500CBCE0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34E9A825-340F-4D66-9FFE-68E8500CBCE0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34E9A825-340F-4D66-9FFE-68E8500CBCE0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34E9A825-340F-4D66-9FFE-68E8500CBCE0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CECC6460-19A7-4CBB-AAC7-437204BD50EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CECC6460-19A7-4CBB-AAC7-437204BD50EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CECC6460-19A7-4CBB-AAC7-437204BD50EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CECC6460-19A7-4CBB-AAC7-437204BD50EA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{34E9A825-340F-4D66-9FFE-68E8500CBCE0} = {2CE8FBF7-9565-4BC9-A03F-C08C1060DB24}
+		{CECC6460-19A7-4CBB-AAC7-437204BD50EA} = {6F6C7383-9AC2-4156-93EA-DD3C51AC5F9E}
+	EndGlobalSection
+EndGlobal

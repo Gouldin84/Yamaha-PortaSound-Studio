@@ -1,0 +1,65 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Standalone Windows Executable
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build Solution
+        run: dotnet build -c Release --no-restore
+
+      - name: Run Automated Tests
+        run: dotnet test -c Release --no-build --verbosity normal
+
+      - name: Publish Standalone Executable
+        run: |
+          dotnet publish src/PSS790Player/PSS790Player.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -o publish_output
+
+      - name: Package Release Archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release_assets
+          Copy-Item publish_output/PSS790Player.exe release_assets/
+          Compress-Archive -Path publish_output/* -DestinationPath release_assets/PSS790Player-win-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: "Release ${{ github.ref_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release_assets/PSS790Player.exe
+            release_assets/PSS790Player-win-x64.zip
