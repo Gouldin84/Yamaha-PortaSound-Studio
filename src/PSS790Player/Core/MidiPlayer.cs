@@ -262,6 +262,14 @@ namespace PSS790Player.Core
             }
         }
 
+        public void SendEvent(MidiEvent midiEvent)
+        {
+            lock (_lock)
+            {
+                _outputDevice?.SendEvent(midiEvent);
+            }
+        }
+
         public void SendVoiceOverride(int channel, int voiceNumber)
         {
             lock (_lock)

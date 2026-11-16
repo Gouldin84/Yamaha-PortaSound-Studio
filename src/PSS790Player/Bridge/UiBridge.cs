@@ -18,6 +18,7 @@ namespace PSS790Player.Bridge
     {
         private readonly WebView2 _webView;
         private readonly MidiPlayer _player;
+        private readonly MidiRecorder _recorder;
         private readonly RemapperOptions _options = new();
         private MidiFile? _loadedOriginalMidi;
         private MidiFile? _loadedRemappedMidi;
@@ -28,6 +29,10 @@ namespace PSS790Player.Bridge
         {
             _webView = webView;
             _player = new MidiPlayer();
+            _recorder = new MidiRecorder
+            {
+                ThruTargetPlayer = _player
+            };
 
             AppPaths.EnsureDirectoriesExist();
 
@@ -49,6 +54,38 @@ namespace PSS790Player.Bridge
                     isPaused = e.IsPaused,
                     currentSeconds = e.CurrentTime.TotalSeconds,
                     totalSeconds = e.TotalTime.TotalSeconds
+                });
+            };
+
+            _recorder.InputActivity += (s, e) =>
+            {
+                SendToJs("recorder_input_activity", new
+                {
+                    channel = e.Channel,
+                    isActive = e.IsActive,
+                    velocity = e.Velocity
+                });
+            };
+
+            _recorder.StateChanged += (s, e) =>
+            {
+                SendToJs("recorder_state", new
+                {
+                    state = e.State.ToString().ToLowerInvariant(),
+                    countInBeat = e.CountInBeat,
+                    bpm = e.Bpm
+                });
+            };
+
+            _recorder.Tick += (s, e) =>
+            {
+                SendToJs("recorder_tick", new
+                {
+                    elapsedSeconds = e.ElapsedSeconds,
+                    eventCount = e.EventCount,
+                    noteCount = e.NoteCount,
+                    bar = e.CurrentBar,
+                    beat = e.CurrentBeat
                 });
             };
         }
@@ -147,6 +184,64 @@ namespace PSS790Player.Bridge
                     case "cancel_batch":
                         _batchCts?.Cancel();
                         break;
+                    case "select_input_device":
+                        var inDev = root.GetProperty("deviceName").GetString();
+                        _recorder.SetInputDevice(inDev);
+                        break;
+                    case "refresh_input_devices":
+                        SendInputDevices();
+                        break;
+                    case "start_recording":
+                        var bpm = root.TryGetProperty("bpm", out var bProp) ? bProp.GetInt32() : 120;
+                        var countIn = root.TryGetProperty("countIn", out var cProp) && cProp.GetBoolean();
+                        _ = _recorder.StartRecordingAsync(bpm, countIn);
+                        break;
+                    case "stop_recording":
+                        _recorder.StopRecording();
+                        var stats = _recorder.GetLastTakeStats();
+                        SendToJs("recorder_take_ready", new
+                        {
+                            noteCount = stats.noteCount,
+                            eventCount = stats.eventCount,
+                            durationSeconds = stats.durationSeconds,
+                            durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss")
+                        });
+                        break;
+                    case "preview_take":
+                        if (_recorder.LastRecordedFile != null)
+                        {
+                            _player.LoadMidi(_recorder.LastRecordedFile);
+                            _player.Play();
+                        }
+                        break;
+                    case "stop_preview":
+                        _player.Stop();
+                        break;
+                    case "save_take":
+                        var takeFileName = root.TryGetProperty("fileName", out var fnProp) ? fnProp.GetString() ?? $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid" : $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
+                        var remapForPss = root.TryGetProperty("remapForPss790", out var rProp) && rProp.GetBoolean();
+                        var savedPath = _recorder.SaveTake(takeFileName, remapForPss, _options);
+                        SendLibraryUpdate();
+                        SendToJs("take_saved", new
+                        {
+                            filePath = savedPath,
+                            fileName = Path.GetFileName(savedPath),
+                            isPss790 = remapForPss
+                        });
+                        break;
+                    case "send_take_to_player":
+                        var takeFile = _recorder.LastRecordedFile;
+                        if (takeFile != null)
+                        {
+                            var title = root.TryGetProperty("title", out var tTitle) ? tTitle.GetString() ?? "Recorded Take" : "Recorded Take";
+                            LoadMidiObject(takeFile, title);
+                            SendToJs("switch_tab", new { tab = "player" });
+                        }
+                        break;
+                    case "set_midi_thru":
+                        var thru = root.GetProperty("enabled").GetBoolean();
+                        _recorder.MidiThruEnabled = thru;
+                        break;
                 }
             }
             catch (Exception ex)
@@ -158,6 +253,7 @@ namespace PSS790Player.Bridge
         private void HandleGetInitialData()
         {
             var devices = MidiPlayer.GetOutputDeviceNames();
+            var inputDevices = MidiRecorder.GetInputDeviceNames();
             var voices = Constants.Pss790Voices.Values
                 .OrderBy(v => v.VoiceNumber)
                 .Select(v => new
@@ -174,17 +270,36 @@ namespace PSS790Player.Bridge
             SendToJs("initial_data", new
             {
                 devices,
+                inputDevices,
                 voices,
                 library = libraryData,
                 defaultDevice = devices.FirstOrDefault(),
+                defaultInputDevice = inputDevices.FirstOrDefault(),
                 defaultBatchSource = AppPaths.GmMidiDir,
-                defaultBatchTarget = AppPaths.Pss790MidiDir
+                defaultBatchTarget = AppPaths.Pss790MidiDir,
+                midiThru = _recorder.MidiThruEnabled,
+                recorderBpm = _recorder.Bpm
             });
 
             if (devices.Count > 0)
             {
                 _player.SetOutputDevice(devices[0]);
             }
+
+            if (inputDevices.Count > 0)
+            {
+                _recorder.SetInputDevice(inputDevices[0]);
+            }
+        }
+
+        private void SendInputDevices()
+        {
+            var inputDevices = MidiRecorder.GetInputDeviceNames();
+            SendToJs("input_devices_updated", new
+            {
+                inputDevices,
+                currentDevice = _recorder.CurrentInputDeviceName
+            });
         }
 
         private void SendLibraryUpdate()
@@ -246,6 +361,36 @@ namespace PSS790Player.Bridge
                     LoadFile(dialog.FileName);
                 }
             });
+        }
+
+        public void LoadMidiObject(MidiFile midi, string title, string? virtualPath = null)
+        {
+            try
+            {
+                _currentFilePath = virtualPath ?? title;
+                _loadedOriginalMidi = midi;
+
+                var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                ReapplyRemapping();
+
+                var channelInfo = AnalyzeChannels(_loadedOriginalMidi);
+                var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
+
+                SendToJs("file_loaded", new
+                {
+                    fileName = title,
+                    filePath = virtualPath ?? title,
+                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
+                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
+                    durationSeconds = duration.TotalSeconds,
+                    durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
+                    channels = channelInfo
+                });
+            }
+            catch (Exception ex)
+            {
+                SendToJs("error", new { message = $"Error loading recorded take: {ex.Message}" });
+            }
         }
 
         public void LoadFile(string pathOrName)
@@ -459,6 +604,7 @@ namespace PSS790Player.Bridge
         public void Dispose()
         {
             _batchCts?.Cancel();
+            _recorder.Dispose();
             _player.Dispose();
             GC.SuppressFinalize(this);
         }

@@ -30,6 +30,7 @@ This application provides real-time translation, hardware playback, and offline 
 - **Individual Note-Off Panic**: Sends explicit Note-Off commands across all active notes upon stop or seek, eliminating hanging notes.
 - **Standalone `.exe`**: Self-contained Windows x64 binary with zero external runtime dependencies.
 - **Modern DAW Interface**: Sleek dark aesthetic styled with Tailwind CSS, glowing real-time note meters, and custom volume faders.
+- **MIDI Recording Studio (2nd Tab)**: Real-time recording workstation capturing MIDI input from external controllers or the Yamaha PSS-790 itself, complete with 1-bar count-in, BPM control, metronome click track, anti-feedback loop guard, 16-channel live inbound activity meters, and instant 1-click export to PSS-790 format or handoff to the player.
 - **Dedicated User Library**: Automatically creates and manages `C:\Users\%USERNAME%\Music\Midi\` with subfolders for `GM Midi` (raw input) and `PSS-790 Midi` (converted files), complete with a 1-click "Open Library" folder button.
 - **Smart Format Detection & Visual Badging**: Recognizes native PSS-790 vs. GM MIDI files via non-destructive markers (`PSS790_REMAPPED:v1`). Displays `🎵 GM` and `⚡ PSS-790` badges and prevents destructive double-remapping.
 - **File Export & Batch Conversion**: Saves corrected `.mid` files with voice overrides preserved, plus a 1-click batch converter for directories of MIDI files.
