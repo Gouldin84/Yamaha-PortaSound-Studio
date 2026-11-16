@@ -24,6 +24,7 @@ namespace PSS790Player.Bridge
         private MidiFile? _loadedRemappedMidi;
         private string? _currentFilePath;
         private CancellationTokenSource? _batchCts;
+        private CancellationTokenSource? _syncCts;
 
         public UiBridge(WebView2 webView)
         {
@@ -135,6 +136,15 @@ namespace PSS790Player.Bridge
                         break;
                     case "refresh_library":
                         SendLibraryUpdate();
+                        break;
+                    case "analyze_library_sync":
+                        HandleAnalyzeLibrarySync();
+                        break;
+                    case "execute_library_sync":
+                        HandleExecuteLibrarySync(root);
+                        break;
+                    case "cancel_library_sync":
+                        _syncCts?.Cancel();
                         break;
                     case "select_device":
                         var dev = root.GetProperty("deviceName").GetString();
@@ -1528,6 +1538,90 @@ namespace PSS790Player.Bridge
             });
         }
 
+        private void HandleAnalyzeLibrarySync()
+        {
+            try
+            {
+                var analysis = BatchConverter.AnalyzeSync(AppPaths.GmMidiDir, AppPaths.Pss790MidiDir);
+                SendToJs("library_sync_analysis", new
+                {
+                    missingCount = analysis.MissingInTarget.Count,
+                    outdatedCount = analysis.OutdatedInTarget.Count,
+                    orphanCount = analysis.OrphanInTarget.Count,
+                    totalGm = analysis.TotalGmFiles,
+                    totalPss = analysis.TotalPssFiles,
+                    isInSync = analysis.IsInSync,
+                    missingFiles = analysis.MissingInTarget.Take(50).ToList(),
+                    outdatedFiles = analysis.OutdatedInTarget.Take(50).ToList(),
+                    orphanFiles = analysis.OrphanInTarget.Take(50).ToList()
+                });
+            }
+            catch (Exception ex)
+            {
+                SendToJs("error", new { message = $"Sync analysis error: {ex.Message}" });
+            }
+        }
+
+        private void HandleExecuteLibrarySync(JsonElement root)
+        {
+            _syncCts?.Cancel();
+            _syncCts = new CancellationTokenSource();
+
+            var convertMissing = !root.TryGetProperty("convertMissing", out var cm) || cm.GetBoolean();
+            var updateOutdated = !root.TryGetProperty("updateOutdated", out var uo) || uo.GetBoolean();
+            var removeOrphans = !root.TryGetProperty("removeOrphans", out var ro) || ro.GetBoolean();
+            var forceReconvertAll = root.TryGetProperty("forceReconvertAll", out var fr) && fr.GetBoolean();
+
+            var syncOptions = new LibrarySyncOptions
+            {
+                ConvertMissing = convertMissing,
+                UpdateOutdated = updateOutdated,
+                RemoveOrphans = removeOrphans,
+                ForceReconvertAll = forceReconvertAll,
+                RemapperOptions = _options
+            };
+
+            Task.Run(async () =>
+            {
+                var progress = new Progress<(int Current, int Total, string FileName, string Action)>(p =>
+                {
+                    SendToJs("sync_progress", new
+                    {
+                        current = p.Current,
+                        total = p.Total,
+                        fileName = p.FileName,
+                        action = p.Action,
+                        percent = p.Total > 0 ? (int)((double)p.Current / p.Total * 100) : 0
+                    });
+                });
+
+                try
+                {
+                    var result = await BatchConverter.ExecuteSyncAsync(
+                        AppPaths.GmMidiDir,
+                        AppPaths.Pss790MidiDir,
+                        syncOptions,
+                        VoiceOverrideStore.Instance,
+                        progress,
+                        _syncCts.Token);
+
+                    SendToJs("sync_completed", new
+                    {
+                        convertedCount = result.ConvertedCount,
+                        updatedCount = result.UpdatedCount,
+                        removedOrphansCount = result.RemovedOrphansCount,
+                        totalOps = result.TotalOperations
+                    });
+
+                    SendLibraryUpdate();
+                }
+                catch (Exception ex)
+                {
+                    SendToJs("error", new { message = $"Sync execution error: {ex.Message}" });
+                }
+            });
+        }
+
         private void SendToJs(string type, object data)
         {
             Application.Current.Dispatcher.Invoke(() =>
@@ -1543,6 +1637,7 @@ namespace PSS790Player.Bridge
         public void Dispose()
         {
             _batchCts?.Cancel();
+            _syncCts?.Cancel();
             _recorder.Dispose();
             _player.Dispose();
             GC.SuppressFinalize(this);

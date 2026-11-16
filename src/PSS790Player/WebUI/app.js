@@ -258,6 +258,18 @@ function handleHostMessage(msg) {
             document.getElementById("btnStartBatch").disabled = false;
             break;
 
+        case "library_sync_analysis":
+            handleLibrarySyncAnalysis(msg.data);
+            break;
+
+        case "sync_progress":
+            updateSyncProgress(msg.data);
+            break;
+
+        case "sync_completed":
+            handleSyncCompleted(msg.data);
+            break;
+
         case "notification":
             showToast(msg.data.message);
             break;
@@ -2149,6 +2161,115 @@ document.getElementById("btnStartBatch").addEventListener("click", () => {
     const tgt = document.getElementById("batchTargetDir").value;
     document.getElementById("btnStartBatch").disabled = true;
     sendToHost("start_batch", { sourceDir: src, targetDir: tgt });
+});
+
+// Library Sync Modal Handlers
+const syncModal = document.getElementById("syncModal");
+const btnSidebarSync = document.getElementById("btnSidebarSync");
+
+function openSyncModal() {
+    if (!syncModal) return;
+    syncModal.classList.remove("hidden");
+    const banner = document.getElementById("syncStatusBanner");
+    if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-slate-900/80 border-slate-800 text-xs text-slate-300";
+    document.getElementById("syncStatusIcon").textContent = "🔍";
+    document.getElementById("syncStatusHeadline").textContent = "Analyzing library folders...";
+    document.getElementById("syncStatusSubtext").textContent = "Comparing files in GM Midi and PSS-790 Midi...";
+    document.getElementById("syncProgressContainer")?.classList.add("hidden");
+    const btnStart = document.getElementById("btnStartSync");
+    if (btnStart) {
+        btnStart.disabled = false;
+        btnStart.textContent = "Align & Sync Now";
+    }
+    sendToHost("analyze_library_sync");
+}
+
+function closeSyncModal() {
+    if (!syncModal) return;
+    syncModal.classList.add("hidden");
+    sendToHost("cancel_library_sync");
+}
+
+function handleLibrarySyncAnalysis(data) {
+    const missingEl = document.getElementById("syncMetricMissing");
+    const outdatedEl = document.getElementById("syncMetricOutdated");
+    const orphansEl = document.getElementById("syncMetricOrphans");
+    const headline = document.getElementById("syncStatusHeadline");
+    const subtext = document.getElementById("syncStatusSubtext");
+    const icon = document.getElementById("syncStatusIcon");
+    const banner = document.getElementById("syncStatusBanner");
+    const btnStart = document.getElementById("btnStartSync");
+
+    if (missingEl) missingEl.textContent = data.missingCount || 0;
+    if (outdatedEl) outdatedEl.textContent = data.outdatedCount || 0;
+    if (orphansEl) orphansEl.textContent = data.orphanCount || 0;
+
+    if (data.isInSync) {
+        if (icon) icon.textContent = "✅";
+        if (headline) headline.textContent = "Library folders are in 100% parity!";
+        if (subtext) subtext.textContent = `All ${data.totalGm} GM songs are matched and optimized in PSS-790 format with 0 orphans.`;
+        if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-emerald-950/40 border-emerald-500/40 text-xs text-emerald-200";
+        if (btnStart) btnStart.textContent = "Re-Verify / Force Sync";
+    } else {
+        if (icon) icon.textContent = "⚡";
+        if (headline) headline.textContent = `${data.missingCount} missing, ${data.outdatedCount} outdated, ${data.orphanCount} orphan files`;
+        if (subtext) subtext.textContent = "Review options below and click Align & Sync to resolve differences.";
+        if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-cyan-950/40 border-cyan-500/40 text-xs text-cyan-200";
+        if (btnStart) btnStart.textContent = "Align & Sync Now";
+    }
+}
+
+function updateSyncProgress(data) {
+    const container = document.getElementById("syncProgressContainer");
+    const currentEl = document.getElementById("syncCurrentFile");
+    const percentEl = document.getElementById("syncPercent");
+    const barEl = document.getElementById("syncProgressBar");
+
+    if (container) container.classList.remove("hidden");
+    if (currentEl) currentEl.textContent = `${data.action}: ${data.fileName} (${data.current}/${data.total})`;
+    if (percentEl) percentEl.textContent = `${data.percent}%`;
+    if (barEl) barEl.style.width = `${data.percent}%`;
+}
+
+function handleSyncCompleted(data) {
+    const container = document.getElementById("syncProgressContainer");
+    const btnStart = document.getElementById("btnStartSync");
+    if (container) container.classList.add("hidden");
+    if (btnStart) btnStart.disabled = false;
+    if (syncModal) syncModal.classList.add("hidden");
+
+    showToast(`Sync complete! ${data.convertedCount} converted, ${data.updatedCount} updated, ${data.removedOrphansCount} orphans cleaned.`);
+}
+
+btnSidebarSync?.addEventListener("click", openSyncModal);
+document.getElementById("btnCloseSyncModal")?.addEventListener("click", closeSyncModal);
+document.getElementById("btnCancelSyncModal")?.addEventListener("click", closeSyncModal);
+
+document.getElementById("btnStartSync")?.addEventListener("click", () => {
+    const convertMissing = document.getElementById("chkSyncMissing")?.checked ?? true;
+    const updateOutdated = document.getElementById("chkSyncOutdated")?.checked ?? true;
+    const removeOrphans = document.getElementById("chkSyncOrphans")?.checked ?? true;
+    const forceReconvertAll = document.getElementById("chkSyncForceAll")?.checked ?? false;
+
+    const btnStart = document.getElementById("btnStartSync");
+    if (btnStart) btnStart.disabled = true;
+
+    const container = document.getElementById("syncProgressContainer");
+    const currentEl = document.getElementById("syncCurrentFile");
+    const percentEl = document.getElementById("syncPercent");
+    const barEl = document.getElementById("syncProgressBar");
+
+    if (container) container.classList.remove("hidden");
+    if (currentEl) currentEl.textContent = "Starting library sync...";
+    if (percentEl) percentEl.textContent = "0%";
+    if (barEl) barEl.style.width = "0%";
+
+    sendToHost("execute_library_sync", {
+        convertMissing,
+        updateOutdated,
+        removeOrphans,
+        forceReconvertAll
+    });
 });
 
 // Trigger initial handshake and keyboard shortcuts
