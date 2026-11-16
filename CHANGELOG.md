@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-11-16
+
+### Added
+- **Hierarchical Recursive Subfolder Tree**:
+  - Replaced flat directory lists with true nested recursive folder trees.
+  - Subfolders (e.g. `Video Games\Amiga` and `Video Games\Arcade`) now nest cleanly beneath parent folders (`Video Games`).
+  - Collapsing a parent folder cleanly conceals its entire subtree, keeping large libraries tidy.
+- **Collapsible Root Library Songs Group**:
+  - Direct songs in the root of `GM Midi` or `PSS-790 Midi` are neatly grouped into a collapsible `📁 (Root Library Songs)` node, preventing dozens of root songs from cluttering the sidebar.
+- **Collapse All / Expand All Quick Toggle**:
+  - Added dedicated `⊟` / `⊞` button in the sidebar header to collapse all or expand all folders with one click.
+- **Persistent Folder State**:
+  - Folders start cleanly collapsed on initial launch, with open/closed states preserved in `localStorage` across sessions.
+- **Symmetrical Folder Mirroring between GM and PSS-790**:
+  - Symmetrical two-way synchronization ensures directory structures in `GM Midi` and `PSS-790 Midi` remain in parity.
+  - Creating a new folder in either category automatically creates the matching folder in the other.
+  - Renaming a folder updates the counterpart folder on both sides of the mirror.
+- **Linked Song Relocation across Mirrored Folders**:
+  - When moving a song in `GM Midi`, the system automatically detects the matching optimized PSS-790 version and offers: `[x] Also move matching linked version to mirrored folder`.
+  - Moving relocates both files to their respective mirrored destinations and automatically migrates relative keys in `Music\Midi\.pss790\overrides.json` for both songs.
+
 ## [1.5.0] - 2026-11-16
 
 ### Added

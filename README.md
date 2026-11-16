@@ -23,10 +23,11 @@ This application provides a complete bidirectional workstation:
 
 ### 📻 Tab 1: Player & Voice Remapper
 - **Quick-Pick Folder Tree Sidebar (Jukebox Mode)**:
-  - Docked collapsible 290px library browser with real-time search, folder expand/collapse toggles, and item badges.
-  - Recursive scanning of `Music\Midi\GM Midi` and `Music\Midi\PSS-790 Midi` with full support for nested game directories (e.g., `Doom\`, `Monkey Island\`).
+  - Docked collapsible 290px library browser with real-time search, recursive nested subfolder navigation, folder expand/collapse toggles, and item badges.
+  - Symmetrical two-way directory mirroring between `Music\Midi\GM Midi` and `Music\Midi\PSS-790 Midi`, with automatic folder parity on creation and rename.
+  - Recursive nested tree rendering (e.g. `Video Games\Amiga`, `Video Games\Arcade`), collapsible root library song grouping, and 1-click Collapse All / Expand All toggle.
   - **Right-Click File Management**: Add new folders, rename files/folders, move songs to destination folders, reveal in Explorer, or delete items directly from the tree context menu.
-  - **Linked PSS Deletion**: When deleting a General MIDI song, automatically detects matching PSS-790 optimized versions and offers to delete both versions simultaneously.
+  - **Linked PSS Deletion & Move**: Symmetrically moves or deletes matching PSS-790 optimized versions in the mirrored counterpart library with a single confirmation.
   - **Split-Click Interaction**: Single-click loads song metadata and channel strips in idle mode for inspection and tweaking; double-click or `Enter` starts playback immediately.
   - **Portable Per-Song Voice Memory**: Custom voice selections persist in `Music\Midi\.pss790\overrides.json` and automatically recall when reloading songs. Moving or renaming files/folders dynamically migrates voice assignments without data loss. Dedicated "Reset to GM Voices" button resets overrides back to defaults.
 - **Media Player Keyboard Shortcuts**:

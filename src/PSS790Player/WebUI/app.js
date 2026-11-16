@@ -366,21 +366,34 @@ function initSidebarState() {
         if (saved !== null) {
             state.isSidebarCollapsed = saved === "true";
         }
+
+        const savedExpanded = localStorage.getItem("pss790_expanded_folders");
+        if (savedExpanded) {
+            const arr = JSON.parse(savedExpanded);
+            state.expandedFolders = new Set(arr);
+        } else {
+            // Folders are collapsed by default on startup
+            state.expandedFolders = new Set();
+        }
     } catch (e) {}
 
-    // Auto-expand all folders on first run if not already set
-    if (state.expandedFolders.size === 0 && state.library) {
-        ["pssTree", "gmTree"].forEach(key => {
-            const tree = state.library[key];
-            if (tree && tree.folders) {
-                tree.folders.forEach(f => {
-                    state.expandedFolders.add(`${tree.format}:${f.name}`);
-                });
-            }
-        });
-    }
-
     updateSidebarVisibility();
+    updateCollapseAllButton();
+}
+
+function saveExpandedFolders() {
+    try {
+        localStorage.setItem("pss790_expanded_folders", JSON.stringify(Array.from(state.expandedFolders)));
+    } catch (e) {}
+    updateCollapseAllButton();
+}
+
+function updateCollapseAllButton() {
+    const btn = document.getElementById("btnCollapseAll");
+    if (!btn) return;
+    const hasExpanded = state.expandedFolders.size > 0;
+    btn.textContent = hasExpanded ? "⊟" : "⊞";
+    btn.title = hasExpanded ? "Collapse All Folders" : "Expand All Folders";
 }
 
 function toggleSidebar() {
@@ -412,6 +425,36 @@ function toggleFolder(folderKey) {
     } else {
         state.expandedFolders.add(folderKey);
     }
+    saveExpandedFolders();
+    renderLibraryTree();
+}
+
+function toggleCollapseAllFolders() {
+    if (state.expandedFolders.size > 0) {
+        state.expandedFolders.clear();
+    } else if (state.library) {
+        const addAllKeys = (node, catKey) => {
+            state.expandedFolders.add(`${catKey}:${node.relativePath || node.name}`);
+            if (node.subFolders && node.subFolders.length > 0) {
+                node.subFolders.forEach(sub => addAllKeys(sub, catKey));
+            }
+        };
+
+        const categories = [
+            { tree: state.library.pssTree, key: "pss790" },
+            { tree: state.library.gmTree, key: "gm" }
+        ];
+
+        categories.forEach(({ tree, key }) => {
+            if (tree) {
+                state.expandedFolders.add(`${key}:__root__`);
+                if (tree.subFolders) {
+                    tree.subFolders.forEach(f => addAllKeys(f, key));
+                }
+            }
+        });
+    }
+    saveExpandedFolders();
     renderLibraryTree();
 }
 
@@ -561,7 +604,14 @@ function openActionModal(actionType, target) {
         inputContainer.classList.add("hidden");
         moveContainer.classList.remove("hidden");
         populateMoveFolderSelect(target.category, target.subFolder);
+
+        const linkedMoveContainer = document.getElementById("actionModalLinkedMoveContainer");
+        if (linkedMoveContainer) linkedMoveContainer.classList.add("hidden");
+
         modal.classList.remove("hidden");
+
+        // Check for matching counterpart file across mirrored library
+        sendToHost("check_linked_file", { filePath: target.fullPath, isFolder: false });
     } else if (actionType === "delete") {
         icon.textContent = "🗑️";
         const isFolder = target.type === "folder";
@@ -571,14 +621,20 @@ function openActionModal(actionType, target) {
             : `Are you sure you want to permanently delete "${target.name}"?`;
         inputContainer.classList.add("hidden");
 
+        const deleteLabel = document.querySelector("#actionModalLinkedDeleteContainer span");
+        if (deleteLabel) {
+            deleteLabel.textContent = isFolder ? "Also delete mirrored folder in counterpart library" : "Also delete matching PSS-790 version";
+        }
+
         btnConfirm.className = "px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition";
         btnConfirm.textContent = "Delete Forever";
 
+        const delContainer = document.getElementById("actionModalLinkedDeleteContainer");
+        if (delContainer) delContainer.classList.add("hidden");
+
         modal.classList.remove("hidden");
 
-        if (!isFolder && target.category === "gm") {
-            sendToHost("check_linked_file", { filePath: target.fullPath });
-        }
+        sendToHost("check_linked_file", { filePath: target.fullPath, isFolder: isFolder });
     }
 }
 
@@ -596,33 +652,43 @@ function populateMoveFolderSelect(category, currentSubFolder) {
     if (!currentSubFolder) rootOpt.selected = true;
     sel.appendChild(rootOpt);
 
-    if (tree && tree.folders) {
-        tree.folders.forEach(f => {
-            const opt = document.createElement("option");
-            opt.value = f.name;
-            opt.textContent = `📁 ${f.name} (${f.count || (f.files ? f.files.length : 0)} songs)`;
-            if (currentSubFolder && currentSubFolder.toLowerCase() === f.name.toLowerCase()) {
-                opt.selected = true;
-            }
-            sel.appendChild(opt);
-        });
-    }
+    const folderList = (tree && (tree.allFolders || tree.folders)) || [];
+    folderList.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.name;
+        opt.textContent = `📁 ${f.name}`;
+        if (currentSubFolder && currentSubFolder.toLowerCase() === f.name.toLowerCase()) {
+            opt.selected = true;
+        }
+        sel.appendChild(opt);
+    });
 }
 
 function handleLinkedFileChecked(data) {
-    if (activeModalAction && activeModalAction.actionType === "delete" && activeModalAction.target) {
-        const target = activeModalAction.target;
-        if (target.fullPath === data.filePath && data.hasLinked) {
-            const container = document.getElementById("actionModalLinkedDeleteContainer");
-            const label = document.getElementById("actionModalLinkedPathLabel");
-            const chk = document.getElementById("chkAlsoDeleteLinked");
+    if (!activeModalAction || !activeModalAction.target) return;
+    const target = activeModalAction.target;
 
-            if (container && label && chk) {
-                target.linkedPath = data.linkedPath;
-                label.textContent = data.linkedName || data.linkedPath;
-                chk.checked = true;
-                container.classList.remove("hidden");
-            }
+    if (activeModalAction.actionType === "delete" && target.fullPath === data.filePath && data.hasLinked) {
+        const container = document.getElementById("actionModalLinkedDeleteContainer");
+        const label = document.getElementById("actionModalLinkedPathLabel");
+        const chk = document.getElementById("chkAlsoDeleteLinked");
+
+        if (container && label && chk) {
+            target.linkedPath = data.linkedPath;
+            label.textContent = data.linkedName || data.linkedPath;
+            chk.checked = true;
+            container.classList.remove("hidden");
+        }
+    } else if (activeModalAction.actionType === "move" && target.fullPath === data.filePath && data.hasLinked) {
+        const container = document.getElementById("actionModalLinkedMoveContainer");
+        const label = document.getElementById("actionModalLinkedMovePathLabel");
+        const chk = document.getElementById("chkAlsoMoveLinked");
+
+        if (container && label && chk) {
+            target.linkedPath = data.linkedPath;
+            label.textContent = data.linkedName || data.linkedPath;
+            chk.checked = true;
+            container.classList.remove("hidden");
         }
     }
 }
@@ -640,6 +706,7 @@ function confirmActionModal() {
     const input = document.getElementById("actionModalInput");
     const folderSelect = document.getElementById("actionModalFolderSelect");
     const chkLinked = document.getElementById("chkAlsoDeleteLinked");
+    const chkMoveLinked = document.getElementById("chkAlsoMoveLinked");
 
     if (actionType === "new_folder") {
         const val = input.value.trim();
@@ -647,7 +714,7 @@ function confirmActionModal() {
             showToast("Please enter a folder name.", true);
             return;
         }
-        const parentSub = target.type === "folder" ? target.folderName : "";
+        const parentSub = target.type === "folder" ? (target.folderName || "") : "";
         sendToHost("create_folder", {
             category: target.category || "gm",
             parentSubFolder: parentSub,
@@ -666,10 +733,13 @@ function confirmActionModal() {
         });
     } else if (actionType === "move") {
         const selectedSubFolder = folderSelect ? folderSelect.value : "";
+        const alsoMove = chkMoveLinked && chkMoveLinked.checked && !!target.linkedPath;
         sendToHost("move_file", {
             sourcePath: target.fullPath,
             targetCategory: target.category || "gm",
-            targetSubFolder: selectedSubFolder
+            targetSubFolder: selectedSubFolder,
+            alsoMoveLinked: alsoMove,
+            linkedPath: target.linkedPath || null
         });
     } else if (actionType === "delete") {
         const alsoDelete = chkLinked && chkLinked.checked && !!target.linkedPath;
@@ -682,6 +752,103 @@ function confirmActionModal() {
     }
 
     closeActionModal();
+}
+
+function filterFolderNode(folder, query) {
+    const nameMatches = folder.name.toLowerCase().includes(query);
+
+    let matchingFiles = [];
+    if (folder.files) {
+        matchingFiles = folder.files.filter(f => nameMatches || f.fileName.toLowerCase().includes(query));
+    }
+
+    let matchingSubFolders = [];
+    if (folder.subFolders) {
+        folder.subFolders.forEach(sub => {
+            const filteredSub = filterFolderNode(sub, query);
+            if (filteredSub) {
+                matchingSubFolders.push(filteredSub);
+            }
+        });
+    }
+
+    if (nameMatches || matchingFiles.length > 0 || matchingSubFolders.length > 0) {
+        const totalMatching = matchingFiles.length + matchingSubFolders.reduce((acc, s) => acc + s.totalCount, 0);
+        return {
+            name: folder.name,
+            fullPath: folder.fullPath,
+            relativePath: folder.relativePath,
+            files: matchingFiles,
+            subFolders: matchingSubFolders,
+            directCount: matchingFiles.length,
+            totalCount: totalMatching
+        };
+    }
+    return null;
+}
+
+function renderFolderNode(folder, depth, catKey, query) {
+    const folderKey = `${catKey}:${folder.relativePath || folder.name}`;
+    const isFolderExpanded = query.length > 0 || state.expandedFolders.has(folderKey);
+
+    const folderGroup = document.createElement("div");
+    folderGroup.className = "tree-folder-group space-y-0.5";
+
+    const padPx = depth * 12;
+
+    const folderHeader = document.createElement("div");
+    folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
+    if (padPx > 0) {
+        folderHeader.style.paddingLeft = `${padPx + 8}px`;
+    }
+
+    folderHeader.innerHTML = `
+        <div class="flex items-center space-x-1.5 truncate">
+            <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
+            <span class="text-amber-400 text-xs">📁</span>
+            <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
+        </div>
+        <span class="text-[9px] font-mono text-slate-500 ml-1">(${folder.totalCount})</span>
+    `;
+    folderHeader.addEventListener("click", () => toggleFolder(folderKey));
+    folderHeader.addEventListener("contextmenu", (e) => {
+        showContextMenu(e, {
+            type: "folder",
+            category: catKey,
+            folderName: folder.relativePath || folder.name,
+            fullPath: folder.fullPath,
+            name: folder.name
+        });
+    });
+    folderGroup.appendChild(folderHeader);
+
+    if (isFolderExpanded) {
+        const folderContent = document.createElement("div");
+        folderContent.className = "space-y-0.5 border-l border-slate-800/80 ml-2.5";
+
+        // 1. Render child subfolders
+        if (folder.subFolders && folder.subFolders.length > 0) {
+            folder.subFolders.forEach(sub => {
+                folderContent.appendChild(renderFolderNode(sub, depth + 1, catKey, query));
+            });
+        }
+
+        // 2. Render direct files
+        if (folder.files && folder.files.length > 0) {
+            folder.files.forEach(file => {
+                state.visibleSongList.push(file);
+                const fileEl = createSongItemElement(file);
+                if (padPx > 0) {
+                    fileEl.style.paddingLeft = `${padPx + 10}px`;
+                }
+                folderContent.appendChild(fileEl);
+            });
+        }
+
+        folderGroup.appendChild(folderContent);
+    }
+
+    return folderGroup;
 }
 
 function renderLibraryTree() {
@@ -728,34 +895,26 @@ function renderLibraryTree() {
         const tree = cat.tree;
         if (!tree) return;
 
-        let filteredFolders = [];
+        let filteredSubFolders = [];
         let filteredRootFiles = [];
 
+        const sourceSubFolders = tree.subFolders || [];
+        const sourceRootFiles = tree.files || [];
+
         if (query) {
-            if (tree.folders) {
-                tree.folders.forEach(f => {
-                    const folderMatches = f.name.toLowerCase().includes(query);
-                    const matchingFiles = (f.files || []).filter(file =>
-                        folderMatches || file.fileName.toLowerCase().includes(query)
-                    );
-                    if (matchingFiles.length > 0) {
-                        filteredFolders.push({
-                            name: f.name,
-                            files: matchingFiles,
-                            count: matchingFiles.length
-                        });
-                    }
-                });
-            }
-            if (tree.files) {
-                filteredRootFiles = tree.files.filter(f => f.fileName.toLowerCase().includes(query));
-            }
+            sourceSubFolders.forEach(f => {
+                const filtered = filterFolderNode(f, query);
+                if (filtered) {
+                    filteredSubFolders.push(filtered);
+                }
+            });
+            filteredRootFiles = sourceRootFiles.filter(f => f.fileName.toLowerCase().includes(query));
         } else {
-            filteredFolders = tree.folders || [];
-            filteredRootFiles = tree.files || [];
+            filteredSubFolders = sourceSubFolders;
+            filteredRootFiles = sourceRootFiles;
         }
 
-        const catSongCount = filteredFolders.reduce((acc, f) => acc + f.files.length, 0) + filteredRootFiles.length;
+        const catSongCount = filteredSubFolders.reduce((acc, f) => acc + f.totalCount, 0) + filteredRootFiles.length;
         if (catSongCount === 0) return;
 
         totalRenderedSongs += catSongCount;
@@ -792,57 +951,51 @@ function renderLibraryTree() {
             const catContent = document.createElement("div");
             catContent.className = "pl-1.5 pt-1 space-y-1";
 
-            // Render Subfolders
-            filteredFolders.forEach(folder => {
-                const folderKey = `${cat.key}:${folder.name}`;
-                const isFolderExpanded = query.length > 0 || state.expandedFolders.has(folderKey);
+            // Render Subfolders recursively
+            filteredSubFolders.forEach(folder => {
+                catContent.appendChild(renderFolderNode(folder, 0, cat.key, query));
+            });
 
-                const folderGroup = document.createElement("div");
-                folderGroup.className = "tree-folder-group space-y-0.5";
+            // Render Category Root Files (grouped in collapsible folder)
+            if (filteredRootFiles.length > 0) {
+                const rootKey = `${cat.key}:__root__`;
+                const isRootExpanded = query.length > 0 || state.expandedFolders.has(rootKey);
 
-                const folderHeader = document.createElement("div");
-                folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
-                folderHeader.innerHTML = `
+                const rootGroup = document.createElement("div");
+                rootGroup.className = "tree-folder-group space-y-0.5 pt-0.5";
+
+                const rootHeader = document.createElement("div");
+                rootHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
+                rootHeader.innerHTML = `
                     <div class="flex items-center space-x-1.5 truncate">
-                        <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
+                        <span class="text-[8px] text-slate-500 transform transition-transform">${isRootExpanded ? '▼' : '▶'}</span>
                         <span class="text-amber-400 text-xs">📁</span>
-                        <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
+                        <span class="font-medium truncate text-slate-300 italic">(Root Library Songs)</span>
                     </div>
-                    <span class="text-[9px] font-mono text-slate-500 ml-1">(${folder.files.length})</span>
+                    <span class="text-[9px] font-mono text-slate-500 ml-1">(${filteredRootFiles.length})</span>
                 `;
-                folderHeader.addEventListener("click", () => toggleFolder(folderKey));
-                folderHeader.addEventListener("contextmenu", (e) => {
+                rootHeader.addEventListener("click", () => toggleFolder(rootKey));
+                rootHeader.addEventListener("contextmenu", (e) => {
                     showContextMenu(e, {
                         type: "folder",
                         category: cat.key,
-                        folderName: folder.name,
-                        fullPath: folder.fullPath,
-                        name: folder.name
+                        folderName: "",
+                        fullPath: tree.fullPath,
+                        name: "(Root Library)"
                     });
                 });
-                folderGroup.appendChild(folderHeader);
+                rootGroup.appendChild(rootHeader);
 
-                if (isFolderExpanded) {
-                    const folderContent = document.createElement("div");
-                    folderContent.className = "pl-3 space-y-0.5 border-l border-slate-800/80 ml-2.5";
-                    folder.files.forEach(file => {
+                if (isRootExpanded) {
+                    const rootContent = document.createElement("div");
+                    rootContent.className = "pl-3 space-y-0.5 border-l border-slate-800/80 ml-2.5";
+                    filteredRootFiles.forEach(file => {
                         state.visibleSongList.push(file);
-                        folderContent.appendChild(createSongItemElement(file));
+                        rootContent.appendChild(createSongItemElement(file));
                     });
-                    folderGroup.appendChild(folderContent);
+                    rootGroup.appendChild(rootContent);
                 }
 
-                catContent.appendChild(folderGroup);
-            });
-
-            // Render Category Root Files
-            if (filteredRootFiles.length > 0) {
-                const rootGroup = document.createElement("div");
-                rootGroup.className = "space-y-0.5 pt-0.5";
-                filteredRootFiles.forEach(file => {
-                    state.visibleSongList.push(file);
-                    rootGroup.appendChild(createSongItemElement(file));
-                });
                 catContent.appendChild(rootGroup);
             }
 
@@ -1502,6 +1655,11 @@ if (btnToggleSidebar) {
 const btnCloseSidebar = document.getElementById("btnCloseSidebar");
 if (btnCloseSidebar) {
     btnCloseSidebar.addEventListener("click", toggleSidebar);
+}
+
+const btnCollapseAll = document.getElementById("btnCollapseAll");
+if (btnCollapseAll) {
+    btnCollapseAll.addEventListener("click", toggleCollapseAllFolders);
 }
 
 const sidebarSearchInput = document.getElementById("sidebarSearchInput");

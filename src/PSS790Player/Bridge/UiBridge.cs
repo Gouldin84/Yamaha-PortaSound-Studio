@@ -357,25 +357,23 @@ namespace PSS790Player.Bridge
                 return;
             }
 
-            var baseDir = string.Equals(category, "pss790", StringComparison.OrdinalIgnoreCase)
-                ? AppPaths.Pss790MidiDir
-                : AppPaths.GmMidiDir;
+            var gmTarget = Path.Combine(AppPaths.GmMidiDir, parentSubFolder, folderName);
+            var pssTarget = Path.Combine(AppPaths.Pss790MidiDir, parentSubFolder, folderName);
 
-            var targetDir = Path.Combine(baseDir, parentSubFolder, folderName);
-
-            if (!AppPaths.IsPathInsideLibrary(targetDir))
+            if (!AppPaths.IsPathInsideLibrary(gmTarget) || !AppPaths.IsPathInsideLibrary(pssTarget))
             {
                 SendToJs("error", new { message = "Invalid directory path." });
                 return;
             }
 
-            if (Directory.Exists(targetDir))
+            if (Directory.Exists(gmTarget) || Directory.Exists(pssTarget))
             {
                 SendToJs("error", new { message = $"Folder '{folderName}' already exists." });
                 return;
             }
 
-            Directory.CreateDirectory(targetDir);
+            Directory.CreateDirectory(gmTarget);
+            Directory.CreateDirectory(pssTarget);
             SendLibraryUpdate();
             SendToJs("notification", new { message = $"Created folder: {folderName}" });
         }
@@ -425,10 +423,38 @@ namespace PSS790Player.Bridge
                 Directory.Move(fullPath, newPath);
                 VoiceOverrideStore.Instance.RenameFolder(fullPath, newPath);
 
-                if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + "\\", StringComparison.OrdinalIgnoreCase))
+                if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 {
                     _currentFilePath = newPath + _currentFilePath.Substring(fullPath.Length);
                 }
+
+                // Symmetrical folder rename in mirrored counterpart library
+                try
+                {
+                    var isGm = fullPath.StartsWith(AppPaths.GmMidiDir, StringComparison.OrdinalIgnoreCase);
+                    var srcRoot = isGm ? AppPaths.GmMidiDir : AppPaths.Pss790MidiDir;
+                    var mirrorRoot = isGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+
+                    var relFolder = Path.GetRelativePath(srcRoot, fullPath);
+                    var mirrorFolder = Path.Combine(mirrorRoot, relFolder);
+
+                    if (Directory.Exists(mirrorFolder))
+                    {
+                        var mirrorParent = Path.GetDirectoryName(mirrorFolder) ?? mirrorRoot;
+                        var newMirrorPath = Path.Combine(mirrorParent, newName);
+                        if (!Directory.Exists(newMirrorPath))
+                        {
+                            Directory.Move(mirrorFolder, newMirrorPath);
+                            VoiceOverrideStore.Instance.RenameFolder(mirrorFolder, newMirrorPath);
+
+                            if (_currentFilePath != null && _currentFilePath.StartsWith(mirrorFolder + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _currentFilePath = newMirrorPath + _currentFilePath.Substring(mirrorFolder.Length);
+                            }
+                        }
+                    }
+                }
+                catch { }
 
                 SendLibraryUpdate();
                 SendToJs("notification", new { message = $"Renamed folder to: {newName}" });
@@ -472,6 +498,8 @@ namespace PSS790Player.Bridge
             var sourcePath = root.TryGetProperty("sourcePath", out var sp) ? sp.GetString() : null;
             var targetCategory = root.TryGetProperty("targetCategory", out var tc) ? tc.GetString() : "gm";
             var targetSubFolder = root.TryGetProperty("targetSubFolder", out var tsf) ? tsf.GetString() ?? "" : "";
+            var alsoMoveLinked = root.TryGetProperty("alsoMoveLinked", out var aml) && aml.GetBoolean();
+            var linkedPath = root.TryGetProperty("linkedPath", out var lp) ? lp.GetString() : null;
 
             if (string.IsNullOrWhiteSpace(sourcePath) || !File.Exists(sourcePath))
             {
@@ -523,27 +551,86 @@ namespace PSS790Player.Bridge
                 _currentFilePath = destPath;
             }
 
+            // Linked file move across mirrored destination
+            var movedLinked = false;
+            if (alsoMoveLinked)
+            {
+                if (string.IsNullOrWhiteSpace(linkedPath) || !File.Exists(linkedPath))
+                {
+                    linkedPath = AppPaths.FindMatchingLinkedFile(sourcePath);
+                }
+
+                if (!string.IsNullOrWhiteSpace(linkedPath) && File.Exists(linkedPath) && AppPaths.IsPathInsideLibrary(linkedPath))
+                {
+                    var isSourceGm = sourcePath.StartsWith(AppPaths.GmMidiDir, StringComparison.OrdinalIgnoreCase);
+                    var mirrorBaseDir = isSourceGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+                    var mirrorDestDir = Path.Combine(mirrorBaseDir, targetSubFolder);
+
+                    if (!Directory.Exists(mirrorDestDir))
+                    {
+                        Directory.CreateDirectory(mirrorDestDir);
+                    }
+
+                    var linkedFileName = Path.GetFileName(linkedPath);
+                    var mirrorDestPath = Path.Combine(mirrorDestDir, linkedFileName);
+
+                    if (!string.Equals(linkedPath, mirrorDestPath, StringComparison.OrdinalIgnoreCase) && !File.Exists(mirrorDestPath))
+                    {
+                        File.Move(linkedPath, mirrorDestPath);
+                        VoiceOverrideStore.Instance.RenameFile(linkedPath, mirrorDestPath);
+
+                        if (string.Equals(_currentFilePath, linkedPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _currentFilePath = mirrorDestPath;
+                        }
+                        movedLinked = true;
+                    }
+                }
+            }
+
             SendLibraryUpdate();
             var folderLabel = string.IsNullOrEmpty(targetSubFolder) ? "(Root)" : targetSubFolder;
-            SendToJs("notification", new { message = $"Moved '{fileName}' to {folderLabel}" });
+            SendToJs("notification", new { message = movedLinked ? $"Moved both GM and PSS-790 versions to {folderLabel}" : $"Moved '{fileName}' to {folderLabel}" });
         }
 
         private void HandleCheckLinkedFile(JsonElement root)
         {
             var filePath = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : null;
+            var isFolder = root.TryGetProperty("isFolder", out var ifProp) && ifProp.GetBoolean();
+
             if (string.IsNullOrWhiteSpace(filePath))
             {
-                SendToJs("linked_file_checked", new { filePath = "", hasLinked = false, linkedPath = (string?)null, linkedName = (string?)null });
+                SendToJs("linked_file_checked", new { filePath = "", hasLinked = false, linkedPath = (string?)null, linkedName = (string?)null, isFolder = false });
                 return;
             }
 
-            var linked = AppPaths.FindMatchingOptimizedFile(filePath);
+            if (isFolder)
+            {
+                var isGm = filePath.StartsWith(AppPaths.GmMidiDir, StringComparison.OrdinalIgnoreCase);
+                var srcRoot = isGm ? AppPaths.GmMidiDir : AppPaths.Pss790MidiDir;
+                var mirrorRoot = isGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+                var rel = Path.GetRelativePath(srcRoot, filePath);
+                var mirrorFolder = Path.Combine(mirrorRoot, rel);
+                var exists = Directory.Exists(mirrorFolder);
+                SendToJs("linked_file_checked", new
+                {
+                    filePath,
+                    hasLinked = exists,
+                    linkedPath = exists ? mirrorFolder : null,
+                    linkedName = exists ? AppPaths.GetRelativeLibraryPath(mirrorFolder) : null,
+                    isFolder = true
+                });
+                return;
+            }
+
+            var linked = AppPaths.FindMatchingLinkedFile(filePath);
             SendToJs("linked_file_checked", new
             {
                 filePath,
                 hasLinked = linked != null,
                 linkedPath = linked,
-                linkedName = linked != null ? AppPaths.GetRelativeLibraryPath(linked) : null
+                linkedName = linked != null ? AppPaths.GetRelativeLibraryPath(linked) : null,
+                isFolder = false
             });
         }
 
@@ -570,7 +657,7 @@ namespace PSS790Player.Bridge
             {
                 if (Directory.Exists(fullPath))
                 {
-                    if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + "\\", StringComparison.OrdinalIgnoreCase))
+                    if (_currentFilePath != null && _currentFilePath.StartsWith(fullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     {
                         _player.Stop();
                         _currentFilePath = null;
@@ -580,8 +667,37 @@ namespace PSS790Player.Bridge
 
                     VoiceOverrideStore.Instance.RemoveFolderOverrides(fullPath);
                     Directory.Delete(fullPath, recursive: true);
+
+                    var deletedMirrored = false;
+                    if (alsoDeleteLinked)
+                    {
+                        if (string.IsNullOrWhiteSpace(linkedPath) || !Directory.Exists(linkedPath))
+                        {
+                            var isGm = fullPath.StartsWith(AppPaths.GmMidiDir, StringComparison.OrdinalIgnoreCase);
+                            var srcRoot = isGm ? AppPaths.GmMidiDir : AppPaths.Pss790MidiDir;
+                            var mirrorRoot = isGm ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
+                            var relFolder = Path.GetRelativePath(srcRoot, fullPath);
+                            linkedPath = Path.Combine(mirrorRoot, relFolder);
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(linkedPath) && Directory.Exists(linkedPath) && AppPaths.IsPathInsideLibrary(linkedPath))
+                        {
+                            if (_currentFilePath != null && _currentFilePath.StartsWith(linkedPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                            {
+                                _player.Stop();
+                                _currentFilePath = null;
+                                _loadedOriginalMidi = null;
+                                _loadedRemappedMidi = null;
+                            }
+
+                            VoiceOverrideStore.Instance.RemoveFolderOverrides(linkedPath);
+                            Directory.Delete(linkedPath, recursive: true);
+                            deletedMirrored = true;
+                        }
+                    }
+
                     SendLibraryUpdate();
-                    SendToJs("notification", new { message = $"Deleted folder: {Path.GetFileName(fullPath)}" });
+                    SendToJs("notification", new { message = deletedMirrored ? $"Deleted mirrored folder: {Path.GetFileName(fullPath)}" : $"Deleted folder: {Path.GetFileName(fullPath)}" });
                 }
             }
             else
@@ -649,6 +765,7 @@ namespace PSS790Player.Bridge
         private object ScanLibraryFiles()
         {
             AppPaths.EnsureDirectoriesExist();
+            AppPaths.SyncMirroredDirectories();
 
             var allFlat = new List<object>();
 
@@ -670,83 +787,120 @@ namespace PSS790Player.Bridge
             };
         }
 
+        private class FolderNodeDto
+        {
+            public string name { get; set; } = "";
+            public string fullPath { get; set; } = "";
+            public string relativePath { get; set; } = "";
+            public List<FolderNodeDto> subFolders { get; set; } = new();
+            public List<object> files { get; set; } = new();
+            public int directCount { get; set; } = 0;
+            public int totalCount { get; set; } = 0;
+        }
+
         private static object BuildCategoryTree(string rootDir, string categoryName, string format, List<object> flatCollector)
         {
             if (!Directory.Exists(rootDir))
             {
-                return new { name = categoryName, fullPath = rootDir, format, folders = new List<object>(), files = new List<object>(), count = 0 };
-            }
-
-            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
-
-            // Pre-populate with all directories so empty folders are visible and targets for move/add
-            foreach (var dir in Directory.GetDirectories(rootDir, "*", SearchOption.AllDirectories))
-            {
-                var relDir = Path.GetRelativePath(rootDir, dir);
-                if (!folderGroups.ContainsKey(relDir))
+                return new
                 {
-                    folderGroups[relDir] = new List<object>();
-                }
-            }
-
-            var files = Directory.GetFiles(rootDir, "*.*", SearchOption.AllDirectories)
-                .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-
-            var rootFiles = new List<object>();
-
-            foreach (var file in files)
-            {
-                var rel = Path.GetRelativePath(rootDir, file);
-                var dirName = Path.GetDirectoryName(rel) ?? "";
-                var fileName = Path.GetFileName(file);
-
-                var fileItem = new
-                {
-                    fileName,
-                    fullPath = file,
-                    relativePath = rel,
-                    subFolder = dirName,
-                    category = categoryName,
-                    format
+                    name = categoryName,
+                    fullPath = rootDir,
+                    format,
+                    subFolders = new List<FolderNodeDto>(),
+                    folders = new List<object>(),
+                    allFolders = new List<object>(),
+                    files = new List<object>(),
+                    count = 0
                 };
-
-                flatCollector.Add(fileItem);
-
-                if (string.IsNullOrEmpty(dirName))
-                {
-                    rootFiles.Add(fileItem);
-                }
-                else
-                {
-                    if (!folderGroups.TryGetValue(dirName, out var list))
-                    {
-                        list = new List<object>();
-                        folderGroups[dirName] = list;
-                    }
-                    list.Add(fileItem);
-                }
             }
 
-            var foldersList = folderGroups
-                .OrderBy(kvp => kvp.Key)
-                .Select(kvp => new
+            var allFoldersList = new List<object>();
+            foreach (var dir in Directory.GetDirectories(rootDir, "*", SearchOption.AllDirectories).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+            {
+                var rel = Path.GetRelativePath(rootDir, dir);
+                allFoldersList.Add(new
                 {
-                    name = kvp.Key,
-                    fullPath = Path.Combine(rootDir, kvp.Key),
-                    files = kvp.Value.OrderBy(f => ((dynamic)f).fileName).ToList(),
-                    count = kvp.Value.Count
-                })
-                .ToList();
+                    name = rel,
+                    fullPath = dir
+                });
+            }
+
+            var rootNode = BuildDirectoryNode(rootDir, rootDir, categoryName, format, flatCollector);
 
             return new
             {
                 name = categoryName,
                 fullPath = rootDir,
                 format,
-                folders = foldersList,
-                files = rootFiles.OrderBy(f => ((dynamic)f).fileName).ToList(),
-                count = files.Count
+                subFolders = rootNode.subFolders,
+                folders = allFoldersList,
+                allFolders = allFoldersList,
+                files = rootNode.files,
+                directCount = rootNode.directCount,
+                count = rootNode.totalCount
+            };
+        }
+
+        private static FolderNodeDto BuildDirectoryNode(string currentDir, string rootDir, string categoryName, string format, List<object> flatCollector)
+        {
+            var dirName = Path.GetFileName(currentDir);
+            var relPath = string.Equals(currentDir, rootDir, StringComparison.OrdinalIgnoreCase)
+                ? ""
+                : Path.GetRelativePath(rootDir, currentDir);
+
+            var directFiles = new List<object>();
+            if (Directory.Exists(currentDir))
+            {
+                var filePaths = Directory.GetFiles(currentDir, "*.*", SearchOption.TopDirectoryOnly)
+                    .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(f => Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var file in filePaths)
+                {
+                    var fileName = Path.GetFileName(file);
+                    var fileRel = Path.GetRelativePath(rootDir, file);
+                    var fileSub = Path.GetDirectoryName(fileRel) ?? "";
+
+                    var fileItem = new
+                    {
+                        fileName,
+                        fullPath = file,
+                        relativePath = fileRel,
+                        subFolder = fileSub,
+                        category = categoryName,
+                        format
+                    };
+
+                    flatCollector.Add(fileItem);
+                    directFiles.Add(fileItem);
+                }
+            }
+
+            var subFolderNodes = new List<FolderNodeDto>();
+            if (Directory.Exists(currentDir))
+            {
+                var subDirs = Directory.GetDirectories(currentDir, "*", SearchOption.TopDirectoryOnly)
+                    .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var subDir in subDirs)
+                {
+                    subFolderNodes.Add(BuildDirectoryNode(subDir, rootDir, categoryName, format, flatCollector));
+                }
+            }
+
+            var directCount = directFiles.Count;
+            var totalCount = directCount + subFolderNodes.Sum(s => s.totalCount);
+
+            return new FolderNodeDto
+            {
+                name = string.IsNullOrEmpty(dirName) ? categoryName : dirName,
+                fullPath = currentDir,
+                relativePath = relPath,
+                subFolders = subFolderNodes,
+                files = directFiles,
+                directCount = directCount,
+                totalCount = totalCount
             };
         }
 

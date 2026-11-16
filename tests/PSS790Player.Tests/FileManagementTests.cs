@@ -142,11 +142,53 @@ namespace PSS790Player.Tests
                 File.WriteAllText(gmSong3, "dummy");
                 var match3 = AppPaths.FindMatchingOptimizedFile(gmSong3);
                 Assert.Null(match3);
+
+                // Reverse check: From PSS-790 to GM
+                var revMatch1 = AppPaths.FindMatchingLinkedFile(pssSong1);
+                Assert.NotNull(revMatch1);
+                Assert.Equal(gmSong1, revMatch1);
+
+                var revMatch2 = AppPaths.FindMatchingLinkedFile(pssSong2);
+                Assert.NotNull(revMatch2);
+                Assert.Equal(gmSong2, revMatch2);
             }
             finally
             {
                 try { if (Directory.Exists(gmDir)) Directory.Delete(gmDir, true); } catch { }
                 try { if (Directory.Exists(pssDir)) Directory.Delete(pssDir, true); } catch { }
+            }
+        }
+
+        [Fact]
+        public void SyncMirroredDirectories_EnsuresFolderParityBothWays()
+        {
+            AppPaths.EnsureDirectoriesExist();
+
+            var uniqueId = Guid.NewGuid().ToString("N");
+            var gmUniqueDir = Path.Combine(AppPaths.GmMidiDir, "TestMirrorGM_" + uniqueId, "SubFolder");
+            var pssUniqueDir = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
+
+            Directory.CreateDirectory(gmUniqueDir);
+            Directory.CreateDirectory(pssUniqueDir);
+
+            try
+            {
+                // Run sync
+                AppPaths.SyncMirroredDirectories();
+
+                // Target mirrored directories should now exist
+                var expectedPssCounterpart = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorGM_" + uniqueId, "SubFolder");
+                var expectedGmCounterpart = Path.Combine(AppPaths.GmMidiDir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
+
+                Assert.True(Directory.Exists(expectedPssCounterpart));
+                Assert.True(Directory.Exists(expectedGmCounterpart));
+            }
+            finally
+            {
+                try { var d = Path.Combine(AppPaths.GmMidiDir, "TestMirrorGM_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
+                try { var d = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorGM_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
+                try { var d = Path.Combine(AppPaths.GmMidiDir, "TestMirrorPSS_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
+                try { var d = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorPSS_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
             }
         }
     }
