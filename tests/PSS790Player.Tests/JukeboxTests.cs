@@ -152,5 +152,48 @@ namespace PSS790Player.Tests
             // No active note event should have fired for muted channel 2
             Assert.DoesNotContain(activities, a => a.Channel == 2 && a.IsActive);
         }
+
+        [Fact]
+        public void MidiPlayer_LoadingNewMidiDuringPlayback_ResetsPositionToZeroAndSilencesDevice()
+        {
+            using var player = new MidiPlayer();
+            var dummyDevice = new DummyOutputDevice();
+            player.SetOutputDevice(dummyDevice);
+
+            // Song A: 10 seconds long
+            var songA = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 5000 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 5000 }
+            ));
+
+            player.LoadMidi(songA);
+            player.Play();
+            player.Seek(TimeSpan.FromSeconds(3));
+
+            Assert.True(player.CurrentPosition.TotalSeconds >= 2.9);
+
+            // Song B: Loaded while song A was at ~3s
+            var songB = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 2000 }
+            ));
+
+            // Loading Song B must cleanly stop Song A and reset position to Zero
+            player.LoadMidi(songB);
+
+            Assert.False(player.IsPlaying);
+            Assert.Equal(TimeSpan.Zero, player.CurrentPosition);
+
+            // All Notes Off / Panic CC events must have been sent
+            Assert.Contains(dummyDevice.SentEvents, ev => ev is ControlChangeEvent cc && cc.ControlNumber == (SevenBitNumber)123);
+
+            // Playing Song B must start from the beginning
+            player.Play();
+            Assert.True(player.IsPlaying);
+            Assert.True(player.CurrentPosition.TotalSeconds < 1.0);
+            player.Stop();
+        }
     }
 }

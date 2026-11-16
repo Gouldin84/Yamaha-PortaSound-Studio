@@ -153,7 +153,16 @@ namespace PSS790Player.Bridge
                     case "load_file":
                     case "load_midi_metadata":
                         var path = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : (root.TryGetProperty("path", out var p) ? p.GetString() : null);
-                        if (!string.IsNullOrEmpty(path)) LoadFile(path, autoPlay: false);
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            if (string.Equals(_currentFilePath, path, StringComparison.OrdinalIgnoreCase) && _player.IsPlaying)
+                            {
+                                break;
+                            }
+
+                            bool shouldPlay = _player.IsPlaying;
+                            LoadFile(path, autoPlay: shouldPlay);
+                        }
                         break;
                     case "load_midi_and_play":
                         var playPath = root.TryGetProperty("filePath", out var fpp) ? fpp.GetString() : (root.TryGetProperty("path", out var pp) ? pp.GetString() : null);
@@ -164,7 +173,7 @@ namespace PSS790Player.Bridge
                         {
                             VoiceOverrideStore.Instance.ResetOverrides(_currentFilePath);
                             _options.ChannelVoiceOverrides.Clear();
-                            ReapplyRemapping();
+                            ReapplyRemapping(preservePosition: true);
                             var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                             var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                             SendToJs("channels_updated", new { channels = channelInfo });
@@ -207,7 +216,7 @@ namespace PSS790Player.Bridge
                         {
                             _player.SendVoiceOverride(ch, voice.Value);
                         }
-                        ReapplyRemapping();
+                        ReapplyRemapping(preservePosition: true);
                         break;
                     case "set_channel_volume":
                         var vCh = root.GetProperty("channel").GetInt32();
@@ -227,7 +236,7 @@ namespace PSS790Player.Bridge
                     case "toggle_polyphony_guard":
                         var guard = root.GetProperty("enabled").GetBoolean();
                         _options.EnablePolyphonyGuard = guard;
-                        ReapplyRemapping();
+                        ReapplyRemapping(preservePosition: true);
                         break;
                     case "save_remapped":
                         SaveRemappedDialog();
@@ -1264,11 +1273,13 @@ namespace PSS790Player.Bridge
         {
             try
             {
+                _player.Stop();
+                _player.Seek(TimeSpan.Zero);
                 _currentFilePath = virtualPath ?? title;
                 _loadedOriginalMidi = midi;
 
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-                ReapplyRemapping();
+                ReapplyRemapping(preservePosition: false);
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
@@ -1312,6 +1323,9 @@ namespace PSS790Player.Bridge
                     return;
                 }
 
+                _player.Stop();
+                _player.Seek(TimeSpan.Zero);
+
                 _currentFilePath = resolvedPath;
                 _loadedOriginalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
 
@@ -1324,7 +1338,7 @@ namespace PSS790Player.Bridge
                 }
 
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-                ReapplyRemapping();
+                ReapplyRemapping(preservePosition: false);
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
@@ -1353,17 +1367,17 @@ namespace PSS790Player.Bridge
             }
         }
 
-        private void ReapplyRemapping()
+        private void ReapplyRemapping(bool preservePosition = false)
         {
             if (_loadedOriginalMidi == null) return;
 
             var wasPlaying = _player.IsPlaying;
-            var pos = _player.CurrentPosition;
+            var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
 
             _loadedRemappedMidi = Remapper.Remap(_loadedOriginalMidi, _options);
             _player.LoadMidi(_loadedRemappedMidi);
 
-            if (wasPlaying)
+            if (wasPlaying && preservePosition)
             {
                 _player.Seek(pos);
                 _player.Play();

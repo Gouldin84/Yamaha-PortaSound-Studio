@@ -1433,7 +1433,9 @@ function selectSongByIndex(index) {
     const song = state.visibleSongList[index];
     state.selectedSongPath = song.fullPath;
     highlightActiveSongInTree();
-    sendToHost("load_midi_metadata", { path: song.fullPath });
+    if (!state.isPlaying) {
+        sendToHost("load_midi_metadata", { path: song.fullPath });
+    }
 
     const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
     if (el) {

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.5] - 2026-11-16
+
+### Fixed
+- **Clean Song Switching & Playback Lifecycle**:
+  - Resolved track switching bug where selecting another song during playback would carry over the previous song's playback timestamp, causing the newly loaded song to play from the middle rather than starting at `00:00`.
+  - Updated `UiBridge.cs` `ReapplyRemapping(bool preservePosition = false)` to restrict position preservation strictly to real-time mixer adjustments (voice overrides, polyphony guard, and voice resets). Loading a new file or take now always stops the previous song cleanly, issues hardware panic note-offs, and resets the playback head to `00:00`.
+  - When a song is playing, clicking another song in the library or selecting one from the quick dropdown immediately silences the old song and starts playing the new song from the beginning (`00:00`).
+  - Clicking the currently playing song in the library does not interrupt active audio, while double-clicking or pressing `Enter` restarts it from `00:00`.
+  - Single-clicking songs while stopped or idle loads them in stopped mode at `00:00` with full metadata and channel strips ready.
+  - Arrow Up/Down keyboard navigation in the library while playing scrolls the list and moves the selection highlight without disrupting active audio until `Enter` is pressed.
+
 ## [1.8.4] - 2026-11-16
 
 ### Fixed
