@@ -863,6 +863,16 @@ function handleLinkedFileChecked(data) {
     }
 }
 
+function openAboutModal() {
+    const modal = document.getElementById("aboutModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeAboutModal() {
+    const modal = document.getElementById("aboutModal");
+    if (modal) modal.classList.add("hidden");
+}
+
 function closeActionModal() {
     const modal = document.getElementById("fileActionModal");
     if (modal) modal.classList.add("hidden");
@@ -1433,6 +1443,17 @@ function setupKeyboardShortcuts() {
         if (ctxMenu && !ctxMenu.classList.contains("hidden") && e.key === "Escape") {
             e.preventDefault();
             hideContextMenu();
+            return;
+        }
+
+        // About modal keyboard shortcuts
+        const aboutModal = document.getElementById("aboutModal");
+        if (aboutModal && !aboutModal.classList.contains("hidden")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeAboutModal();
+                return;
+            }
             return;
         }
 
@@ -2020,6 +2041,14 @@ document.getElementById("btnConfirmActionModal")?.addEventListener("click", conf
 
 document.getElementById("fileActionModal")?.addEventListener("click", (e) => {
     if (e.target.id === "fileActionModal") closeActionModal();
+});
+
+// About & Legal Notices Modal Event Listeners
+document.getElementById("btnAbout")?.addEventListener("click", openAboutModal);
+document.getElementById("btnCloseAboutModal")?.addEventListener("click", closeAboutModal);
+document.getElementById("btnDismissAboutModal")?.addEventListener("click", closeAboutModal);
+document.getElementById("aboutModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "aboutModal") closeAboutModal();
 });
 
 // Dismiss context menu on click outside, blur, or resize

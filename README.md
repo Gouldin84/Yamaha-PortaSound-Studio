@@ -154,6 +154,21 @@ dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self
 
 ---
 
+## Legal Disclaimer & Acknowledgements
+
+**Yamaha Trademark Disclaimer**:
+Yamaha, PortaSound, PSS-790, and AWM are registered trademarks of Yamaha Corporation. This software is an independent open-source enthusiast project developed by Gouldin84 for vintage hardware interoperability, preservation, and non-commercial educational study. It is not affiliated with, sponsored by, endorsed by, or certified by Yamaha Corporation.
+
+**Third-Party Open-Source Credits**:
+- [Melanchall.DryWetMidi](https://github.com/melanchall/drywetmidi) (MIT License) - High-performance .NET MIDI playback, parsing, and device I/O
+- [Microsoft.Web.WebView2](https://developer.microsoft.com/microsoft-edge/webview2/) (Microsoft Software License) - Embedded Chromium desktop UI runtime
+- [Tailwind CSS](https://tailwindcss.com) (MIT License) - Utility-first modern CSS framework
+- [Inter Font](https://rsms.me/inter/) (SIL Open Font License 1.1) - Interface typography
+
+For complete license texts, copyright notices, and community credits, see [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).
+
+---
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

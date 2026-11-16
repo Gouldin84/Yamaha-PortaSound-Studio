@@ -118,6 +118,14 @@
                 </svg>
                 <span>Batch</span>
             </button>
+
+            <!-- About & Legal Info Button -->
+            <button id="btnAbout" title="About & Legal Credits" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span class="hidden sm:inline">About</span>
+            </button>
         </div>
     </header>
 
@@ -615,6 +623,105 @@
             <div class="flex items-center justify-end space-x-2.5 pt-2">
                 <button id="btnCancelActionModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
                 <button id="btnConfirmActionModal" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About & Legal Notices Modal -->
+    <div id="aboutModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="glass-panel w-full max-w-lg rounded-2xl border border-slate-700/80 shadow-2xl p-5 space-y-4 max-h-[85vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center shadow-md shadow-cyan-500/20">
+                        <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 MIDI Remapper & Studio v1.8.1</p>
+                    </div>
+                </div>
+                <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Modal Content (Scrollable) -->
+            <div class="space-y-4 text-xs text-slate-300 overflow-y-auto custom-scrollbar pr-1 flex-1">
+                <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-white">Project Author</span>
+                        <span class="font-mono text-cyan-400">Gouldin84</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-white">License</span>
+                        <span class="text-slate-300">MIT License</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-white">Target Hardware</span>
+                        <span class="text-slate-300">Yamaha PortaSound PSS-790 (1990)</span>
+                    </div>
+                </div>
+
+                <div class="space-y-1.5">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400/90 flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span>Trademark Disclaimer</span>
+                    </h4>
+                    <p class="text-[11px] leading-relaxed text-slate-400 bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
+                        <strong>Yamaha</strong>, <strong>PortaSound</strong>, <strong>PSS-790</strong>, and <strong>AWM</strong> are registered trademarks of Yamaha Corporation. This software is an independent open-source enthusiast utility developed by Gouldin84 for hardware interoperability, preservation, and non-commercial educational study. It is not affiliated with, sponsored by, endorsed by, or certified by Yamaha Corporation.
+                    </p>
+                </div>
+
+                <div class="space-y-2">
+                    <h4 class="text-xs font-bold uppercase tracking-wider text-cyan-400/90 flex items-center space-x-1.5">
+                        <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                        </svg>
+                        <span>Third-Party Open-Source Credits</span>
+                    </h4>
+                    <div class="space-y-1.5 text-[11px]">
+                        <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <span class="font-semibold text-slate-200">Melanchall.DryWetMidi</span>
+                                <p class="text-[10px] text-slate-400">MIDI parsing, real-time playback engine & I/O</p>
+                            </div>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">MIT</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <span class="font-semibold text-slate-200">Microsoft.Web.WebView2</span>
+                                <p class="text-[10px] text-slate-400">Embedded Chromium desktop engine</p>
+                            </div>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">Microsoft</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <span class="font-semibold text-slate-200">Tailwind CSS</span>
+                                <p class="text-[10px] text-slate-400">Utility-first modern interface styling</p>
+                            </div>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">MIT</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-900/60 border border-slate-800/80 flex items-center justify-between">
+                            <div>
+                                <span class="font-semibold text-slate-200">Inter Font Family</span>
+                                <p class="text-[10px] text-slate-400">Handheld & desktop optimized typography</p>
+                            </div>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">SIL OFL 1.1</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end border-t border-slate-800 pt-3 shrink-0">
+                <button id="btnDismissAboutModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close</button>
             </div>
         </div>
     </div>
