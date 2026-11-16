@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-11-16
+
+### Fixed
+- **Quick-Pick Tree Population & Asset Synchronization**:
+  - Restored full backward compatibility for `tree.folders` in library data serialization, populating `.files` and `.count` on flat folder entries to prevent undefined property errors.
+  - Ensured WebUI distribution assets (`app.js`, `index.html`) synchronize cleanly into the release distribution folder.
+  - By default on initial launch, root library songs are expanded and immediately playable while custom game subfolders remain neatly collapsed.
+
 ## [1.6.0] - 2026-11-16
 
 ### Added

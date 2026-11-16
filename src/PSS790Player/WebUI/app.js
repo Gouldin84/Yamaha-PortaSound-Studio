@@ -372,10 +372,13 @@ function initSidebarState() {
             const arr = JSON.parse(savedExpanded);
             state.expandedFolders = new Set(arr);
         } else {
-            // Folders are collapsed by default on startup
-            state.expandedFolders = new Set();
+            // By default on initial run, expand root songs so library is immediately browseable,
+            // but keep custom subfolders collapsed for clean organization
+            state.expandedFolders = new Set(["gm:__root__", "pss790:__root__"]);
         }
-    } catch (e) {}
+    } catch (e) {
+        state.expandedFolders = new Set(["gm:__root__", "pss790:__root__"]);
+    }
 
     updateSidebarVisibility();
     updateCollapseAllButton();
@@ -802,13 +805,15 @@ function renderFolderNode(folder, depth, catKey, query) {
         folderHeader.style.paddingLeft = `${padPx + 8}px`;
     }
 
+    const count = folder.totalCount !== undefined ? folder.totalCount : (folder.files ? folder.files.length : 0);
+
     folderHeader.innerHTML = `
         <div class="flex items-center space-x-1.5 truncate">
             <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
             <span class="text-amber-400 text-xs">📁</span>
             <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
         </div>
-        <span class="text-[9px] font-mono text-slate-500 ml-1">(${folder.totalCount})</span>
+        <span class="text-[9px] font-mono text-slate-500 ml-1">(${count})</span>
     `;
     folderHeader.addEventListener("click", () => toggleFolder(folderKey));
     folderHeader.addEventListener("contextmenu", (e) => {
@@ -914,7 +919,7 @@ function renderLibraryTree() {
             filteredRootFiles = sourceRootFiles;
         }
 
-        const catSongCount = filteredSubFolders.reduce((acc, f) => acc + f.totalCount, 0) + filteredRootFiles.length;
+        const catSongCount = filteredSubFolders.reduce((acc, f) => acc + (f.totalCount !== undefined ? f.totalCount : (f.files ? f.files.length : 0)), 0) + filteredRootFiles.length;
         if (catSongCount === 0) return;
 
         totalRenderedSongs += catSongCount;

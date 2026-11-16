@@ -811,11 +811,14 @@ namespace PSS790Player.Bridge
                     folders = new List<object>(),
                     allFolders = new List<object>(),
                     files = new List<object>(),
+                    directCount = 0,
                     count = 0
                 };
             }
 
             var allFoldersList = new List<object>();
+            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var dir in Directory.GetDirectories(rootDir, "*", SearchOption.AllDirectories).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
             {
                 var rel = Path.GetRelativePath(rootDir, dir);
@@ -824,9 +827,31 @@ namespace PSS790Player.Bridge
                     name = rel,
                     fullPath = dir
                 });
+                folderGroups[rel] = new List<object>();
             }
 
             var rootNode = BuildDirectoryNode(rootDir, rootDir, categoryName, format, flatCollector);
+
+            // Populate legacy folderGroups with files so legacy/fallback 'folders' has .files and .count
+            foreach (var file in flatCollector.Where(f => ((dynamic)f).category == categoryName))
+            {
+                var sub = ((dynamic)file).subFolder as string;
+                if (!string.IsNullOrEmpty(sub) && folderGroups.TryGetValue(sub, out var list))
+                {
+                    list.Add(file);
+                }
+            }
+
+            var legacyFoldersList = folderGroups
+                .OrderBy(kvp => kvp.Key)
+                .Select(kvp => new
+                {
+                    name = kvp.Key,
+                    fullPath = Path.Combine(rootDir, kvp.Key),
+                    files = kvp.Value,
+                    count = kvp.Value.Count
+                })
+                .ToList();
 
             return new
             {
@@ -834,7 +859,7 @@ namespace PSS790Player.Bridge
                 fullPath = rootDir,
                 format,
                 subFolders = rootNode.subFolders,
-                folders = allFoldersList,
+                folders = legacyFoldersList,
                 allFolders = allFoldersList,
                 files = rootNode.files,
                 directCount = rootNode.directCount,
