@@ -222,6 +222,9 @@ function handleHostMessage(msg) {
             updatePlaybackUi();
             if (playStateChanged) {
                 highlightActiveSongInTree();
+                if (!state.isPlaying) {
+                    clearAllChannelLeds();
+                }
             }
             break;
 
@@ -1567,6 +1570,7 @@ function setupKeyboardShortcuts() {
 }
 
 function renderMixer() {
+    clearAllChannelLeds();
     const grid = document.getElementById("mixerGrid");
     grid.innerHTML = "";
 
@@ -1665,15 +1669,54 @@ function renderMixer() {
     });
 }
 
+const channelLedTimers = {};
+const channelLedLastOn = {};
+
 function updateChannelLed(channel, isActive, velocity) {
     const led = document.getElementById(`led-${channel}`);
     if (!led) return;
 
     const isDrum = channel === 15;
+    const activeClass = isDrum ? 'drum-active' : 'active';
+
     if (isActive && velocity > 0) {
-        led.classList.add(isDrum ? 'drum-active' : 'active');
+        if (channelLedTimers[channel]) {
+            clearTimeout(channelLedTimers[channel]);
+            delete channelLedTimers[channel];
+        }
+        channelLedLastOn[channel] = performance.now();
+        led.classList.add(activeClass);
     } else {
-        led.classList.remove(isDrum ? 'drum-active' : 'active');
+        const lastOn = channelLedLastOn[channel] || 0;
+        const elapsed = performance.now() - lastOn;
+        const minHoldMs = 120; // 120ms peak hold for crisp visible pulse
+
+        if (channelLedTimers[channel]) {
+            clearTimeout(channelLedTimers[channel]);
+            delete channelLedTimers[channel];
+        }
+
+        if (elapsed < minHoldMs) {
+            channelLedTimers[channel] = setTimeout(() => {
+                led.classList.remove(activeClass);
+                delete channelLedTimers[channel];
+            }, minHoldMs - elapsed);
+        } else {
+            led.classList.remove(activeClass);
+        }
+    }
+}
+
+function clearAllChannelLeds() {
+    for (let ch = 0; ch < 16; ch++) {
+        if (channelLedTimers[ch]) {
+            clearTimeout(channelLedTimers[ch]);
+            delete channelLedTimers[ch];
+        }
+        const led = document.getElementById(`led-${ch}`);
+        if (led) {
+            led.classList.remove('active', 'drum-active');
+        }
     }
 }
 

@@ -1,5 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Melanchall.DryWetMidi.Common;
+using Melanchall.DryWetMidi.Core;
+using Melanchall.DryWetMidi.Multimedia;
 using PSS790Player.Core;
 using Xunit;
 
@@ -75,6 +80,15 @@ namespace PSS790Player.Tests
             Assert.Equal("D_E1M1.mid", extRel);
         }
 
+        private class DummyOutputDevice : IOutputDevice
+        {
+            public List<MidiEvent> SentEvents { get; } = new();
+            public event EventHandler<MidiEventSentEventArgs>? EventSent;
+            public void SendEvent(MidiEvent midiEvent) { SentEvents.Add(midiEvent); EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent)); }
+            public void PrepareForEventsSending() { }
+            public void Dispose() { }
+        }
+
         [Fact]
         public void MidiPlayer_InitialStateAndProgressReporting_IsConfiguredProperly()
         {
@@ -83,6 +97,60 @@ namespace PSS790Player.Tests
             Assert.False(player.IsPaused);
             Assert.Equal(TimeSpan.Zero, player.CurrentPosition);
             Assert.Equal(TimeSpan.Zero, player.TotalDuration);
+        }
+
+        [Fact]
+        public void MidiPlayer_PlaysSong_FiresChannelActivity()
+        {
+            using var player = new MidiPlayer();
+            var dummyDevice = new DummyOutputDevice();
+            player.SetOutputDevice(dummyDevice);
+
+            var midi = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 100 }
+            ));
+
+            var activities = new List<ChannelActivityEventArgs>();
+            player.ChannelActivity += (s, e) => activities.Add(e);
+
+            player.LoadMidi(midi);
+            player.Play();
+            System.Threading.Thread.Sleep(200);
+            player.Stop();
+
+            Assert.NotEmpty(activities);
+            Assert.Contains(activities, a => a.Channel == 2 && a.IsActive && a.Velocity == 100);
+            Assert.Contains(activities, a => a.Channel == 2 && !a.IsActive);
+            Assert.Contains(dummyDevice.SentEvents, ev => ev is NoteOnEvent no && no.Channel == (FourBitNumber)2);
+        }
+
+        [Fact]
+        public void MidiPlayer_MutedChannel_SuppressesNotesAndActivity()
+        {
+            using var player = new MidiPlayer();
+            var dummyDevice = new DummyOutputDevice();
+            player.SetOutputDevice(dummyDevice);
+
+            player.SetChannelMute(2, true);
+
+            var midi = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 100 }
+            ));
+
+            var activities = new List<ChannelActivityEventArgs>();
+            player.ChannelActivity += (s, e) => activities.Add(e);
+
+            player.LoadMidi(midi);
+            player.Play();
+            System.Threading.Thread.Sleep(200);
+            player.Stop();
+
+            // Notes on channel 2 must be suppressed from output device
+            Assert.DoesNotContain(dummyDevice.SentEvents, ev => ev is NoteOnEvent no && no.Channel == (FourBitNumber)2);
+            // No active note event should have fired for muted channel 2
+            Assert.DoesNotContain(activities, a => a.Channel == 2 && a.IsActive);
         }
     }
 }

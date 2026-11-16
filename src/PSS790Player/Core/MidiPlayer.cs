@@ -25,7 +25,8 @@ namespace PSS790Player.Core
 
     public class MidiPlayer : IDisposable
     {
-        private OutputDevice? _outputDevice;
+        private IOutputDevice? _outputDevice;
+        private FilteringOutputDevice? _filteringDevice;
         private Playback? _playback;
         private MidiFile? _currentFile;
         private readonly object _lock = new();
@@ -75,6 +76,23 @@ namespace PSS790Player.Core
 
         public void SetOutputDevice(string deviceName)
         {
+            try
+            {
+                SetOutputDevice(OutputDevice.GetByName(deviceName));
+            }
+            catch
+            {
+                lock (_lock)
+                {
+                    Stop();
+                    _outputDevice?.Dispose();
+                    _outputDevice = null;
+                }
+            }
+        }
+
+        public void SetOutputDevice(IOutputDevice? outputDevice)
+        {
             lock (_lock)
             {
                 var wasPlaying = IsPlaying;
@@ -82,16 +100,7 @@ namespace PSS790Player.Core
 
                 Stop();
                 _outputDevice?.Dispose();
-                _outputDevice = null;
-
-                try
-                {
-                    _outputDevice = OutputDevice.GetByName(deviceName);
-                }
-                catch
-                {
-                    _outputDevice = null;
-                }
+                _outputDevice = outputDevice;
 
                 if (_currentFile != null && _outputDevice != null)
                 {
@@ -125,45 +134,65 @@ namespace PSS790Player.Core
         {
             if (_currentFile == null || _outputDevice == null) return;
 
-            _playback?.Dispose();
-            _playback = _currentFile.GetPlayback(_outputDevice);
-
-            _playback.EventCallback = (midiEvent, rawTime, totalTime) =>
+            if (_playback != null)
             {
-                if (midiEvent is ChannelEvent channelEvent)
+                _playback.EventPlayed -= OnPlaybackEventPlayed;
+                _playback.Dispose();
+                _playback = null;
+            }
+
+            _filteringDevice = new FilteringOutputDevice(this);
+            _playback = _currentFile.GetPlayback(_filteringDevice);
+            _playback.EventPlayed += OnPlaybackEventPlayed;
+
+            _playback.Finished += (s, e) =>
+            {
+                _progressTimer.Stop();
+                SendPanicNoteOff();
+                NotifyState();
+            };
+        }
+
+        private void OnPlaybackEventPlayed(object? sender, MidiEventPlayedEventArgs e)
+        {
+            if (e.Event is ChannelEvent channelEvent)
+            {
+                int ch = channelEvent.Channel;
+
+                // Mute / Solo handling
+                bool hasSolo = _channelSolos.Any(s => s);
+                bool isMuted = _channelMutes[ch] || (hasSolo && !_channelSolos[ch]);
+
+                if (isMuted)
                 {
-                    int ch = channelEvent.Channel;
+                    return;
+                }
 
-                    // Mute / Solo handling
-                    bool hasSolo = _channelSolos.Any(s => s);
-                    bool isMuted = _channelMutes[ch] || (hasSolo && !_channelSolos[ch]);
-
-                    if (isMuted && channelEvent is NoteOnEvent or NoteOffEvent)
+                if (channelEvent is NoteOnEvent noteOn)
+                {
+                    if (noteOn.Velocity > 0)
                     {
-                        return null; // Suppress note event
-                    }
-
-                    if (channelEvent is NoteOnEvent noteOn)
-                    {
-                        if (noteOn.Velocity > 0)
+                        lock (_activeNotes)
                         {
-                            lock (_activeNotes)
-                            {
-                                _activeNotes.Add((ch, (byte)noteOn.NoteNumber));
-                            }
-                            ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                            {
-                                Channel = ch,
-                                IsActive = true,
-                                Velocity = (byte)noteOn.Velocity
-                            });
+                            _activeNotes.Add((ch, (byte)noteOn.NoteNumber));
                         }
-                        else
+                        ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                         {
-                            lock (_activeNotes)
-                            {
-                                _activeNotes.Remove((ch, (byte)noteOn.NoteNumber));
-                            }
+                            Channel = ch,
+                            IsActive = true,
+                            Velocity = (byte)noteOn.Velocity
+                        });
+                    }
+                    else
+                    {
+                        bool hasRemaining;
+                        lock (_activeNotes)
+                        {
+                            _activeNotes.Remove((ch, (byte)noteOn.NoteNumber));
+                            hasRemaining = _activeNotes.Any(n => n.Channel == ch);
+                        }
+                        if (!hasRemaining)
+                        {
                             ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                             {
                                 Channel = ch,
@@ -172,12 +201,17 @@ namespace PSS790Player.Core
                             });
                         }
                     }
-                    else if (channelEvent is NoteOffEvent noteOff)
+                }
+                else if (channelEvent is NoteOffEvent noteOff)
+                {
+                    bool hasRemaining;
+                    lock (_activeNotes)
                     {
-                        lock (_activeNotes)
-                        {
-                            _activeNotes.Remove((ch, (byte)noteOff.NoteNumber));
-                        }
+                        _activeNotes.Remove((ch, (byte)noteOff.NoteNumber));
+                        hasRemaining = _activeNotes.Any(n => n.Channel == ch);
+                    }
+                    if (!hasRemaining)
+                    {
                         ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                         {
                             Channel = ch,
@@ -186,16 +220,7 @@ namespace PSS790Player.Core
                         });
                     }
                 }
-
-                return midiEvent;
-            };
-
-            _playback.Finished += (s, e) =>
-            {
-                _progressTimer.Stop();
-                SendPanicNoteOff();
-                NotifyState();
-            };
+            }
         }
 
         public void Play()
@@ -449,9 +474,58 @@ namespace PSS790Player.Core
             _progressTimer.Stop();
             _progressTimer.Dispose();
             Stop();
-            _playback?.Dispose();
+            if (_playback != null)
+            {
+                _playback.EventPlayed -= OnPlaybackEventPlayed;
+                _playback.Dispose();
+                _playback = null;
+            }
             _outputDevice?.Dispose();
+            _outputDevice = null;
             GC.SuppressFinalize(this);
+        }
+
+        private sealed class FilteringOutputDevice : IOutputDevice
+        {
+            private readonly MidiPlayer _player;
+
+            public event EventHandler<MidiEventSentEventArgs>? EventSent;
+
+            public FilteringOutputDevice(MidiPlayer player)
+            {
+                _player = player;
+            }
+
+            public void SendEvent(MidiEvent midiEvent)
+            {
+                var target = _player._outputDevice;
+                if (target == null) return;
+
+                if (midiEvent is ChannelEvent channelEvent)
+                {
+                    int ch = channelEvent.Channel;
+                    bool hasSolo = _player._channelSolos.Any(s => s);
+                    bool isMuted = _player._channelMutes[ch] || (hasSolo && !_player._channelSolos[ch]);
+
+                    if (isMuted && (channelEvent is NoteOnEvent or NoteOffEvent))
+                    {
+                        return; // Suppress note from reaching hardware output
+                    }
+                }
+
+                target.SendEvent(midiEvent);
+                EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
+            }
+
+            public void PrepareForEventsSending()
+            {
+                _player._outputDevice?.PrepareForEventsSending();
+            }
+
+            public void Dispose()
+            {
+                // MidiPlayer manages the lifecycle of the underlying target device
+            }
         }
     }
 }

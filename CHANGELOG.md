@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.4] - 2026-11-16
+
+### Fixed
+- **16-Channel Real-Time Activity LEDs**:
+  - Replaced uncalled DryWetMidi `Playback.EventCallback` with real-time `Playback.EventPlayed` event subscription in `MidiPlayer.cs`.
+  - Mixer channel LEDs (CH 1–CH 16) now illuminate in real-time with vibrant green (melodic) and amber (drums) lights as notes are dispatched to MIDI hardware.
+  - Implemented multi-note polyphonic tracking so chords keep channel LEDs illuminated until the final note in the chord is released.
+  - Added 120ms visual peak-hold decay in `app.js` (`updateChannelLed`), guaranteeing that rapid staccato hits, fast hi-hat patterns, and 32nd-note rolls produce a crisp, punchy, clearly visible flash on high-refresh and 60Hz handheld screens.
+  - Added `clearAllChannelLeds` on stop, pause, and library reload to immediately clear any active channel indicators.
+- **Hardware Mute & Solo Channel Isolation**:
+  - Introduced `FilteringOutputDevice` wrapping the MIDI output stream to transparently filter out `NoteOn` and `NoteOff` events on muted or un-soloed channels during playback.
+  - Retains background control parameters (Volume, Pan, Program Change, Pitch Bend) so unmuting channels transitions smoothly without voice or pitch glitches.
+  - Immediately silences currently sounding notes and dims channel LEDs when a channel is muted or excluded during solo.
+- **Asynchronous UI Bridge Dispatching**:
+  - Updated `UiBridge.SendToJs` to use asynchronous `Dispatcher.BeginInvoke` when called from background multimedia playback threads, preventing UI lockups and eliminating MIDI playback timer jitter under heavy note traffic.
+
 ## [1.8.3] - 2026-11-16
 
 ### Fixed

@@ -41,6 +41,9 @@ This application provides a complete bidirectional workstation:
   - Incremental, non-destructive execution with live progress reporting, automatic pruning of orphaned keys in `VoiceOverrideStore`, and cleanup of empty orphan directories.
   - Optional checkbox to force re-convert the entire library with the latest hardware rules.
 - **Format-Aware 16-Channel Mixer & Voice Inspector**:
+  - **Real-Time 16-Channel Activity LEDs**: Live responsive glowing LED meters for every MIDI channel (green for melodic channels 1–15, amber for rhythm channel 16) with polyphonic chord hold and minimum pulse decay so rapid staccato hits and hi-hats flash brightly.
+  - **Hardware Mute & Solo Channel Isolation**: Direct hardware note suppression for muted and un-soloed channels, with background parameter continuity (volume, pan, pitch bend, voice) for instant glitch-free unmuting.
+  - **Real-Time Playback Progress Scrubber**: Smooth high-precision progress bar with live time displays and seek-on-release scrubbing.
   - Live channel strips with volume sliders, mute/solo buttons, and voice override dropdowns.
   - Inspecting native PSS-790 files correctly displays true Chart 2 hardware voices (e.g., `PIANO`, `VIOLIN 1`, `ELEC BASS 1`) and identifies Channel 16 as fixed rhythm, while GM files display General MIDI instrument labels.
 - **Media Player Keyboard Shortcuts**:

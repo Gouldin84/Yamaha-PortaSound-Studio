@@ -1624,14 +1624,30 @@ namespace PSS790Player.Bridge
 
         private void SendToJs(string type, object data)
         {
-            Application.Current.Dispatcher.Invoke(() =>
+            var app = Application.Current;
+            if (app == null) return;
+
+            var action = new Action(() =>
             {
-                if (_webView.CoreWebView2 != null)
+                try
                 {
-                    var payload = JsonSerializer.Serialize(new { type, data });
-                    _webView.CoreWebView2.PostWebMessageAsJson(payload);
+                    if (_webView.CoreWebView2 != null)
+                    {
+                        var payload = JsonSerializer.Serialize(new { type, data });
+                        _webView.CoreWebView2.PostWebMessageAsJson(payload);
+                    }
                 }
+                catch { }
             });
+
+            if (app.Dispatcher.CheckAccess())
+            {
+                action();
+            }
+            else
+            {
+                app.Dispatcher.BeginInvoke(action);
+            }
         }
 
         public void Dispose()
