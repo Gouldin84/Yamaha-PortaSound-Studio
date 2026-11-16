@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.2] - 2026-11-16
+
+### Added
+- **Authentic Yamaha PSS-790 Windows Application Icon & Favicon**:
+  - High-resolution multi-frame `.ico` (`app.ico`) with 7 standard mipmapped resolutions (`256x256`, `128x128`, `64x64`, `48x48`, `32x32`, `24x24`, `16x16`).
+  - Embedded into the native Windows Win32 PE header for Windows Explorer, Desktop shortcuts, Taskbar, and Alt-Tab switcher.
+  - Safe in-memory manifest resource stream loading in WPF (`MainWindow.xaml.cs`) to prevent single-file XAML URI resolution crashes.
+  - Dedicated browser favicon for WebView2.
+- **Library Alignment & Sync System (Sync Folders)**:
+  - Dedicated **Sync** button in the sidebar footer right beside **Refresh**.
+  - Interactive diff analysis modal scanning both directories to detect:
+    - 📥 **Missing PSS Files**: Newly added GM songs awaiting conversion.
+    - 🔄 **Outdated PSS Files**: GM source files modified after their PSS conversion.
+    - 🗑️ **Orphan PSS Files**: Ghost files in `PSS-790 Midi` whose GM original was renamed or deleted.
+  - Incremental, non-destructive execution with live progress reporting, automatic pruning of orphaned keys in `VoiceOverrideStore`, and cleanup of empty orphan directories.
+  - Optional checkbox to force re-convert the entire library with the latest hardware rules.
+- **Real-Hardware Serial DIN Buffer & Voice Protections**:
+  - **Foreign SysEx Stripping**: Filters Roland GS and Yamaha XG System Exclusive reset dumps (which can burst 250+ messages at once), preventing receive FIFO buffer overruns (`bu full` lockups) across 31,250 baud serial DIN cables.
+  - **Dynamic RPN 0,0 Pitch Bend Sensitivity**: Pre-scans controller streams for Registered Parameter Number pitch bend sensitivity declarations. Retains full 1:1 scale factor for $\pm 12$-semitone octave slides (e.g., *The Moon.mid* intro), while scaling standard $\pm 2$-semitone GM bends by 1/6 for the PSS-790's fixed 12-semitone pitch wheel.
+  - **Missing Program Change Auto-Initialization**: Injects `ProgramChangeEvent(3)` (Voice 00: `PIANO`) at Tick 0 on active melodic channels lacking an initial voice assignment, preventing voice bleeding from prior songs.
+  - **Extended Percussion Fallbacks**: Musical translation for Roland GS / GM extended percussion notes outside the 35–81 range (slaps &rarr; rimshots, sticks &rarr; woodblocks, shakers &rarr; maracas, bell trees &rarr; triangles, surdos &rarr; bass drums).
+  - **Overlapping Same-Pitch Note Clamping**: Automatically truncates earlier same-pitch notes on identical channels if their duration overlaps a subsequent Note-On, preventing vintage voice-stealing circuit desynchronization.
+  - **Zero-Duration Clamping**: Enforces a minimum note length of 1 tick to prevent hardware hanging notes.
+- **Format-Aware 16-Channel Mixer & Voice Inspector**:
+  - Inspecting native PSS-790 files correctly displays true Chart 2 hardware voices (e.g., `PIANO`, `VIOLIN 1`, `ELEC BASS 1`) and identifies Channel 16 as fixed rhythm, while GM files display General MIDI instrument labels.
+- **Single-File Self-Sufficiency & Asset Cache Clearing**:
+  - Embedded all WebUI assets as embedded resources inside `PSS790Player.exe` with automatic fallback extraction, ensuring the `.exe` is 100% standalone and portable.
+  - Added automatic WebView2 HTTP disk cache clearing on startup and asset cache-busting so updates load immediately without stale browser cache retention.
+
 ## [1.8.1] - 2026-11-16
 
 ### Added
