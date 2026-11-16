@@ -767,12 +767,12 @@ document.getElementById("btnStopPreviewTake").addEventListener("click", () => {
 // Take Actions
 document.getElementById("btnSaveTakePss790").addEventListener("click", () => {
     const fn = document.getElementById("takeFilenameInput").value.trim() || "Take_Recording";
-    sendToHost("save_take", { fileName: fn, remapForPss790: true });
+    sendToHost("save_take", { fileName: fn, isNativePss: true });
 });
 
 document.getElementById("btnSaveTakeGm").addEventListener("click", () => {
     const fn = document.getElementById("takeFilenameInput").value.trim() || "Take_Recording";
-    sendToHost("save_take", { fileName: fn, remapForPss790: false });
+    sendToHost("save_take", { fileName: fn, isNativePss: false });
 });
 
 document.getElementById("btnSendTakeToPlayer").addEventListener("click", () => {

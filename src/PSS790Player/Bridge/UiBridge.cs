@@ -219,14 +219,16 @@ namespace PSS790Player.Bridge
                         break;
                     case "save_take":
                         var takeFileName = root.TryGetProperty("fileName", out var fnProp) ? fnProp.GetString() ?? $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid" : $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
-                        var remapForPss = root.TryGetProperty("remapForPss790", out var rProp) && rProp.GetBoolean();
-                        var savedPath = _recorder.SaveTake(takeFileName, remapForPss, _options);
+                        var isNativePss = root.TryGetProperty("isNativePss", out var nProp) ? nProp.GetBoolean() : (root.TryGetProperty("remapForPss790", out var rProp) && rProp.GetBoolean());
+                        var savedPath = isNativePss 
+                            ? _recorder.SaveNativeTake(takeFileName) 
+                            : _recorder.ExportTakeToGeneralMidi(takeFileName);
                         SendLibraryUpdate();
                         SendToJs("take_saved", new
                         {
                             filePath = savedPath,
                             fileName = Path.GetFileName(savedPath),
-                            isPss790 = remapForPss
+                            isPss790 = isNativePss
                         });
                         break;
                     case "send_take_to_player":
@@ -234,7 +236,13 @@ namespace PSS790Player.Bridge
                         if (takeFile != null)
                         {
                             var title = root.TryGetProperty("title", out var tTitle) ? tTitle.GetString() ?? "Recorded Take" : "Recorded Take";
-                            LoadMidiObject(takeFile, title);
+                            var cloned = takeFile.Clone();
+                            var firstTrack = cloned.GetTrackChunks().FirstOrDefault();
+                            if (firstTrack != null)
+                            {
+                                firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
+                            }
+                            LoadMidiObject(cloned, title);
                             SendToJs("switch_tab", new { tab = "player" });
                         }
                         break;

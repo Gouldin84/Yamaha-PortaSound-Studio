@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
@@ -27,32 +28,37 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void SaveTake_WithoutRecording_ThrowsInvalidOperationException()
+        public void SaveNativeTake_WithoutRecording_ThrowsInvalidOperationException()
         {
             using var recorder = new MidiRecorder();
-            Assert.Throws<InvalidOperationException>(() => recorder.SaveTake("test_take.mid", false));
+            Assert.Throws<InvalidOperationException>(() => recorder.SaveNativeTake("test_take.mid"));
         }
 
         [Fact]
-        public void SaveTake_WithRemapping_AppliesPSS790RulesAndMarker()
+        public void SaveNativeTake_PreservesExact1to1DataAndInjectsMarker()
         {
             using var recorder = new MidiRecorder();
 
-            // Create a synthetic recorded take with GM drums on Channel 9
+            // Create a synthetic native PSS-790 take:
+            // Drum note on Channel 15 with Chart 1 note 45 (BASS DRUM HI), and Piano on Channel 0 with Chart 2 program 3
             var syntheticFile = new MidiFile();
-            var track = new TrackChunk();
-            track.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)9 });
-            track.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)9 }); // Kick
-            track.Events.Add(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)9 });
-            syntheticFile.Chunks.Add(track);
+            var drumTrack = new TrackChunk();
+            drumTrack.Events.Add(new NoteOnEvent((SevenBitNumber)45, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)15 });
+            drumTrack.Events.Add(new NoteOffEvent((SevenBitNumber)45, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)15 });
+            syntheticFile.Chunks.Add(drumTrack);
 
-            // Use reflection to set _lastRecordedFile for testing SaveTake
+            var melodicTrack = new TrackChunk();
+            melodicTrack.Events.Add(new ProgramChangeEvent((SevenBitNumber)3) { Channel = (FourBitNumber)0 }); // Chart 2 Piano
+            melodicTrack.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            melodicTrack.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)0 });
+            syntheticFile.Chunks.Add(melodicTrack);
+
             var field = typeof(MidiRecorder).GetField("_lastRecordedFile", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(field);
             field.SetValue(recorder, syntheticFile);
 
-            var testFileName = $"Test_SaveTake_{Guid.NewGuid():N}.mid";
-            string savedPath = recorder.SaveTake(testFileName, remapForPss790: true);
+            var testFileName = $"Test_NativeTake_{Guid.NewGuid():N}.mid";
+            string savedPath = recorder.SaveNativeTake(testFileName);
 
             try
             {
@@ -63,20 +69,16 @@ namespace PSS790Player.Tests
                 var format = Remapper.DetectMidiFormat(reloaded);
                 Assert.Equal(MidiFormat.Pss790Native, format);
 
-                // Check marker
-                bool hasMarker = false;
-                foreach (var chunk in reloaded.GetTrackChunks())
-                {
-                    foreach (var evt in chunk.Events)
-                    {
-                        if (evt is TextEvent te && te.Text.Contains(Remapper.Pss790MarkerText))
-                        {
-                            hasMarker = true;
-                            break;
-                        }
-                    }
-                }
-                Assert.True(hasMarker);
+                // Verify 1:1 integrity: Drums remain on Channel 15 and note is still 45
+                var drumNotes = reloaded.GetNotes().Where(n => n.Channel == 15).ToList();
+                Assert.Single(drumNotes);
+                Assert.Equal((byte)45, (byte)drumNotes[0].NoteNumber);
+
+                // Verify melodic program is still 3 on Channel 0
+                var pc = reloaded.GetTimedEvents().Select(te => te.Event).OfType<ProgramChangeEvent>().FirstOrDefault();
+                Assert.NotNull(pc);
+                Assert.Equal((byte)3, (byte)pc.ProgramNumber);
+                Assert.Equal(0, pc.Channel);
             }
             finally
             {
@@ -85,22 +87,28 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void SaveTake_WithoutRemapping_SavesRawToGmMidiFolder()
+        public void ExportTakeToGeneralMidi_ReverseRemapsDrumsAndVoices()
         {
             using var recorder = new MidiRecorder();
 
+            // Native PSS-790 take:
+            // Channel 15 has Chart 1 note 57 (HI HAT CLOSED)
+            // Channel 0 has Chart 2 program 3 (PIANO)
             var syntheticFile = new MidiFile();
             var track = new TrackChunk();
-            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { DeltaTime = 0, Channel = (FourBitNumber)0 });
-            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)0 });
+            track.Events.Add(new ProgramChangeEvent((SevenBitNumber)3) { Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)57, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)15 }); // Ch 16 PSS drum
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)57, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)15 });
             syntheticFile.Chunks.Add(track);
 
             var field = typeof(MidiRecorder).GetField("_lastRecordedFile", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             Assert.NotNull(field);
             field.SetValue(recorder, syntheticFile);
 
-            var testFileName = $"Test_RawTake_{Guid.NewGuid():N}.mid";
-            string savedPath = recorder.SaveTake(testFileName, remapForPss790: false);
+            var testFileName = $"Test_GmExport_{Guid.NewGuid():N}.mid";
+            string savedPath = recorder.ExportTakeToGeneralMidi(testFileName);
 
             try
             {
@@ -110,6 +118,18 @@ namespace PSS790Player.Tests
                 var reloaded = MidiFile.Read(savedPath);
                 var format = Remapper.DetectMidiFormat(reloaded);
                 Assert.Equal(MidiFormat.GeneralMidi, format);
+
+                // Verify reverse remapping:
+                // Drums should now be on Channel 9 (GM Drum Ch 10)
+                var gmDrumNotes = reloaded.GetNotes().Where(n => n.Channel == 9).ToList();
+                Assert.Single(gmDrumNotes);
+                // Chart 1 note 57 (HI HAT CLOSED) -> GM note 42 (Closed Hi-Hat)
+                Assert.Equal((byte)42, (byte)gmDrumNotes[0].NoteNumber);
+
+                // Chart 2 program 3 (PIANO) -> GM program 0 (Acoustic Grand Piano)
+                var pc = reloaded.GetTimedEvents().Select(te => te.Event).OfType<ProgramChangeEvent>().FirstOrDefault();
+                Assert.NotNull(pc);
+                Assert.Equal((byte)0, (byte)pc.ProgramNumber);
             }
             finally
             {

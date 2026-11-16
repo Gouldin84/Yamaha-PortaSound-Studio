@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-11-16
+
+### Added
+- **Native 1:1 PSS-790 Capture (`SaveNativeTake`)**:
+  - Direct 1:1 preservation of takes recorded from the Yamaha PSS-790.
+  - Automatically injects the non-destructive `PSS790_REMAPPED:v1` marker into Track 0.
+  - Saves directly into `Music\Midi\PSS-790 Midi\`.
+  - Bypasses destructive GM remapping (preserves native Channel 16 drums, Chart 1 percussion notes, Chart 2 programs, and native $\pm 1$ octave pitch bends).
+- **Reverse Remapper (`ReverseRemapper.cs`)**:
+  - Translates PSS-790 native takes to standard General MIDI for export to modern DAWs (Ableton, FL Studio, Logic, Reaper) and PC media players.
+  - Relocates Channel 16 drums &rarr; Channel 10.
+  - Translates Chart 1 percussion note numbers (36–85) &rarr; Standard GM drum notes (35–81) via `Pss790ToGmDrumMap`.
+  - Translates Chart 2 Program Change bytes &rarr; Standard GM Instrument Numbers (0–127) via `Pss790MidiProgramToGmMap`.
+  - Strips PSS-790 metadata markers and exports directly to `Music\Midi\GM Midi\`.
+- **Refined Studio Take Actions UI**:
+  - `⚡ Save Native (PSS-790 Ready)`: Direct 1:1 save without remapping.
+  - `🎵 Export to General MIDI (DAW/PC)`: Reverse conversion for PC/DAW compatibility.
+  - `🎧 Send to Player (Audition)`: Immediate handoff to Tab 1 in Passthrough Mode.
+
 ## [1.2.0] - 2026-11-16
 
 ### Added

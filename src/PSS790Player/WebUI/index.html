@@ -348,26 +348,33 @@
 
                 <!-- 3 Action Pathways -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                    <!-- Action 1: Save Remapped to PSS-790 -->
+                    <!-- Action 1: Save Native PSS-790 Take -->
                     <button id="btnSaveTakePss790" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-emerald-950/40 to-slate-900 border border-emerald-800/60 hover:border-emerald-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-emerald-400 font-bold text-xs mb-1">
                             <span>⚡</span>
-                            <span>Save to PSS-790 Midi</span>
+                            <span>Save Native (PSS-790 Ready)</span>
                         </div>
-                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Chart 1 drums, Chart 2 voices, 1/6 bend, polyphony decay clamping.</p>
+                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Direct 1:1 capture with native marker to PSS-790 Midi folder. Zero translation needed.</p>
                     </button>
 
-                    <!-- Action 2: Save Raw GM -->
+                    <!-- Action 2: Export to General MIDI -->
                     <button id="btnSaveTakeGm" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-indigo-950/40 to-slate-900 border border-indigo-800/60 hover:border-indigo-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-indigo-400 font-bold text-xs mb-1">
                             <span>🎵</span>
-                            <span>Save to GM Midi</span>
+                            <span>Export to General MIDI (DAW/PC)</span>
                         </div>
-                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Saves raw uncompressed take to your standard library folder.</p>
+                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Reverse remaps Ch 16 &rarr; 10 drums, Chart 1 notes, and Chart 2 voices to standard GM.</p>
                     </button>
 
                     <!-- Action 3: Send to Player -->
                     <button id="btnSendTakeToPlayer" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-cyan-950/40 to-slate-900 border border-cyan-800/60 hover:border-cyan-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
+                        <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-xs mb-1">
+                            <span>🎧</span>
+                            <span>Send to Player (Audition)</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Loads native take into Tab 1 in Passthrough Mode to hear it on the keyboard immediately.</p>
+                    </button>
+                </div>
                         <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-xs mb-1">
                             <span>🎧</span>
                             <span>Send to Player (Audition)</span>

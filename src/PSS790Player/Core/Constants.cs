@@ -288,5 +288,181 @@ namespace PSS790Player.Core
             78, // Whistle
             79  // Brash Squeeze
         };
+
+        // Reverse Percussion Map: PSS-790 Chart 1 (36-85) to General MIDI Drum (35-81)
+        public static readonly ReadOnlyDictionary<byte, byte> Pss790ToGmDrumMap = new(new Dictionary<byte, byte>
+        {
+            { 36, 37 }, // RIM SHOT 2 -> Side Stick (37)
+            { 37, 80 }, // TRIANGLE MUTE -> Mute Triangle (80)
+            { 38, 40 }, // SYNTH SNARE -> Electric Snare (40)
+            { 39, 81 }, // TRIANGLE OPEN -> Open Triangle (81)
+            { 40, 38 }, // SNARE LO -> Acoustic Snare (38)
+            { 41, 38 }, // SNARE MID -> Acoustic Snare (38)
+            { 42, 38 }, // SNARE ECHO -> Acoustic Snare (38)
+            { 43, 38 }, // SNARE BRUSH -> Acoustic Snare (38)
+            { 44, 35 }, // BASS DRUM LO -> Acoustic Bass Drum (35)
+            { 45, 36 }, // BASS DRUM HI -> Bass Drum 1 (36)
+            { 46, 37 }, // RIM SHOT 1 -> Side Stick (37)
+            { 47, 41 }, // TOM BASS -> Low Floor Tom (41)
+            { 48, 45 }, // TOM LO -> Low Tom (45)
+            { 49, 38 }, // SNARE HI -> Acoustic Snare (38)
+            { 50, 47 }, // TOM MID -> Low-Mid Tom (47)
+            { 51, 38 }, // SNARE FLANGE -> Acoustic Snare (38)
+            { 52, 45 }, // SYNTH TOM -> Low Tom (45)
+            { 53, 50 }, // TOM HI -> High Tom (50)
+            { 54, 39 }, // HAND CLAPS -> Hand Clap (39)
+            { 55, 56 }, // COWBELL -> Cowbell (56)
+            { 56, 70 }, // CABASA -> Maracas (70)
+            { 57, 42 }, // HI HAT CLOSED -> Closed Hi-Hat (42)
+            { 58, 42 }, // BRASH HIT -> Closed Hi-Hat (42)
+            { 59, 46 }, // HI HAT OPEN -> Open Hi-Hat (46)
+            { 60, 49 }, // CRASH CYMBAL -> Crash Cymbal 1 (49)
+            { 61, 55 }, // SPLASH CYMBAL -> Splash Cymbal (55)
+            { 62, 51 }, // RIDE CYMBAL CUP -> Ride Cymbal 1 (51)
+            { 63, 59 }, // RIDE CYMBAL EDGE -> Ride Cymbal 2 (59)
+            { 64, 64 }, // CONGA LO -> Low Conga (64)
+            { 65, 63 }, // CONGA HI -> Open Hi Conga (63)
+            { 66, 62 }, // CONGA HI MUTE -> Mute Hi Conga (62)
+            { 67, 61 }, // BONGO LO -> Low Bongo (61)
+            { 68, 60 }, // BONGO HI -> Hi Bongo (60)
+            { 69, 66 }, // TIMBALE LO -> Low Timbale (66)
+            { 70, 65 }, // TIMBALE HI -> High Timbale (65)
+            { 71, 54 }, // TAMBOURINE -> Tambourine (54)
+            { 72, 75 }, // CLAVES LO -> Claves (75)
+            { 73, 76 }, // CLAVES HI -> Hi Wood Block (76)
+            { 74, 68 }, // AGOGO LO -> Low Agogo (68)
+            { 75, 67 }, // AGOGO HI -> High Agogo (67)
+            { 76, 78 }, // CUICA LO -> Mute Cuica (78)
+            { 77, 79 }, // CUICA HI -> Open Cuica (79)
+            { 78, 71 }, // WHISTLE -> Short Whistle (71)
+            { 79, 73 }, // BRASH SQUEEZE -> Short Guiro (73)
+            { 80, 44 }, // HI HAT FOOT -> Pedal Hi-Hat (44)
+            { 81, 38 }, // SNARE GATED REVERB -> Acoustic Snare (38)
+            { 82, 38 }, // ONE -> Snare/Percussion (38)
+            { 83, 38 }, // TWO -> Snare/Percussion (38)
+            { 84, 38 }, // THREE -> Snare/Percussion (38)
+            { 85, 38 }  // FOUR -> Snare/Percussion (38)
+        });
+
+        // Reverse Voice Map: PSS-790 Voice Number (0-99) to General MIDI Instrument (0-127)
+        public static readonly ReadOnlyDictionary<int, byte> Pss790VoiceToGmMap = new(new Dictionary<int, byte>
+        {
+            { 0, 0 },   // PIANO -> Acoustic Grand Piano
+            { 1, 4 },   // ELECTRIC PIANO 1 -> Electric Piano 1
+            { 2, 5 },   // ELECTRIC PIANO 2 -> Electric Piano 2
+            { 3, 6 },   // HARPSICHORD 1 -> Harpsichord
+            { 4, 6 },   // HARPSICHORD 2 -> Harpsichord
+            { 5, 3 },   // HONKY-TONK PIANO -> Honky-tonk Piano
+            { 6, 7 },   // CRAVI -> Clavinet
+            { 7, 8 },   // CELESTA -> Celesta
+            { 8, 19 },  // PIPE ORGAN -> Church Organ
+            { 9, 20 },  // REED ORGAN -> Reed Organ
+            { 10, 16 }, // JAZZ ORGAN 1 -> Drawbar Organ
+            { 11, 17 }, // JAZZ ORGAN 2 -> Percussive Organ
+            { 12, 18 }, // TREMOLO ORGAN -> Rock Organ
+            { 13, 18 }, // FULL ORGAN -> Rock Organ
+            { 14, 21 }, // ACCORDION -> Accordion
+            { 15, 30 }, // DISTORTION GUITAR -> Distortion Guitar
+            { 16, 27 }, // ELECTRIC GUITAR -> Electric Guitar (clean)
+            { 17, 27 }, // TREMOLO GUITAR -> Electric Guitar (clean)
+            { 18, 28 }, // MUTE GUITAR -> Electric Guitar (muted)
+            { 19, 30 }, // DISTORTION GUITAR FLANGE -> Distortion Guitar
+            { 20, 27 }, // E. GUITAR FLANGE -> Electric Guitar (clean)
+            { 21, 28 }, // MUTE GUITAR ECHO -> Electric Guitar (muted)
+            { 22, 27 }, // E. GUITAR ECHO -> Electric Guitar (clean)
+            { 23, 26 }, // JAZZ GUITAR -> Electric Guitar (jazz)
+            { 24, 26 }, // JAZZ GUITAR ECHO -> Electric Guitar (jazz)
+            { 25, 25 }, // FOLK GUITAR -> Acoustic Guitar (steel)
+            { 26, 25 }, // 12 STRING GUITAR -> Acoustic Guitar (steel)
+            { 27, 24 }, // GUT GUITAR -> Acoustic Guitar (nylon)
+            { 28, 24 }, // GUT GUITAR ECHO -> Acoustic Guitar (nylon)
+            { 29, 25 }, // STEEL GUITAR -> Acoustic Guitar (steel)
+            { 30, 40 }, // VIOLIN 1 -> Violin
+            { 31, 40 }, // VIOLIN 2 -> Violin
+            { 32, 45 }, // PIZZICATO VIOLIN -> Pizzicato Strings
+            { 33, 42 }, // CELLO -> Cello
+            { 34, 48 }, // STRINGS 1 -> String Ensemble 1
+            { 35, 49 }, // STRINGS 2 -> String Ensemble 2
+            { 36, 44 }, // TREMOLO STRINGS -> Tremolo Strings
+            { 37, 49 }, // SLOW STRINGS -> String Ensemble 2
+            { 38, 48 }, // OCTAVE STRINGS -> String Ensemble 1
+            { 39, 50 }, // SYNTH STRINGS -> Synth Strings 1
+            { 40, 61 }, // BRASS ENSEMBLE 1 -> Brass Section
+            { 41, 61 }, // BRASS ENSEMBLE 2 -> Brass Section
+            { 42, 62 }, // SYNTH BRASS 1 -> Synth Brass 1
+            { 43, 63 }, // SYNTH BRASS 2 -> Synth Brass 2
+            { 44, 56 }, // TRUMPET -> Trumpet
+            { 45, 59 }, // MUTE TRUMPET -> Muted Trumpet
+            { 46, 57 }, // TROMBONE -> Trombone
+            { 47, 60 }, // FRENCH HORN -> French Horn
+            { 48, 58 }, // TUBA -> Tuba
+            { 49, 61 }, // BRASS SLAP -> Brass Section
+            { 50, 71 }, // CLARINET -> Clarinet
+            { 51, 68 }, // OBOE -> Oboe
+            { 52, 70 }, // BASSOON -> Bassoon
+            { 53, 73 }, // FLUTE -> Flute
+            { 54, 75 }, // PANFLUTE -> Pan Flute
+            { 55, 74 }, // RECORDER -> Recorder
+            { 56, 78 }, // WHISTLE -> Whistle
+            { 57, 65 }, // SAXOPHONE -> Alto Sax
+            { 58, 64 }, // SOPRANO SAX -> Soprano Sax
+            { 59, 66 }, // BREATH SAX -> Tenor Sax
+            { 60, 22 }, // HARMONICA -> Harmonica
+            { 61, 109 }, // BAGPIPE -> Bagpipe
+            { 62, 10 }, // MUSIC BOX -> Music Box
+            { 63, 9 },  // GLOCKENSPIEL -> Glockenspiel
+            { 64, 11 }, // VIBRAPHONE -> Vibraphone
+            { 65, 12 }, // MARIMBA -> Marimba
+            { 66, 13 }, // XYLOPHONE -> Xylophone
+            { 67, 14 }, // TUBULAR BELL -> Tubular Bells
+            { 68, 114 }, // STEEL DRUM -> Steel Drums
+            { 69, 47 }, // TIMPANI -> Timpani
+            { 70, 108 }, // KALIMBA -> Kalimba
+            { 71, 115 }, // WOOD BLOCK -> Woodblock
+            { 72, 7 },  // SYNTH CLAVI -> Clavinet
+            { 73, 38 }, // SYNTH BASS 1 -> Synth Bass 1
+            { 74, 39 }, // SYNTH BASS 2 -> Synth Bass 2
+            { 75, 32 }, // WOOD BASS -> Acoustic Bass
+            { 76, 33 }, // ELECTRIC BASS -> Electric Bass (finger)
+            { 77, 36 }, // SLAP BASS -> Slap Bass 1
+            { 78, 35 }, // FRETLESS BASS -> Fretless Bass
+            { 79, 37 }, // FUNK BASS -> Slap Bass 2
+            { 80, 105 }, // BANJO -> Banjo
+            { 81, 104 }, // SITAR -> Sitar
+            { 82, 106 }, // SHAMISEN -> Koto
+            { 83, 107 }, // KOTO -> Koto
+            { 84, 25 }, // MANDOLIN -> Acoustic Guitar (steel)
+            { 85, 46 }, // HARP -> Orchestral Harp
+            { 86, 116 }, // TAIKO -> Taiko Drum
+            { 87, 80 }, // SYNTH LEAD 1 -> Lead 1 (square)
+            { 88, 81 }, // SYNTH LEAD 2 -> Lead 2 (sawtooth)
+            { 89, 87 }, // SYNTH LEAD 3 -> Lead 8 (bass + lead)
+            { 90, 82 }, // SYNTH LEAD 4 -> Lead 3 (calliope)
+            { 91, 88 }, // SYNTH PAD 1 -> Pad 1 (new age)
+            { 92, 89 }, // SYNTH PAD 2 -> Pad 2 (warm)
+            { 93, 90 }, // SYNTH PAD 3 -> Pad 3 (polysynth)
+            { 94, 91 }, // SYNTH PAD 4 -> Pad 4 (choir)
+            { 95, 99 }, // FANTASY -> FX 4 (atmosphere)
+            { 96, 0 },  // PERCUSSIONS -> Standard Kit
+            { 97, 126 }, // SOUND EFFECT 1 -> Applause
+            { 98, 125 }, // SOUND EFFECT 2 -> Helicopter
+            { 99, 127 }  // SOUND EFFECT 3 -> Gunshot
+        });
+
+        // Reverse Chart 2 Program byte to GM Instrument Number (0-127)
+        public static readonly ReadOnlyDictionary<byte, byte> Pss790MidiProgramToGmMap;
+
+        static Constants()
+        {
+            var map = new Dictionary<byte, byte>();
+            foreach (var kvp in Pss790Voices)
+            {
+                if (Pss790VoiceToGmMap.TryGetValue(kvp.Key, out var gmProg))
+                {
+                    map[kvp.Value.MidiProgram] = gmProg;
+                }
+            }
+            Pss790MidiProgramToGmMap = new ReadOnlyDictionary<byte, byte>(map);
+        }
     }
 }

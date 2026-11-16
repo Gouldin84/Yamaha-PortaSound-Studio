@@ -309,7 +309,7 @@ namespace PSS790Player.Core
             return (notes, timedEvents, duration);
         }
 
-        public string SaveTake(string fileName, bool remapForPss790, RemapperOptions? options = null)
+        public string SaveNativeTake(string fileName)
         {
             if (_lastRecordedFile == null)
             {
@@ -321,35 +321,58 @@ namespace PSS790Player.Core
                 fileName += ".mid";
             }
 
-            // Clean invalid filename characters
             foreach (char c in Path.GetInvalidFileNameChars())
             {
                 fileName = fileName.Replace(c, '_');
             }
 
-            string targetDir = remapForPss790 ? AppPaths.Pss790MidiDir : AppPaths.GmMidiDir;
             AppPaths.EnsureDirectoriesExist();
-            string fullPath = Path.Combine(targetDir, fileName);
+            string fullPath = Path.Combine(AppPaths.Pss790MidiDir, fileName);
 
-            MidiFile fileToSave;
-            if (remapForPss790)
+            // Direct 1:1 clone of the PSS-790 take + inject PSS790_REMAPPED:v1 marker in Track 0
+            var fileToSave = _lastRecordedFile.Clone();
+            var firstTrack = fileToSave.GetTrackChunks().FirstOrDefault();
+            if (firstTrack == null)
             {
-                var opt = options ?? new RemapperOptions
-                {
-                    EnablePolyphonyGuard = true,
-                    ScalePitchBend = true,
-                    FilterUnsupportedControllers = true,
-                    ForceRemap = true
-                };
-                fileToSave = Remapper.Remap(_lastRecordedFile, opt);
+                firstTrack = new TrackChunk();
+                fileToSave.Chunks.Add(firstTrack);
             }
-            else
-            {
-                fileToSave = _lastRecordedFile.Clone();
-            }
+
+            firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
 
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
+        }
+
+        public string ExportTakeToGeneralMidi(string fileName)
+        {
+            if (_lastRecordedFile == null)
+            {
+                throw new InvalidOperationException("No recorded take available to save.");
+            }
+
+            if (!fileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName += ".mid";
+            }
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+
+            AppPaths.EnsureDirectoriesExist();
+            string fullPath = Path.Combine(AppPaths.GmMidiDir, fileName);
+
+            // Reverse-remap: PSS-790 Ch 16 drums -> GM Ch 10, Chart 1 -> GM drum notes, Chart 2 -> GM instruments
+            var fileToSave = ReverseRemapper.ReverseRemapToGeneralMidi(_lastRecordedFile);
+            fileToSave.Write(fullPath, overwriteFile: true);
+            return fullPath;
+        }
+
+        public string SaveTake(string fileName, bool remapForPss790, RemapperOptions? options = null)
+        {
+            return remapForPss790 ? SaveNativeTake(fileName) : ExportTakeToGeneralMidi(fileName);
         }
 
         public void Dispose()
