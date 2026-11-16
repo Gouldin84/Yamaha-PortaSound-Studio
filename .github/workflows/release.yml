@@ -52,14 +52,28 @@ jobs:
           Copy-Item publish_output/PSS790Player.exe release_assets/
           Compress-Archive -Path publish_output/* -DestinationPath release_assets/PSS790Player-win-x64.zip
 
+      - name: Extract Release Notes from Changelog
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $content = [System.IO.File]::ReadAllText("CHANGELOG.md", [System.Text.Encoding]::UTF8)
+          $pattern = "(?s)## \[$tag\][^\r\n]*\r?\n(.*?)(?=\r?\n## \[|\Z)"
+          if ($content -match $pattern) {
+              $notes = $matches[1].Trim()
+          } else {
+              $notes = "### Release ${{ github.ref_name }}`n`nStandalone executable build for Yamaha PSS-790 MIDI Player & Remapper."
+          }
+          [System.IO.File]::WriteAllText("release_notes.md", $notes, [System.Text.Encoding]::UTF8)
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           name: "Release ${{ github.ref_name }}"
+          body_path: release_notes.md
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
             release_assets/PSS790Player.exe
             release_assets/PSS790Player-win-x64.zip
