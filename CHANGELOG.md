@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-11-16
+
+### Added
+- **1-Click Windows SmartScreen Unblocker & Setup Guide**:
+  - Added `Launch-PSS790.bat` to eliminate Microsoft Defender SmartScreen prompts on Windows 11 / Asus ROG Ally by automatically clearing the browser "Mark of the Web" (`Zone.Identifier`) before launching.
+  - Added `ASUS_ROG_ALLY_SETUP.txt` companion quick-start guide explaining 1-tap launching, manual unblock, and Micro-SD / USB transfer tips.
+  - Updated GitHub Actions automated release pipeline to bundle both files inside `PSS790Player-win-x64.zip` and publish them as standalone release assets.
+
 ## [1.8.0] - 2026-11-16
 
 ### Added

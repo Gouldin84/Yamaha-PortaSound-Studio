@@ -1,0 +1,52 @@
+========================================================================
+Yamaha PSS-790 MIDI Player & Remapper - Asus ROG Ally & Windows Setup
+========================================================================
+
+Thank you for downloading the PSS-790 MIDI Player & Recording Studio!
+This application is fully optimized for the Asus ROG Ally Z1 Extreme
+(7-inch 120Hz touchscreen, 1080p display at 150% Windows scaling).
+
+------------------------------------------------------------------------
+QUICK-START: 3 WAYS TO LAUNCH
+------------------------------------------------------------------------
+
+Option 1: 1-Click Launcher (Recommended)
+  Double-tap "Launch-PSS790.bat".
+  This automatically removes Windows browser download flags and starts
+  the application immediately with zero warnings!
+
+Option 2: Direct Executable (.exe)
+  1. Double-tap "PSS790Player.exe".
+  2. If Windows SmartScreen appears ("Windows protected your PC"):
+     - Tap "More info"
+     - Tap "Run anyway"
+  You only need to do this once per version!
+
+Option 3: Permanent Manual Unblock
+  1. Press-and-hold (or right-click) "PSS790Player.exe".
+  2. Tap "Properties".
+  3. At the bottom, check the "Unblock" checkbox.
+  4. Tap "OK".
+
+*Pro Tip for Handheld Users*:
+  If you copy PSS790Player.exe to your Asus ROG Ally using a Micro-SD
+  card, USB-C flash drive, or local network share (SMB), Windows will NOT
+  attach download flags, and SmartScreen will NEVER appear!
+
+------------------------------------------------------------------------
+TOUCHSCREEN FEATURES FOR ASUS ROG ALLY
+------------------------------------------------------------------------
+- Fixed Viewport: The app locks cleanly to the 720p screen without
+  awkward window scrolling or cropped headers.
+- Multi-Select: Tap checkboxes on song rows or tap the [x] Select button
+  in the sidebar to select multiple songs.
+- Docked Batch Bar: When songs are selected, [Move] and [Delete] buttons
+  remain docked at the bottom of the sidebar at all times.
+- 120Hz Touch Scrolling: Smooth, native kinetic scrolling on the Ally's
+  touchscreen.
+- 22px Slider Thumbs: Volume and tempo slider handles are enlarged for
+  easy finger dragging.
+
+Enjoy making music with your Yamaha PortaSound PSS-790!
+GitHub: https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter
+========================================================================

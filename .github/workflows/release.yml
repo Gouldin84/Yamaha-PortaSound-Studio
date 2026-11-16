@@ -49,7 +49,11 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release_assets
+          Copy-Item src/PSS790Player/Launch-PSS790.bat publish_output/
+          Copy-Item ASUS_ROG_ALLY_SETUP.txt publish_output/
           Copy-Item publish_output/PSS790Player.exe release_assets/
+          Copy-Item src/PSS790Player/Launch-PSS790.bat release_assets/
+          Copy-Item ASUS_ROG_ALLY_SETUP.txt release_assets/
           Compress-Archive -Path publish_output/* -DestinationPath release_assets/PSS790Player-win-x64.zip
 
       - name: Extract Release Notes from Changelog
@@ -76,4 +80,6 @@ jobs:
           generate_release_notes: false
           files: |
             release_assets/PSS790Player.exe
+            release_assets/Launch-PSS790.bat
+            release_assets/ASUS_ROG_ALLY_SETUP.txt
             release_assets/PSS790Player-win-x64.zip
