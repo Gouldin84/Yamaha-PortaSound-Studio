@@ -381,6 +381,10 @@ body.theme-light select {
     border-color: #cbd5e1 !important;
 }
 
+body.theme-light input::placeholder {
+    color: #94a3b8 !important;
+}
+
 body.theme-light select option {
     background-color: #ffffff !important;
     color: #0f172a !important;
@@ -439,72 +443,99 @@ body.theme-light .ctx-menu-item:hover {
     background-color: #f1f5f9 !important;
 }
 
-/* Badges & Accent Tints */
-body.theme-light .bg-cyan-950 {
+/* Badges & Accent Tints (Universal Opacity & Attribute Matching) */
+body.theme-light [class*="bg-cyan-950"],
+body.theme-light [class*="bg-sky-950"] {
     background-color: #e0f2fe !important;
     border-color: #bae6fd !important;
 }
 
-body.theme-light .text-cyan-400,
-body.theme-light .text-cyan-300 {
+body.theme-light [class*="text-cyan-400"],
+body.theme-light [class*="text-cyan-300"],
+body.theme-light [class*="text-sky-400"],
+body.theme-light [class*="text-sky-300"] {
     color: #0284c7 !important;
 }
 
-body.theme-light .bg-emerald-950,
-body.theme-light .bg-emerald-950\/40,
-body.theme-light .bg-emerald-950\/80 {
+body.theme-light [class*="bg-emerald-950"] {
     background-color: #dcfce7 !important;
-    border-color: #bbf7d0 !important;
+    border-color: #86efac !important;
 }
 
-body.theme-light .text-emerald-400,
-body.theme-light .text-emerald-300 {
+body.theme-light [class*="text-emerald-400"],
+body.theme-light [class*="text-emerald-300"] {
     color: #15803d !important;
 }
 
-body.theme-light .bg-amber-950 {
+body.theme-light [class*="bg-amber-950"] {
     background-color: #fef3c7 !important;
     border-color: #fde68a !important;
 }
 
-body.theme-light .text-amber-400,
-body.theme-light .text-amber-300 {
+body.theme-light [class*="text-amber-400"],
+body.theme-light [class*="text-amber-300"] {
     color: #b45309 !important;
 }
 
-body.theme-light .bg-rose-950,
-body.theme-light .bg-rose-950\/70 {
+body.theme-light [class*="bg-rose-950"] {
     background-color: #ffe4e6 !important;
     border-color: #fecdd3 !important;
 }
 
-body.theme-light .text-rose-400,
-body.theme-light .text-rose-300 {
+body.theme-light [class*="text-rose-400"],
+body.theme-light [class*="text-rose-300"] {
     color: #be123c !important;
 }
 
-body.theme-light .bg-indigo-950,
-body.theme-light .bg-indigo-950\/30,
-body.theme-light .bg-indigo-950\/40,
-body.theme-light .bg-indigo-950\/80 {
+body.theme-light [class*="bg-indigo-950"] {
     background-color: #ede9fe !important;
     border-color: #ddd6fe !important;
 }
 
-body.theme-light .text-indigo-400,
-body.theme-light .text-indigo-300 {
+body.theme-light [class*="text-indigo-400"],
+body.theme-light [class*="text-indigo-300"] {
     color: #4f46e5 !important;
 }
 
-body.theme-light .bg-blue-950,
-body.theme-light .bg-blue-950\/80 {
+body.theme-light [class*="bg-blue-950"] {
     background-color: #dbeafe !important;
     border-color: #bfdbfe !important;
 }
 
-body.theme-light .text-blue-400,
-body.theme-light .text-blue-300 {
+body.theme-light [class*="text-blue-400"],
+body.theme-light [class*="text-blue-300"] {
     color: #1d4ed8 !important;
+}
+
+/* Badge Borders in Light Mode */
+body.theme-light [class*="border-emerald-800"],
+body.theme-light [class*="border-emerald-600"] {
+    border-color: #86efac !important;
+}
+
+body.theme-light [class*="border-cyan-800"],
+body.theme-light [class*="border-cyan-600"] {
+    border-color: #bae6fd !important;
+}
+
+body.theme-light [class*="border-amber-800"],
+body.theme-light [class*="border-amber-600"] {
+    border-color: #fde68a !important;
+}
+
+body.theme-light [class*="border-rose-800"],
+body.theme-light [class*="border-rose-600"] {
+    border-color: #fecdd3 !important;
+}
+
+body.theme-light [class*="border-indigo-800"],
+body.theme-light [class*="border-indigo-600"] {
+    border-color: #ddd6fe !important;
+}
+
+body.theme-light [class*="border-blue-800"],
+body.theme-light [class*="border-blue-600"] {
+    border-color: #bfdbfe !important;
 }
 
 /* Toast Notification */

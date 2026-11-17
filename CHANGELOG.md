@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.1] - 2026-11-17
+
+### Fixed
+- **Light Theme Badge & Text Box Contrast**:
+  - Fixed visibility of the Smart Polyphony Guard `[Protected]` badge, which was previously rendering as dark green text on an un-overridden dark teal background in Light Studio mode.
+  - Implemented universal attribute wildcard selectors (`[class*="bg-emerald-950"]`, `[class*="bg-cyan-950"]`, `[class*="bg-amber-950"]`, `[class*="bg-rose-950"]`, `[class*="bg-indigo-950"]`, `[class*="bg-blue-950"]`) in `styles.css` to properly map all badge opacity variations (`/60`, `/70`, `/80`, `/40`) to high-contrast pastel backgrounds with crisp dark text.
+  - Added universal border mappings for all colored badge borders in Light Mode (`border-emerald-800`, `border-cyan-800`, `border-amber-800`, etc.).
+  - Added explicit placeholder styling (`input::placeholder { color: #94a3b8 }`) for all form inputs in Light Studio mode.
+
 ## [1.17.0] - 2026-11-17
 
 ### Added
