@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-11-17
+
+### Added
+- **Modern Light Studio Theme**:
+  - Implemented an elegant, high-contrast Light Studio aesthetic matching hardware DAWs (Ableton Live / Logic Pro) as a clean companion to the original Dark Studio mode.
+  - Soft-slate neutral backgrounds (`#f1f5f9`), crisp white card containers (`#ffffff`), tailored border definitions (`#e2e8f0`), and polished typography hierarchy (`#0f172a` primary, `#475569` secondary).
+  - Preserved full visual distinction for active notes, LED meters, drum badges, and channel indicators with soft pastel accent backgrounds (`#e0f2fe` cyan, `#dcfce7` emerald, `#fef3c7` amber, `#ffe4e6` rose, `#ede9fe` indigo).
+  - Modal overlay dimming with translucent backdrop blur (`rgba(15, 23, 42, 0.55)`).
+- **Header Theme Toggle & Persistence**:
+  - Added dedicated header Theme Toggle button (`#btnThemeToggle`) with live icon (☀️ / 🌙) and text label.
+  - Theme preference is instantly applied without page reloads and persisted locally across sessions via `localStorage` (`pss790_theme`).
+  - Smooth 200ms CSS transitions for background and text during theme switching.
+
 ## [1.11.0] - 2026-11-17
 
 ### Added

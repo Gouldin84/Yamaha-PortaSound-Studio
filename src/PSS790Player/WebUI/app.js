@@ -55,8 +55,42 @@ let state = {
     isSysexCapturing: false,
     isSysexTransmitting: false,
     sysexSearchQuery: "",
-    lastInspectedHex: ""
+    lastInspectedHex: "",
+    theme: "dark"
 };
+
+// --- Theme Management ---
+function applyTheme(theme) {
+    state.theme = theme;
+    const isLight = theme === "light";
+    document.body.classList.toggle("theme-light", isLight);
+    const icon = document.getElementById("themeToggleIcon");
+    const text = document.getElementById("themeToggleText");
+    if (icon) icon.textContent = isLight ? "🌙" : "☀️";
+    if (text) text.textContent = isLight ? "Dark" : "Light";
+    try {
+        localStorage.setItem("pss790_theme", theme);
+    } catch (e) { }
+}
+
+function toggleTheme() {
+    const next = state.theme === "light" ? "dark" : "light";
+    applyTheme(next);
+    showToast(`Switched to ${next === "light" ? "Light" : "Dark"} Studio Theme`);
+}
+
+function initTheme() {
+    try {
+        const saved = localStorage.getItem("pss790_theme");
+        if (saved === "light" || saved === "dark") {
+            applyTheme(saved);
+        } else {
+            applyTheme("dark");
+        }
+    } catch (e) {
+        applyTheme("dark");
+    }
+}
 
 // --- Web Audio Metronome Click ---
 let audioCtx = null;
@@ -2974,8 +3008,12 @@ document.getElementById("btnCopySysexHex")?.addEventListener("click", () => {
     }
 });
 
+// Light / Dark Theme Toggle
+document.getElementById("btnThemeToggle")?.addEventListener("click", toggleTheme);
+
 // Trigger initial handshake and keyboard shortcuts
 window.addEventListener("DOMContentLoaded", () => {
+    initTheme();
     setupKeyboardShortcuts();
     initSidebarState();
     sendToHost("get_initial_data");
