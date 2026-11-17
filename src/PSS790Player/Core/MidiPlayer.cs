@@ -35,6 +35,7 @@ namespace PSS790Player.Core
         private readonly bool[] _channelMutes = new bool[16];
         private readonly bool[] _channelSolos = new bool[16];
         private readonly byte[] _channelVolumes = new byte[16];
+        private readonly byte[] _lastFileChannelVolumes = new byte[16];
         private readonly System.Timers.Timer _progressTimer;
 
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
@@ -50,6 +51,7 @@ namespace PSS790Player.Core
             for (int i = 0; i < 16; i++)
             {
                 _channelVolumes[i] = 100;
+                _lastFileChannelVolumes[i] = 100;
             }
 
             _progressTimer = new System.Timers.Timer(100);
@@ -141,8 +143,16 @@ namespace PSS790Player.Core
                 _playback = null;
             }
 
+            var settings = new PlaybackSettings
+            {
+                ClockSettings = new MidiClockSettings
+                {
+                    CreateTickGeneratorCallback = () => new HighPrecisionTickGenerator()
+                }
+            };
+
             _filteringDevice = new FilteringOutputDevice(this);
-            _playback = _currentFile.GetPlayback(_filteringDevice);
+            _playback = _currentFile.GetPlayback(_filteringDevice, settings);
             _playback.EventPlayed += OnPlaybackEventPlayed;
 
             _playback.Finished += (s, e) =>
@@ -151,6 +161,38 @@ namespace PSS790Player.Core
                 SendPanicNoteOff();
                 NotifyState();
             };
+
+            _playback.RepeatStarted += (s, e) =>
+            {
+                SendPanicNoteOff();
+                RePrimeInitialControllers();
+            };
+        }
+
+        private void RePrimeInitialControllers()
+        {
+            lock (_lock)
+            {
+                if (_outputDevice == null || _currentFile == null) return;
+
+                // Re-prime controllers across all 16 channels to guarantee seamless looping
+                for (int ch = 0; ch < 16; ch++)
+                {
+                    try
+                    {
+                        var fourBitCh = (FourBitNumber)ch;
+                        byte fileVol = _lastFileChannelVolumes[ch];
+                        byte userVol = _channelVolumes[ch];
+                        int scaled = (int)Math.Round((double)fileVol * userVol / 100.0);
+                        scaled = Math.Clamp(scaled, 0, 127);
+
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled) { Channel = fourBitCh });
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)56) { Channel = fourBitCh });
+                        _outputDevice.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
+                    }
+                    catch { }
+                }
+            }
         }
 
         private void OnPlaybackEventPlayed(object? sender, MidiEventPlayedEventArgs e)
@@ -335,7 +377,11 @@ namespace PSS790Player.Core
                     _channelVolumes[channel] = volume;
                     if (_outputDevice != null)
                     {
-                        var cc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)volume)
+                        byte fileVol = _lastFileChannelVolumes[channel];
+                        int scaled = (int)Math.Round((double)fileVol * volume / 100.0);
+                        scaled = Math.Clamp(scaled, 0, 127);
+
+                        var cc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
                         {
                             Channel = (FourBitNumber)channel
                         };
@@ -515,6 +561,23 @@ namespace PSS790Player.Core
                     if (isMuted && (channelEvent is NoteOnEvent or NoteOffEvent))
                     {
                         return; // Suppress note from reaching hardware output
+                    }
+
+                    // Proportional Mixer Scaling: scale incoming file CC 7 by user channel volume slider %
+                    if (channelEvent is ControlChangeEvent cc && cc.ControlNumber == 7)
+                    {
+                        _player._lastFileChannelVolumes[ch] = (byte)cc.ControlValue;
+                        byte userVolume = _player._channelVolumes[ch];
+                        int scaled = (int)Math.Round((double)cc.ControlValue * userVolume / 100.0);
+                        scaled = Math.Clamp(scaled, 0, 127);
+
+                        var scaledCc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+                        {
+                            Channel = cc.Channel
+                        };
+                        target.SendEvent(scaledCc);
+                        EventSent?.Invoke(this, new MidiEventSentEventArgs(scaledCc));
+                        return;
                     }
                 }
 

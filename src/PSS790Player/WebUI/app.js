@@ -2304,6 +2304,8 @@ document.getElementById("btnStartBatch").addEventListener("click", () => {
     const neutralizePitch = document.getElementById("chkBatchPitchTune")?.checked ?? true;
     const polyphonyGuard = document.getElementById("chkBatchPolyphony")?.checked ?? true;
     const reverbBoost = document.getElementById("chkBatchReverb")?.checked ?? true;
+    const foldExpression = document.getElementById("chkBatchExpressionFold")?.checked ?? true;
+    const normalizeVelocities = document.getElementById("chkBatchVelocityNorm")?.checked ?? true;
     document.getElementById("btnStartBatch").disabled = true;
     sendToHost("start_batch", {
         sourceDir: src,
@@ -2311,7 +2313,9 @@ document.getElementById("btnStartBatch").addEventListener("click", () => {
         emulateSustain,
         neutralizePitch,
         polyphonyGuard,
-        reverbBoost
+        reverbBoost,
+        foldExpression,
+        normalizeVelocities
     });
 });
 

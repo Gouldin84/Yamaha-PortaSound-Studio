@@ -296,7 +296,10 @@ namespace PSS790Player.Bridge
                             NeutralizeAcousticPitchBends = !root.TryGetProperty("neutralizePitch", out var pitProp) || pitProp.GetBoolean(),
                             AutoCenterDanglingPitchBends = true,
                             EnablePolyphonyGuard = !root.TryGetProperty("polyphonyGuard", out var polProp) || polProp.GetBoolean(),
-                            DefaultReverbBoost = !root.TryGetProperty("reverbBoost", out var revProp) || revProp.GetBoolean()
+                            DefaultReverbBoost = !root.TryGetProperty("reverbBoost", out var revProp) || revProp.GetBoolean(),
+                            FoldExpressionPedal = !root.TryGetProperty("foldExpression", out var expProp) || expProp.GetBoolean(),
+                            NormalizeAwmVelocities = !root.TryGetProperty("normalizeVelocities", out var velProp) || velProp.GetBoolean(),
+                            EnsureSetupPreRoll = !root.TryGetProperty("setupPreRoll", out var preProp) || preProp.GetBoolean()
                         };
 
                         StartBatchConversion(sourceDir, targetDir, batchOptions);

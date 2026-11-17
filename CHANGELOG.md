@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-11-17
+
+### Added
+- **Audio Fidelity & Playback Robustness Engine**:
+  - Comprehensive hardware-tailored playback and conversion engine update maximizing sound fidelity and timing precision on the Yamaha PSS-790.
+- **Dynamic Expression Swell Folding (CC 11 &rarr; CC 7)**:
+  - Compensates for the PSS-790's lack of CC 11 hardware circuitry by mathematically folding CC 11 into CC 7: $V_{\text{eff}} = \text{round}\left(\frac{\text{CC } 7 \times \text{CC } 11}{127}\right)$.
+  - Restores dynamic swells, crescendos, decrescendos, and track balance that were previously ignored by the hardware.
+- **Proportional Live Mixer Volume Scaling (`MidiPlayer.cs`)**:
+  - Embedded CC 7 volume events in MIDI files are now proportionally scaled against user mixer channel volume sliders: $\text{Sent CC } 7 = \text{round}\left(\frac{\text{File CC } 7 \times \text{Mixer Level}}{100}\right)$.
+  - Custom channel volume balances stay locked in and are no longer overwritten mid-song by MIDI files.
+- **Sub-Millisecond Windows Multimedia Timer Precision**:
+  - Configured DryWetMIDI `PlaybackSettings` with `HighPrecisionTickGenerator` (`timeSetEvent` / 1ms tick resolution), eliminating micro-jitter and timing hesitation on busy 16-channel arrangements.
+- **Opening Note Setup Pre-Roll Guard**:
+  - Enforces a clean 48-tick ($\approx 25\text{--}50\text{ ms}$) setup pre-roll window if Note-On events occur at Tick 0 concurrently with Program Changes and controllers.
+  - Gives the 8-bit Yamaha microcomputer time to configure tone generators before Note 1 strikes, permanently eliminating dropped opening notes and initial voice glitches.
+- **AWM Dynamic Velocity Sweet-Spot Normalizer**:
+  - Maps velocity extremes $[1, 127]$ into the PSS-790 AWM DAC sweet spot curve $[36, 118]$: $V_{\text{out}} = 36 + \text{round}\left((V_{\text{in}} - 1) \times \frac{82}{126}\right)$.
+  - Lifts whispering inaudible notes into clear audibility while preventing harsh sample-split transients and polyphony competition.
+- **Seamless Loop Wrap-Around Controller Re-Priming**:
+  - Leverages DryWetMIDI `Playback.RepeatStarted` to perform note panic and re-transmit initial channel program changes, scaled volumes, and pitch center (8192) on loop wrap-around, ensuring clean, continuous playback.
+- **Fidelity Test Suite (`AudioFidelityAndPlaybackTests.cs`)**:
+  - Added 4 unit tests covering CC 11 expression folding, AWM velocity scaling, pre-roll separation, and high-precision tick generator creation (96/96 tests passing).
+
 ## [1.10.0] - 2026-11-17
 
 ### Added

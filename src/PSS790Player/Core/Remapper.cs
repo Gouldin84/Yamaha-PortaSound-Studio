@@ -21,6 +21,9 @@ namespace PSS790Player.Core
         public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments (Pianos, Organs, Strings, Bells, Choirs, Brass sections) so they don't detune on PSS-790 hardware
         public bool AutoCenterDanglingPitchBends { get; set; } = true; // Guarantees all channels return to pitch 8192 (center) at track end and during silences
         public bool EmulateSustainPedal { get; set; } = true; // Extends staccato note durations while CC 64 (Damper Pedal) is held, preventing dry/empty sound on piano/keyboard tracks
+        public bool FoldExpressionPedal { get; set; } = true; // Folds CC 11 (Expression) into CC 7 (Volume) so swells, crescendos, and track balance play on PSS-790
+        public bool NormalizeAwmVelocities { get; set; } = true; // Maps velocities into PSS-790 sweet spot (36-118), preventing inaudible notes and harsh sample clipping
+        public bool EnsureSetupPreRoll { get; set; } = true; // Guarantees a clean setup window before Note 1 so microcomputer configures voices without dropping opening notes
         public bool DefaultReverbBoost { get; set; } = true; // Injects default CC 91 (Reverb Send = 48-64) for melodic channels lacking reverb events
         public bool FilterUnsupportedControllers { get; set; } = true;
         public bool ForceRemap { get; set; } = false;
@@ -200,6 +203,12 @@ namespace PSS790Player.Core
                 ApplySustainPedalEmulation(remapped, channelGmPrograms);
             }
 
+            // 0b. Dynamic Expression (CC 11) Folding into Volume (CC 7) for PSS-790 hardware swells & balance
+            if (options.FoldExpressionPedal)
+            {
+                ApplyExpressionPedalFolding(remapped);
+            }
+
             // Full GM to PSS-790 Remapping Pipeline
             // 1. Pre-scan for RPN 0,0 (Pitch Bend Sensitivity) across tracks before filtering controllers
             var channelBendRange = new Dictionary<int, int>();
@@ -322,6 +331,12 @@ namespace PSS790Player.Core
                             if (chEvt is NoteOnEvent melodicNoteOn)
                             {
                                 melodicNoteOn.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOn.NoteNumber, gmProg);
+                                if (options.NormalizeAwmVelocities && melodicNoteOn.Velocity > 0)
+                                {
+                                    byte v = (byte)melodicNoteOn.Velocity;
+                                    int norm = Constants.AwmVelocityMin + (int)Math.Round((v - 1) * (double)(Constants.AwmVelocityMax - Constants.AwmVelocityMin) / 126.0);
+                                    melodicNoteOn.Velocity = (SevenBitNumber)Math.Clamp(norm, 1, 127);
+                                }
                             }
                             else if (chEvt is NoteOffEvent melodicNoteOff)
                             {
@@ -465,6 +480,12 @@ namespace PSS790Player.Core
             {
                 var optimizer = new PolyphonyOptimizer(enabled: true);
                 remapped = optimizer.Optimize(remapped);
+            }
+
+            // Enforce clean setup pre-roll separation so tone generators configure before Note 1 strikes
+            if (options.EnsureSetupPreRoll)
+            {
+                ApplySetupPreRoll(remapped);
             }
 
             // Embed metadata marker
@@ -815,6 +836,82 @@ namespace PSS790Player.Core
                         {
                             long newUs = (long)Math.Round(st.MicrosecondsPerQuarterNote / mult);
                             st.MicrosecondsPerQuarterNote = Math.Clamp(newUs, 100_000, 2_000_000);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void ApplyExpressionPedalFolding(MidiFile midi)
+        {
+            foreach (var track in midi.GetTrackChunks())
+            {
+                var currentCc7 = new Dictionary<int, byte>();
+                var currentCc11 = new Dictionary<int, byte>();
+
+                for (int ch = 0; ch < 16; ch++)
+                {
+                    currentCc7[ch] = 100;
+                    currentCc11[ch] = 127;
+                }
+
+                using var mgr = track.ManageTimedEvents();
+                foreach (var te in mgr.Objects)
+                {
+                    if (te.Event is ControlChangeEvent cc)
+                    {
+                        int ch = cc.Channel;
+                        if (cc.ControlNumber == 7)
+                        {
+                            currentCc7[ch] = (byte)cc.ControlValue;
+                            if (currentCc11[ch] != 127)
+                            {
+                                int folded = (int)Math.Round((double)currentCc7[ch] * currentCc11[ch] / 127.0);
+                                cc.ControlValue = (SevenBitNumber)Math.Clamp(folded, 0, 127);
+                            }
+                        }
+                        else if (cc.ControlNumber == 11)
+                        {
+                            currentCc11[ch] = (byte)cc.ControlValue;
+                            int folded = (int)Math.Round((double)currentCc7[ch] * currentCc11[ch] / 127.0);
+                            cc.ControlNumber = (SevenBitNumber)7;
+                            cc.ControlValue = (SevenBitNumber)Math.Clamp(folded, 0, 127);
+                        }
+                    }
+                }
+            }
+        }
+
+        private static void ApplySetupPreRoll(MidiFile midi, int minPreRollTicks = 48)
+        {
+            long minNoteTime = long.MaxValue;
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                using var mgr = track.ManageTimedEvents();
+                foreach (var te in mgr.Objects)
+                {
+                    if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        if (te.Time < minNoteTime)
+                        {
+                            minNoteTime = te.Time;
+                        }
+                    }
+                }
+            }
+
+            if (minNoteTime < minPreRollTicks)
+            {
+                long shiftTicks = minPreRollTicks - minNoteTime;
+                foreach (var track in midi.GetTrackChunks())
+                {
+                    using var mgr = track.ManageTimedEvents();
+                    foreach (var te in mgr.Objects)
+                    {
+                        if (te.Event is NoteOnEvent or NoteOffEvent)
+                        {
+                            te.Time += shiftTicks;
                         }
                     }
                 }
