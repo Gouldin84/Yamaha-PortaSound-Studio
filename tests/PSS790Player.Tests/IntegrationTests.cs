@@ -217,6 +217,9 @@ namespace PSS790Player.Tests
             _output.WriteLine($"Remapped total notes: {remappedNotes.Count}");
             _output.WriteLine($"Notes removed: {originalNotes.Count - remappedNotes.Count}");
 
+            var destPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\PSS-790 Midi\From Now On.mid"));
+            remapped.Write(destPath, true, MidiFileFormat.MultiTrack);
+
             for (int i = 0; i < tracks.Count; i++)
             {
                 var oNotes = tracks[i].GetNotes().ToList();
