@@ -457,7 +457,9 @@ function renderFormatBadge(format, isGmPassthrough) {
     const badgeContainer = document.getElementById("formatBadgeContainer");
     if (!badgeContainer) return;
 
-    if (format === "pss790") {
+    if (format === "rec") {
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-rose-950 text-rose-400 border border-rose-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-rose-500/20" title="Yamaha PSS-790 Studio Recording. Direct native hardware passthrough active."><span>⏺</span><span>PSS-790 Recording</span></span>`;
+    } else if (format === "pss790") {
         badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha PSS-790. Direct passthrough active."><span>⚡</span><span>PSS-790 Ready</span></span>`;
     } else if (isGmPassthrough) {
         badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-blue-500/20" title="Playing original unmodified General MIDI file directly through Microsoft GS Wavetable Synth for Windows reference."><span>🎹</span><span>Windows GS Synth (Original GM Passthrough)</span></span>`;
@@ -1490,10 +1492,25 @@ function renderLibraryTree() {
 function createSongItemElement(file) {
     const isSelected = file.fullPath === state.selectedSongPath;
     const isPlaying = file.fullPath === state.currentFilePath && state.isPlaying;
+    const isRec = file.format === "rec";
     const isPss = file.format === "pss790";
     const isChecked = state.selectedSongs.has(file.fullPath);
     const isTouch = window.matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window);
     const chkVisibility = (isTouch || state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
+
+    let badgeClass = 'bg-indigo-950 text-indigo-400 border border-indigo-800/60';
+    let badgeLabel = 'GM';
+    let badgeTitle = 'Standard General MIDI file (auto-remapped on the fly)';
+
+    if (isRec) {
+        badgeClass = 'bg-rose-950 text-rose-400 border border-rose-800/60';
+        badgeLabel = 'REC';
+        badgeTitle = 'Native Yamaha PSS-790 Studio Recording (direct hardware passthrough)';
+    } else if (isPss) {
+        badgeClass = 'bg-emerald-950 text-emerald-400 border border-emerald-800/60';
+        badgeLabel = 'PSS';
+        badgeTitle = 'Native Yamaha PSS-790 converted file (plays via direct hardware passthrough)';
+    }
 
     const div = document.createElement("div");
     div.className = `group tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''} ${isChecked ? 'bg-cyan-950/40 border-cyan-800/50' : ''}`;
@@ -1511,8 +1528,8 @@ function createSongItemElement(file) {
             </span>
             <span class="song-title truncate font-medium">${escapeHtml(file.fileName)}</span>
         </div>
-        <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${isPss ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' : 'bg-indigo-950 text-indigo-400 border border-indigo-800/60'}" title="${isPss ? 'Native Yamaha PSS-790 converted file (plays via direct hardware passthrough)' : 'Standard General MIDI file (auto-remapped on the fly)'}">
-            ${isPss ? 'PSS' : 'GM'}
+        <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${badgeClass}" title="${badgeTitle}">
+            ${badgeLabel}
         </span>
     `;
 

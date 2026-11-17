@@ -35,19 +35,46 @@ namespace PSS790Player.Core
     public class Remapper
     {
         public const string Pss790MarkerText = "PSS790_REMAPPED:v1";
+        public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
 
-        public static MidiFormat DetectMidiFormat(MidiFile midiFile)
+        public static bool HasPss790Marker(MidiFile midiFile)
         {
-            // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events
             foreach (var track in midiFile.GetTrackChunks())
             {
                 foreach (var evt in track.Events)
                 {
-                    if (evt is TextEvent textEvent && textEvent.Text.Contains("PSS790_REMAPPED"))
-                        return MidiFormat.Pss790Native;
-                    if (evt is MarkerEvent markerEvent && markerEvent.Text.Contains("PSS790_REMAPPED"))
-                        return MidiFormat.Pss790Native;
+                    if (evt is TextEvent textEvent && (textEvent.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                        textEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase)))
+                        return true;
+                    if (evt is MarkerEvent markerEvent && (markerEvent.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                          markerEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase)))
+                        return true;
                 }
+            }
+            return false;
+        }
+
+        public static bool IsRecording(MidiFile midiFile)
+        {
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is TextEvent textEvent && textEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (evt is MarkerEvent markerEvent && markerEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        public static MidiFormat DetectMidiFormat(MidiFile midiFile)
+        {
+            // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events (Remapped or Recording)
+            if (HasPss790Marker(midiFile))
+            {
+                return MidiFormat.Pss790Native;
             }
 
             // 2. Heuristic Check: Channel 15 has percussion notes and Channel 9 has no events
@@ -526,8 +553,7 @@ namespace PSS790Player.Core
                 midi.Chunks.Add(firstTrack);
             }
 
-            bool markerExists = firstTrack.Events.Any(e => e is TextEvent t && t.Text.Contains("PSS790_REMAPPED"));
-            if (!markerExists)
+            if (!HasPss790Marker(midi))
             {
                 firstTrack.Events.Insert(0, new TextEvent(Pss790MarkerText) { DeltaTime = 0 });
             }

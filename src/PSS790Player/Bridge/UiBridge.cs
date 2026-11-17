@@ -563,11 +563,7 @@ namespace PSS790Player.Bridge
                         {
                             var title = root.TryGetProperty("title", out var tTitle) ? tTitle.GetString() ?? "Recorded Take" : "Recorded Take";
                             var cloned = takeFile.Clone();
-                            var firstTrack = cloned.GetTrackChunks().FirstOrDefault();
-                            if (firstTrack != null)
-                            {
-                                firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
-                            }
+                            MidiRecorder.EmbedRecordingMarker(cloned);
                             LoadMidiObject(cloned, title);
                             SendToJs("switch_tab", new { tab = "player" });
                         }
@@ -1638,6 +1634,7 @@ namespace PSS790Player.Bridge
                 _loadedOriginalMidi = midi;
 
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
                 ReapplyRemapping(preservePosition: false);
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
@@ -1649,8 +1646,9 @@ namespace PSS790Player.Bridge
                     fileName = title,
                     filePath = virtualPath ?? title,
                     relativeDir = "",
-                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
-                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
+                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
+                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
+                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)"),
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo,
@@ -1699,6 +1697,7 @@ namespace PSS790Player.Bridge
                 }
 
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
                 ReapplyRemapping(preservePosition: false);
 
                 bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
@@ -1713,9 +1712,10 @@ namespace PSS790Player.Bridge
                     fileName = Path.GetFileName(resolvedPath),
                     filePath = resolvedPath,
                     relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
-                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
-                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
-                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)"),
+                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
+                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
+                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
+                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)")),
                     isGmPassthrough = isGmPassthrough,
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
@@ -1740,6 +1740,7 @@ namespace PSS790Player.Bridge
             if (_loadedOriginalMidi != null)
             {
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
                 bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
                 bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
 
@@ -1748,9 +1749,10 @@ namespace PSS790Player.Bridge
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 SendToJs("playback_format_updated", new
                 {
-                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
-                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
-                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)"),
+                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
+                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
+                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
+                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)")),
                     isGmPassthrough = isGmPassthrough,
                     channels = channelInfo
                 });

@@ -17,8 +17,10 @@ namespace PSS790Player.Core
             foreach (var track in gmMidi.GetTrackChunks())
             {
                 track.Events.RemoveAll(e =>
-                    (e is TextEvent te && te.Text.Contains(Remapper.Pss790MarkerText)) ||
-                    (e is MarkerEvent me && me.Text.Contains(Remapper.Pss790MarkerText)));
+                    (e is TextEvent te && (te.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                           te.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (e is MarkerEvent me && (me.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                             me.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))));
             }
 
             // 2. Analyze which channels are active

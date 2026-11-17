@@ -246,5 +246,77 @@ namespace PSS790Player.Tests
                 if (exportedPssPath != null && File.Exists(exportedPssPath)) File.Delete(exportedPssPath);
             }
         }
+
+        [Fact]
+        public void EmbedRecordingMarker_And_MarkerDetection_WorksCorrectly()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            Assert.False(Remapper.HasPss790Marker(midi));
+            Assert.False(Remapper.IsRecording(midi));
+
+            // Embed marker
+            MidiRecorder.EmbedRecordingMarker(midi);
+            Assert.True(Remapper.HasPss790Marker(midi));
+            Assert.True(Remapper.IsRecording(midi));
+
+            // Verify DetectMidiFormat detects it as PSS790 native even with zero drums
+            var detectedFormat = Remapper.DetectMidiFormat(midi);
+            Assert.Equal(MidiFormat.Pss790Native, detectedFormat);
+
+            // Verify Remap respects passthrough
+            var remapped = Remapper.Remap(midi);
+            Assert.NotNull(remapped);
+            Assert.True(Remapper.IsRecording(remapped));
+            Assert.Equal(MidiFormat.Pss790Native, Remapper.DetectMidiFormat(remapped));
+        }
+
+        [Theory]
+        [InlineData("PSS790_RECORDING:v1")]
+        [InlineData("PSS790_Recording")]
+        [InlineData("pss790_recording")]
+        [InlineData("PSS790_REMAPPED:v1")]
+        public void HasPss790Marker_DetectsMixedCaseMarkers(string markerText)
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new TextEvent(markerText));
+            midi.Chunks.Add(track);
+
+            Assert.True(Remapper.HasPss790Marker(midi));
+            if (markerText.Contains("RECORDING", StringComparison.OrdinalIgnoreCase))
+            {
+                Assert.True(Remapper.IsRecording(midi));
+            }
+        }
+
+        [Fact]
+        public void ReverseRemapToGeneralMidi_StripsRecordingAndRemappedMarkers()
+        {
+            var midi = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new TextEvent(Remapper.Pss790RecordingMarkerText));
+            track.Events.Add(new TextEvent(Remapper.Pss790MarkerText));
+            track.Events.Add(new ProgramChangeEvent((SevenBitNumber)3) { Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(track);
+
+            Assert.True(Remapper.HasPss790Marker(midi));
+
+            var gmResult = ReverseRemapper.ReverseRemapToGeneralMidi(midi);
+
+            // Both markers must be completely stripped from GM export
+            Assert.False(Remapper.HasPss790Marker(gmResult));
+            Assert.False(Remapper.IsRecording(gmResult));
+
+            // Detect format should now report GM
+            var detected = Remapper.DetectMidiFormat(gmResult);
+            Assert.Equal(MidiFormat.GeneralMidi, detected);
+        }
     }
 }

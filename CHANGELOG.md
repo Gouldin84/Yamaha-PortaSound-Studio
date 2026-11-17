@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.1] - 2026-11-17
+
+### Added
+- **Native Take Metadata Marker (`PSS790_RECORDING:v1`)**:
+  - Automatically embeds non-destructive meta text marker (`PSS790_RECORDING:v1`) in Track 0 of all newly recorded takes and saved takes.
+  - Ensures takes recorded directly from Yamaha PSS-790 hardware are persistently marked with their native hardware lineage.
+- **Recording Passthrough Protection & Anti-Double-Translation**:
+  - `Remapper.DetectMidiFormat()` detects `PSS790_RECORDING` (case-insensitively, e.g. `PSS790_Recording`, `PSS790_recording`, `PSS790_RECORDING:v1`) and treats the file as native PSS-790 format.
+  - Guarantees 100% Passthrough Mode when loading, previewing, or playing recorded takes, preventing unintentional note remapping or transposition even if the take contains only melodic voices on Channel 1 without percussion.
+  - Player HUD and Song Tree proudly display the distinct rose badge `REC` / `PSS-790 Studio Recording (Passthrough)`.
+- **Clean General MIDI Export**:
+  - `ReverseRemapper.ReverseRemapToGeneralMidi()` now cleanly strips both `PSS790_REMAPPED` and `PSS790_RECORDING` metadata markers so GM exports are fully clean, standard, and portable across external DAWs and software synths.
+
 ## [1.18.0] - 2026-11-17
 
 ### Added

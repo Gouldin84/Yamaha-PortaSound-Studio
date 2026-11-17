@@ -295,6 +295,10 @@ namespace PSS790Player.Core
                     {
                         _recording.Stop();
                         _lastRecordedFile = _recording.ToFile();
+                        if (_lastRecordedFile != null)
+                        {
+                            EmbedRecordingMarker(_lastRecordedFile);
+                        }
                     }
                     catch
                     {
@@ -348,6 +352,21 @@ namespace PSS790Player.Core
             return (notes, timedEvents, duration);
         }
 
+        public static void EmbedRecordingMarker(MidiFile midi)
+        {
+            var firstTrack = midi.GetTrackChunks().FirstOrDefault();
+            if (firstTrack == null)
+            {
+                firstTrack = new TrackChunk();
+                midi.Chunks.Add(firstTrack);
+            }
+
+            if (!Remapper.HasPss790Marker(midi))
+            {
+                firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790RecordingMarkerText) { DeltaTime = 0 });
+            }
+        }
+
         public string SaveNativeTake(string fileName)
         {
             if (_lastRecordedFile == null)
@@ -368,16 +387,9 @@ namespace PSS790Player.Core
             AppPaths.EnsureDirectoriesExist();
             string fullPath = Path.Combine(AppPaths.Pss790MidiDir, fileName);
 
-            // Direct 1:1 clone of the PSS-790 take + inject PSS790_REMAPPED:v1 marker in Track 0
+            // Direct 1:1 clone of the PSS-790 take + ensure recording marker in Track 0
             var fileToSave = _lastRecordedFile.Clone();
-            var firstTrack = fileToSave.GetTrackChunks().FirstOrDefault();
-            if (firstTrack == null)
-            {
-                firstTrack = new TrackChunk();
-                fileToSave.Chunks.Add(firstTrack);
-            }
-
-            firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
+            EmbedRecordingMarker(fileToSave);
 
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
@@ -426,6 +438,7 @@ namespace PSS790Player.Core
             var fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
 
             var fileToSave = _lastRecordedFile.Clone();
+            EmbedRecordingMarker(fileToSave);
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
@@ -451,6 +464,7 @@ namespace PSS790Player.Core
             string fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
 
             var fileToSave = _lastRecordedFile.Clone();
+            EmbedRecordingMarker(fileToSave);
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
@@ -552,13 +566,7 @@ namespace PSS790Player.Core
             var destPath = Path.Combine(AppPaths.Pss790MidiDir, outFileName);
             var sourceMidi = MidiFile.Read(sourcePath);
             var pssFile = sourceMidi.Clone();
-            var firstTrack = pssFile.GetTrackChunks().FirstOrDefault();
-            if (firstTrack == null)
-            {
-                firstTrack = new TrackChunk();
-                pssFile.Chunks.Add(firstTrack);
-            }
-            firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
+            EmbedRecordingMarker(pssFile);
             pssFile.Write(destPath, overwriteFile: true);
             return destPath;
         }
