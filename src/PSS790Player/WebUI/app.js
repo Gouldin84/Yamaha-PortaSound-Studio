@@ -80,8 +80,10 @@ function applyTheme(theme) {
     document.body.classList.toggle("theme-light", isLight);
     const icon = document.getElementById("themeToggleIcon");
     const text = document.getElementById("themeToggleText");
+    const btn = document.getElementById("btnThemeToggle");
     if (icon) icon.textContent = isLight ? "🌙" : "☀️";
     if (text) text.textContent = isLight ? "Dark" : "Light";
+    if (btn) btn.title = `Switch to ${isLight ? "Dark" : "Light"} Studio Theme (currently ${isLight ? "Light" : "Dark"})`;
     try {
         localStorage.setItem("pss790_theme", theme);
     } catch (e) { }

@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=1.18.4">
+    <link rel="stylesheet" href="styles.css?v=1.18.5">
     <script>
         tailwind.config = {
             theme: {
@@ -55,7 +55,7 @@
     </div>
 
     <!-- Top Navigation Header -->
-    <header class="glass-panel shrink-0 z-30 px-2.5 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800/80 flex items-center justify-between gap-1.5 sm:gap-2">
+    <header class="glass-panel shrink-0 z-30 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800/80 flex items-center justify-between gap-1 sm:gap-2">
         <!-- Logo & Title -->
         <div class="flex items-center space-x-2 shrink-0" title="Yamaha PortaSound PSS-790 (1990) Multi-Timbral 28-Voice Synthesizer Workstation">
             <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-md shadow-cyan-500/20 shrink-0 border border-slate-700/60 object-cover">
@@ -70,19 +70,19 @@
 
         <!-- Workspace Tab Switcher -->
         <div class="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 shadow-inner shrink-0">
-            <button id="tabBtnPlayer" title="Player Workspace: Load, preview, and play back MIDI files with real-time Yamaha PSS-790 remapping" class="tab-btn active flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition-all">
+            <button id="tabBtnPlayer" title="Player Workspace: Load, preview, and play back MIDI files with real-time Yamaha PSS-790 remapping" class="tab-btn active flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition-all">
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 <span>Player</span>
             </button>
-            <button id="tabBtnRecorder" title="Studio Recorder Workspace: Record live MIDI keyboard performances with metronome and count-in" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
+            <button id="tabBtnRecorder" title="Studio Recorder Workspace: Record live MIDI keyboard performances with metronome and count-in" class="tab-btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
                 <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
                 <span>Studio</span>
                 <span id="recordingPill" title="Active Recording: Incoming MIDI notes and events are currently being captured" class="hidden px-1.5 py-0.2 bg-rose-500/20 text-rose-400 text-[9px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
             </button>
-            <button id="tabBtnSysex" title="SysEx Vault Workspace: Backup keyboard memory dumps, restore bank snapshots, and send system commands" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
+            <button id="tabBtnSysex" title="SysEx Vault Workspace: Backup keyboard memory dumps, restore bank snapshots, and send system commands" class="tab-btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
                 <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
                 </svg>
@@ -95,7 +95,7 @@
             <div class="flex items-center space-x-1 sm:space-x-1.5 bg-slate-900/80 px-2 sm:px-2.5 py-1 rounded-lg border border-slate-800">
                 <span id="outputStatusDot" title="Output Status: Green pulse indicates an active, ready MIDI output port connection" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0"></span>
                 <label for="deviceSelect" class="text-[11px] font-medium text-slate-400 hidden xl:inline-block">Port:</label>
-                <select id="deviceSelect" title="MIDI Output Device: Select the hardware MIDI interface or software synth for playback" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[130px] md:max-w-[160px]">
+                <select id="deviceSelect" title="MIDI Output Device: Select the hardware MIDI interface or software synth for playback" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[95px] sm:max-w-[115px] md:max-w-[135px] xl:max-w-[160px] truncate">
                     <option value="" disabled selected>Scanning devices...</option>
                 </select>
                 <button id="btnRefreshDevices" title="Rescan MIDI Devices (Hot-Swap): Detect newly plugged or unplugged MIDI hardware interfaces without restarting" class="text-slate-400 hover:text-cyan-400 transition p-0.5 active:scale-90" aria-label="Rescan MIDI Devices">
@@ -110,7 +110,7 @@
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
                 </svg>
-                <span class="hidden sm:inline">Library</span>
+                <span class="hidden xl:inline">Library</span>
             </button>
 
             <!-- Browse & Load Button -->
@@ -118,7 +118,7 @@
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                 </svg>
-                <span class="hidden sm:inline">Load</span>
+                <span class="hidden xl:inline">Load</span>
             </button>
 
             <!-- Quick General MIDI Library Picker (Hidden - superseded by Library Sidebar) -->
@@ -134,7 +134,7 @@
                 <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                 </svg>
-                <span class="hidden sm:inline">Folder</span>
+                <span class="hidden 2xl:inline">Folder</span>
             </button>
 
             <!-- Save Remapped MIDI Button -->
@@ -142,7 +142,7 @@
                 <svg class="w-3.5 h-3.5 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
                 </svg>
-                <span class="hidden xs:inline">Export</span>
+                <span class="hidden xl:inline">Export</span>
             </button>
 
             <!-- Batch Remapper Button -->
@@ -150,7 +150,7 @@
                 <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
-                <span class="hidden md:inline">Batch</span>
+                <span class="hidden 2xl:inline">Batch</span>
             </button>
 
             <!-- About & Legal Info Button -->
@@ -158,13 +158,13 @@
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
-                <span class="hidden md:inline">About</span>
+                <span class="hidden 2xl:inline">About</span>
             </button>
 
             <!-- Light / Dark Theme Toggle Button -->
-            <button id="btnThemeToggle" title="Toggle Theme: Switch between Dark Studio and Light Studio visual appearance" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnThemeToggle" title="Toggle Theme: Switch between Dark Studio and Light Studio visual appearance" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" aria-label="Toggle Theme">
                 <span id="themeToggleIcon" class="text-xs">☀️</span>
-                <span id="themeToggleText" class="hidden lg:inline text-[11px]">Theme</span>
+                <span id="themeToggleText" class="hidden 2xl:inline text-[11px]">Theme</span>
             </button>
         </div>
     </header>
@@ -1255,7 +1255,7 @@
                     <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.18.4</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.18.5</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -1401,6 +1401,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=1.18.4"></script>
+    <script src="app.js?v=1.18.5"></script>
 </body>
 </html>

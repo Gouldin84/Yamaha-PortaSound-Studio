@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.5] - 2026-11-17
+
+### Fixed
+- **Header Actions Toolbar Handheld Responsiveness**:
+  - Streamlined toolbar button widths on compact and handheld displays (Asus ROG Ally, Steam Deck, 720p/1080p high DPI):
+    - Changed text labels on toolbar buttons (`Folder`, `Batch`, `About`, `Theme`) to display only on wide screens (`2xl:`), rendering as clean, compact icon buttons with rich tooltips on compact screens.
+    - Added `truncate` and adjusted `max-w` on the MIDI device dropdown selector to prevent long device names from pushing trailing controls off-screen.
+    - Ensured the Light/Dark theme toggle button (`btnThemeToggle`) fits comfortably with ample breathing room on all display sizes and window modes.
+
 ## [1.18.4] - 2026-11-17
 
 ### Fixed
