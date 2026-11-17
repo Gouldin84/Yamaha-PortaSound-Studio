@@ -265,7 +265,7 @@ function handleHostMessage(msg) {
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
             document.getElementById("timeScrubber").max = state.durationSeconds;
             document.getElementById("timeScrubber").value = 0;
-            document.getElementById("fileStatusBadge").textContent = "Loaded";
+            updatePlaybackUi();
 
             // Format Badge Rendering
             renderFormatBadge(msg.data.format, msg.data.isGmPassthrough);
@@ -1756,14 +1756,26 @@ function renderMixer() {
         const card = document.createElement("div");
         const isDrum = ch.channel === 15;
 
-        card.className = `glass-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${
-            ch.hasNotes ? 'border-cyan-500/30 bg-slate-900/60' : 'border-slate-800/80'
+        const topAccent = isDrum
+            ? 'border-t-2 border-t-amber-400'
+            : (ch.hasNotes ? 'border-t-2 border-t-cyan-400' : 'border-t-2 border-t-slate-800/80');
+
+        card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${
+            ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90'
         }`;
+
+        const muteClass = ch.isMuted
+            ? 'btn-console-m muted bg-rose-600 text-white shadow-sm shadow-rose-500/50 ring-1 ring-rose-400/80'
+            : 'btn-console-m bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50';
+
+        const soloClass = ch.isSolo
+            ? 'btn-console-s soloed bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50 ring-1 ring-amber-300'
+            : 'btn-console-s bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50';
 
         card.innerHTML = `
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
                 <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}" title="Channel ${ch.channelDisplay} (${isDrum ? 'Drums / Percussion (Chart 1)' : 'Melody / Accompaniment'})">CH ${ch.channelDisplay}</span>
-                <span id="led-${ch.channel}" class="meter-led w-2 h-2 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
+                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
             <div class="space-y-0.5">
@@ -1798,9 +1810,9 @@ function renderMixer() {
                     </div>
                 </div>
 
-                <div class="flex space-x-0.5">
-                    <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition" title="Mute Channel ${ch.channelDisplay}: Silence this channel during playback">M</button>
-                    <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition" title="Solo Channel ${ch.channelDisplay}: Isolate this channel and silence all other channels">S</button>
+                <div class="flex space-x-1">
+                    <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${muteClass}" title="Mute Channel ${ch.channelDisplay}: Silence this channel during playback">M</button>
+                    <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${soloClass}" title="Solo Channel ${ch.channelDisplay}: Isolate this channel and silence all other channels">S</button>
                 </div>
             </div>
         `;
@@ -1831,7 +1843,7 @@ function renderMixer() {
         if (btnMute) {
             btnMute.addEventListener("click", () => {
                 ch.isMuted = !ch.isMuted;
-                btnMute.className = `w-6 h-6 rounded-md text-[10px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition`;
+                btnMute.className = `w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'btn-console-m muted bg-rose-600 text-white shadow-sm shadow-rose-500/50 ring-1 ring-rose-400/80' : 'btn-console-m bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50'}`;
                 sendToHost("set_channel_mute", { channel: ch.channel, mute: ch.isMuted });
             });
         }
@@ -1840,7 +1852,7 @@ function renderMixer() {
         if (btnSolo) {
             btnSolo.addEventListener("click", () => {
                 ch.isSolo = !ch.isSolo;
-                btnSolo.className = `w-6 h-6 rounded-md text-[10px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition`;
+                btnSolo.className = `w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'btn-console-s soloed bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50 ring-1 ring-amber-300' : 'btn-console-s bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50'}`;
                 sendToHost("set_channel_solo", { channel: ch.channel, solo: ch.isSolo });
             });
         }
@@ -2081,6 +2093,23 @@ function updatePlaybackUi() {
         const secs = Math.floor(state.durationSeconds % 60);
         totalTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
+
+    const statusBadge = document.getElementById("fileStatusBadge");
+    if (statusBadge) {
+        if (state.isPlaying) {
+            statusBadge.className = "px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-emerald-950/30";
+            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Playing</span>`;
+        } else if (state.isPaused) {
+            statusBadge.className = "px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 border border-amber-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-amber-950/30";
+            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>Paused</span>`;
+        } else if (state.currentFile) {
+            statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
+            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>Ready</span>`;
+        } else {
+            statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
+            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Idle</span>`;
+        }
+    }
 }
 
 function updateBatchProgress(data) {
@@ -2178,9 +2207,9 @@ document.getElementById("timeScrubber").addEventListener("change", (e) => {
 document.querySelectorAll(".speed-btn").forEach(btn => {
     btn.addEventListener("click", () => {
         document.querySelectorAll(".speed-btn").forEach(b => {
-            b.className = "speed-btn px-2.5 py-1 text-xs font-semibold rounded-lg text-slate-400 hover:text-white transition";
+            b.className = "speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition active:scale-95";
         });
-        btn.className = "speed-btn px-2.5 py-1 text-xs font-semibold rounded-lg bg-cyan-500 text-slate-950 shadow-sm transition";
+        btn.className = "speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded bg-cyan-500 text-slate-950 shadow-sm transition active:scale-95";
         state.speed = parseFloat(btn.dataset.speed);
         sendToHost("set_speed", { speed: state.speed });
     });
@@ -2190,9 +2219,9 @@ document.getElementById("btnLoop").addEventListener("click", () => {
     state.isLooping = !state.isLooping;
     const btn = document.getElementById("btnLoop");
     if (state.isLooping) {
-        btn.className = "px-3 py-2 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm";
+        btn.className = "px-2 py-1 rounded-lg bg-cyan-500/25 text-cyan-400 border border-cyan-500/50 text-[11px] font-semibold transition flex items-center space-x-1 shadow-sm ring-1 ring-cyan-500/30 active:scale-95";
     } else {
-        btn.className = "px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-400 hover:text-white border border-slate-700/60 transition flex items-center space-x-1.5";
+        btn.className = "px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-400 hover:text-white border border-slate-700/60 transition flex items-center space-x-1 active:scale-95";
     }
     sendToHost("set_loop", { loop: state.isLooping });
 });

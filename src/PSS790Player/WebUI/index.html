@@ -173,7 +173,7 @@
 
                 <!-- Real-Time Search Filter -->
                 <div class="relative shrink-0">
-                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, folders..." title="Instant Search: Filter songs and folders by title, category, or subfolder path" class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
+                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, folders..." title="Instant Search: Filter songs and folders by title, category, or subfolder path" class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 focus:ring-1 focus:ring-cyan-500/40 transition" />
                     <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
@@ -301,9 +301,9 @@
                 <!-- Timeline Scrubber -->
                 <div class="space-y-0.5 pt-0.5">
                     <input type="range" id="timeScrubber" min="0" max="100" value="0" step="0.1" title="Timeline Scrubber: Click or drag to jump to any point in the song" class="w-full h-1.5 cursor-pointer">
-                    <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                        <span id="currentTimeDisplay" title="Elapsed playback time (MM:SS)" class="cursor-help">00:00</span>
-                        <span id="totalTimeDisplay" title="Total song length (MM:SS)" class="cursor-help">00:00</span>
+                    <div class="flex items-center justify-between text-[11px] font-mono">
+                        <span id="currentTimeDisplay" title="Elapsed playback time (MM:SS)" class="lcd-display px-2 py-0.5 text-cyan-400 font-semibold cursor-help">00:00</span>
+                        <span id="totalTimeDisplay" title="Total song length (MM:SS)" class="lcd-display px-2 py-0.5 text-slate-400 font-medium cursor-help">00:00</span>
                     </div>
                 </div>
             </section>
@@ -1126,7 +1126,7 @@
                     <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.16.0</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.17.0</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">

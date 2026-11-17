@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-17
+
+### Added
+- **Hardware Mixing Console Strip Aesthetics**:
+  - Color-coded channel strip top accent bands distinguishing Channel 16/10 Rhythm (`border-t-2 border-t-amber-400`), active harmonic channels with musical note content (`border-t-2 border-t-cyan-400`), and empty channels.
+  - Tactile backlit studio console Mute and Solo buttons: illuminated ruby-red backlight (`bg-rose-600 text-white shadow-sm shadow-rose-500/50 ring-1 ring-rose-400/80`) when Muted, and glowing amber backlight (`bg-amber-500 text-slate-950 font-black shadow-sm shadow-amber-500/50 ring-1 ring-amber-300`) when Soloed.
+  - Glossy lens LED activity meters with inner lens highlights and vibrant bloom on note strikes.
+- **Digital LCD/VFD HUD Display & Live Status Pill**:
+  - Framed timeline scrubber timestamps (`#currentTimeDisplay` and `#totalTimeDisplay`) inside authentic hardware LCD bezels with monospace digits and inner shadow.
+  - Dynamic live playback state indicator (`#fileStatusBadge`): animated emerald pulse when `Playing` (🟢 Playing), warm amber pill when `Paused` (⏸️ Paused), and clean neutral pill when `Ready` (🎵 Ready) or `Idle`.
+- **Zero-Jitter Button Layout Stability**:
+  - Standardized exact padding and dimensions across `.speed-btn` multipliers and `#btnLoop` to completely eliminate layout shifts when clicked.
+- **Library Sidebar Enhancements**:
+  - Tree hierarchy guide lines and glowing cyan background highlight on the currently playing track (`.tree-song-item.playing`).
+  - Subtle cyan focus ring on instant search filter input.
+- **Light Studio Theme Calibration**:
+  - Full contrast, border, and color styling parity for new console strips, LCD bezels, and Mute/Solo button states in Light Studio mode.
+
 ## [1.16.0] - 2026-11-17
 
 ### Added
