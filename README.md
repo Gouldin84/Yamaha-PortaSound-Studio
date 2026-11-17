@@ -1,6 +1,6 @@
-# Yamaha PSS-790 MIDI Player, Remapper & Recording Studio
+# Yamaha PSS-790 Studio
 
-A high-performance standalone MIDI workstation, real-time voice remapper, and two-way recording studio designed specifically for the **Yamaha PortaSound PSS-790** keyboard synthesizer.
+A high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio designed specifically for the **Yamaha PortaSound PSS-790** keyboard synthesizer.
 
 [![Release](https://img.shields.io/github/v/release/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter)](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -13,9 +13,10 @@ A high-performance standalone MIDI workstation, real-time voice remapper, and tw
 
 The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polyphonic Advanced Wave Memory (AWM) tone generator with 100 preset voices, 50 built-in rhythm styles, a vector synth joystick pad, and 16-channel multi-timbral MIDI reception. However, because it predates the General MIDI (GM) standard, standard MIDI files sound distorted, transposed, or unaligned without translation.
 
-This application provides a complete bidirectional workstation:
+**Yamaha PSS-790 Studio** provides a complete bidirectional workstation across three dedicated studio tabs:
 1. **Player & Voice Remapper**: Real-time translation, hardware playback, and batch file conversion for General MIDI files.
-2. **MIDI Recording Studio**: Direct capture from the PSS-790 keyboard, styles, and vector pad, with native 1:1 playback preservation and reverse export to standard General MIDI for modern DAWs.
+2. **MIDI Recording Studio & Vault**: Direct capture from the PSS-790 keyboard, styles, and vector pad, with native take preservation (`PSS790_RECORDING:v1`), standalone take vault, stereo VU meters, live chord analyzer, and reverse export to standard General MIDI.
+3. **SysEx Vault & Preset Librarian**: Bidirectional System Exclusive memory dumps, voice parameter backup, hex payload inspection, and 1-click restore to keyboard memory.
 
 ---
 
@@ -40,12 +41,21 @@ This application provides a complete bidirectional workstation:
     - 🗑️ **Orphan PSS Files**: Ghost files in `PSS-790 Midi` whose GM original was renamed or deleted.
   - Incremental, non-destructive execution with live progress reporting, automatic pruning of orphaned keys in `VoiceOverrideStore`, and cleanup of empty orphan directories.
   - Optional checkbox to force re-convert the entire library with the latest hardware rules.
+- **Smart Polyphony Guard & Voice Protections**:
+  - Dynamically enforces the 28-voice hardware limit, automatically dropping low-velocity background percussion and density subdivisions during heavy congestion ($\ge 22$ notes) while strictly shielding melody, vocal, bass, and kick/snare parts.
+  - Hi-hat choke grouping (closed hi-hat truncates open hi-hat ring).
+  - Truncates lingering percussion durations to free up AWM sound generator elements.
+  - Overlapping same-pitch note clamping and zero-duration protection to prevent hardware voice-stealing bugs.
 - **Format-Aware 16-Channel Mixer & Voice Inspector**:
   - **Real-Time 16-Channel Activity LEDs**: Live responsive glowing LED meters for every MIDI channel (green for melodic channels 1–15, amber for rhythm channel 16) with polyphonic chord hold and minimum pulse decay so rapid staccato hits and hi-hats flash brightly.
   - **Hardware Mute & Solo Channel Isolation**: Direct hardware note suppression for muted and un-soloed channels, with background parameter continuity (volume, pan, pitch bend, voice) for instant glitch-free unmuting.
   - **Real-Time Playback Progress Scrubber**: Smooth high-precision progress bar with live time displays and seek-on-release scrubbing.
   - Live channel strips with volume sliders, mute/solo buttons, and voice override dropdowns.
   - Inspecting native PSS-790 files correctly displays true Chart 2 hardware voices (e.g., `PIANO`, `VIOLIN 1`, `ELEC BASS 1`) and identifies Channel 16 as fixed rhythm, while GM files display General MIDI instrument labels.
+- **Microsoft GS Wavetable Synth Unmodified GM Mode**:
+  - When output is set to Microsoft GS Wavetable Synth, the remapping engine automatically disengages (Channel 10 drums and standard GM program numbers are preserved 1:1), enabling pure, unmodified General MIDI auditioning on PC speakers.
+- **Live MIDI Hot-Swap**:
+  - Dynamically detects USB-MIDI cable connections and disconnections in real time without restarting the application; active playback pauses gracefully if an interface is unplugged.
 - **Media Player Keyboard Shortcuts**:
   | Key | Action |
   |---|---|
@@ -66,35 +76,70 @@ This application provides a complete bidirectional workstation:
 - **Real-Hardware Serial DIN Buffer & Voice Protections**:
   - **Foreign SysEx Stripping**: Filters Roland GS and Yamaha XG System Exclusive reset dumps (which can burst 250+ messages at once), preventing receive FIFO buffer overruns (`bu full` lockups) across 31,250 baud serial cables.
   - **Active Channel Missing Program Change Auto-Initialization**: Injects `ProgramChangeEvent(3)` (Voice 00: `PIANO`) at Tick 0 on active channels lacking an initial voice assignment, preventing voice bleeding from prior songs.
-  - **Overlapping Same-Pitch Note Clamping**: Automatically truncates earlier same-pitch notes on identical channels if their duration overlaps a subsequent Note-On, preventing vintage voice-stealing circuit desynchronization.
-  - **Zero-Duration Clamping**: Enforces a minimum note length of 1 tick to prevent hardware hanging notes.
-- **Smart Polyphony Optimizer**:
-  - Clamps lingering percussion note durations to free up AWM sound generator elements.
-  - Implements hi-hat choke grouping (closed hi-hat truncates open hi-hat).
-  - During peak polyphony congestion ($\ge 22$ notes), automatically sheds incidental background percussion and high-density subdivisions while strictly protecting melody, vocal, bass, and kick/snare parts.
-- **Buffer Overrun Protection**: Filters unhandled Control Changes (keeping CC 1, 7, and 91) and strips Aftertouch to protect the synthesizer's internal microcomputer buffer (`bu full`).
-- **Individual Note-Off Panic**: Sends explicit Note-Off commands across all active notes upon stop or seek, eliminating hanging notes.
 - **Recursive Batch Converter**: 1-click batch converter for folders and nested subdirectories of MIDI files with relaxed vintage MIDI chunk parsing and real-time progress tracking.
 
-### 🎙️ Tab 2: MIDI Recording Studio
+---
+
+### 🎙️ Tab 2: MIDI Recording Studio & Take Vault
 - **Direct PSS-790 Recording**: Captures live performances, vector synthesis sweeps, and built-in auto-accompaniment styles directly from the keyboard's MIDI OUT.
+- **Dedicated Standalone Recordings Library (Exclusive to Tab 2)**:
+  - Separate project take vault stored in `Music\Midi\Recordings\` (`AppPaths.RecordingsDir`), keeping work-in-progress takes segregated from published songs.
+  - Automatic background preservation of recorded takes upon recording stop with captured notes.
+  - Browse all recorded takes with duration, note count, formatted timestamp, and file size in KB.
+  - **Instant Take Auditioning**: Preview and stop recordings directly within Tab 2 (`▶ Preview` / `⏹ Stop`).
+  - **Export to General MIDI**: Reverse-remaps Channel 16 drums to Channel 10 and PSS-790 voices back to standard GM programs, saving to `GM Midi/` with instant reflection in the Tab 1 jukebox.
+  - **Export to PSS-790 Library**: Embeds native hardware marker and saves to `PSS-790 Midi/` for physical keyboard playback.
+  - Inline rename, deletion, and real-time search filter for past takes.
+  - "Open Folder" button revealing the recordings directory directly in Windows Explorer.
+- **Stereo Master Peak Level VU Meters**:
+  - Dual 12-segment graduated LED ladder meters (Left & Right) with calibrated dB scale (-24dB to +3dB clip).
+  - 60 FPS ballistic physics with instantaneous velocity peak attack, smooth exponential decay, and peak-hold indicators.
+  - Dynamic stereo pan spread responsive to inbound MIDI channels.
+- **Real-Time Live Chord & Musical Pitch Analyzer**:
+  - Phosphor green Studio LCD display detecting chord names, roots, qualities, and inversions (Major, Minor, 7ths, Maj7, Min7, Sus4, Sus2, Dim, Aug, 6th, Add9, 9th, compound chords, and slash inversions like `C Maj / E`).
+  - Single-note pitch identification and 2-note musical intervals (e.g. `C4 - G4 (Perfect 5th)`).
+- **Real Musical Pitch Displays Across all 16 Inbound Channel Cards**:
+  - Displays actual live musical note names (`C4`, `G#3`, `Bb5`, etc.) and strike velocities on all 16 inbound channel cards.
+- **Native Take Metadata Marker (`PSS790_RECORDING:v1`) & Passthrough Protection**:
+  - Automatically embeds non-destructive meta text marker (`PSS790_RECORDING:v1`) on Track 0 of all takes.
+  - `Remapper.DetectMidiFormat()` detects `PSS790_RECORDING` case-insensitively and activates **100% Passthrough Mode**, preventing accidental double-translation or note transposition when loaded into the player.
+  - `ReverseRemapper.ReverseRemapToGeneralMidi()` cleanly strips both `PSS790_REMAPPED` and `PSS790_RECORDING` markers when exporting takes to GM.
 - **Anti-Feedback Loop Guard**: Software MIDI Thru is disabled by default with an explicit opt-in toggle to safeguard against destructive feedback loops caused by the PSS-790's internal soft-thru merger.
 - **DAW Transport & Timing Assist**:
   - Large digital timecode display (`00:00:00.0`) and musical bar/beat counter (`BAR 01 : 1`).
   - Configurable tempo (40 to 240 BPM) with synchronized slider and number inputs.
   - Visual 1-bar (4 beat) count-in countdown banner before capture begins.
   - Built-in Web Audio metronome click track (accented high click on beat 1).
-- **16-Channel Inbound Signal Monitor**: Live DAW-style channel cards across all 16 MIDI channels illuminating glowing rose LEDs and displaying note names/velocities on incoming `NoteOnEvent`s.
-- **3 Post-Recording Take Actions**:
-  - **`⚡ Save Native (PSS-790 Ready)`**: Direct 1:1 capture without remapping. Embeds the `PSS790_REMAPPED:v1` marker and saves to `Music\Midi\PSS-790 Midi\`.
-  - **`🎵 Export to General MIDI (DAW/PC)`**: Reverse conversion translating Channel 16 &rarr; Channel 10 drums, Chart 1 notes &rarr; GM drum notes, and Chart 2 voices &rarr; GM instruments for use in Ableton, FL Studio, Logic, Reaper, or Windows media players.
-  - **`🎧 Send to Player (Audition)`**: Transfers the native take directly into Tab 1 in Passthrough Mode to play back on the keyboard immediately.
+
+---
+
+### 💾 Tab 3: SysEx Vault & Preset Librarian
+- **Bidirectional System Exclusive Support**:
+  - Send and receive native Yamaha PSS-790 SysEx dumps (`F0 43 ... F7`).
+  - Dedicated storage vault in `Music\Midi\SysEx\` (`AppPaths.SysExDir`).
+- **Real-Time SysEx Capture**:
+  - Listens on the selected MIDI In port for incoming bulk dumps, Vector Play recordings, and voice parameter updates.
+  - Live hex view with automatic byte counting and manufacturer identification (Yamaha ID `43`).
+  - Save received dumps as standard `.syx` files.
+- **Keyboard Restore & Bulk Transmit**:
+  - Transmit saved `.syx` files back to the PSS-790 to restore user voices, vector configurations, and style memories.
+  - Paced hardware-safe transmission throttles SysEx packets to prevent synthesizer buffer overflows.
+- **SysEx Hex Inspector**:
+  - Built-in hex inspection modal with formatted byte offset viewing, ASCII representations, and payload validation.
+
+---
+
+### 🌓 Dark Studio & Light Studio Themes
+- 1-click theme switcher toggle in the top-right toolbar.
+- High-contrast, meticulously calibrated styling across both themes for mixing console cards, LCD displays, VU meters, modals, and status badges.
+
+---
 
 ### 🎮 Asus ROG Ally & Handheld Touch Optimization
-- **Fixed-Viewport Workstation Layout**: Full viewport locking (`h-screen overflow-hidden`) eliminates awkward page scrolling, matching professional DAWs like Ableton Live and FL Studio.
+- **Fixed-Viewport Workstation Layout**: Full viewport locking (`h-screen overflow-hidden`) eliminates page scrolling, matching professional DAWs like Ableton Live and FL Studio.
 - **Independent Two-Pane Scrolling**:
-  - **Left Sidebar**: 100% height pane where only the file tree scrolls internally. The search bar, selection buttons, docked batch action bar (`📦 Move` & `🗑️ Delete`), and refresh footer remain **100% visible on screen at all times**.
-  - **Right Workspace**: Independent scrollable pane for the transport deck, 16-channel mixer, and inbound monitor. Scrolling the mixer never shifts or hides the library sidebar.
+  - **Left Sidebar**: 100% height pane where only the file tree scrolls internally. The search bar, selection buttons, docked batch action bar, and refresh footer remain **100% visible on screen at all times**.
+  - **Right Workspace**: Independent scrollable pane for the transport deck, 16-channel mixer, and studio monitors.
 - **Touch-Friendly Hit Targets**:
   - Enlarged tap targets ($\ge 36\text{px}$–$44\text{px}$) across buttons and controls.
   - Checkboxes automatically visible on touchscreens with generous hit zones.
@@ -102,13 +147,18 @@ This application provides a complete bidirectional workstation:
   - 120Hz fluid kinetic touch scrolling via `touch-action: pan-y`.
 - **DPI Scaling & Handheld Dimensions**: Tailored for the Asus ROG Ally Z1 Extreme ($1280 \times 720$ effective resolution at 150% Windows scaling) and compact laptop displays with auto-scaling modals and compact single-line navigation.
 
+---
+
 ### 📁 Standardized User Library (`C:\Users\%USERNAME%\Music\Midi\`)
-- **`GM Midi\` Subfolder**: Drop zone for raw General MIDI files (automatically remapped during playback and conversion).
-- **`PSS-790 Midi\` Subfolder**: Output destination for converted files and native PSS-790 takes (played in direct Passthrough Mode).
-- **1-Click "Open Folder"**: Top navigation button to instantly reveal the library directory in Windows Explorer.
+- **`GM Midi\`**: Drop zone for raw General MIDI files (automatically remapped during playback and conversion).
+- **`PSS-790 Midi\`**: Output destination for converted files and native PSS-790 takes (played in direct Passthrough Mode).
+- **`Recordings\`**: Standalone vault for raw studio takes, auditioning, and GM/PSS export.
+- **`SysEx\`**: Repository for System Exclusive dumps, voice presets, and vector memories.
+- **1-Click "Folder" Button**: Top navigation button to instantly reveal `Music\Midi\` in Windows Explorer.
 - **Visual Format Badging**:
   - `🎵 GM`: General MIDI file requiring auto-remapping.
   - `⚡ PSS-790`: Native PSS-790 file with direct passthrough engaged.
+  - `⏺ REC`: Native studio recording take with passthrough protection.
 
 ---
 
@@ -116,7 +166,7 @@ This application provides a complete bidirectional workstation:
 
 ### Running Pre-Built Binaries
 Download the latest standalone executable from the **[Releases](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)** page:
-1. Download `PSS790Player.exe` (or `PSS790Player-win-x64.zip`).
+1. Download `PSS790Player.exe`.
 2. Run `PSS790Player.exe` directly (no installation or .NET runtime installation required).
 
 ### Running from Project Clone
@@ -171,7 +221,7 @@ dotnet build
 dotnet test
 
 # Publish standalone single-file executable
-dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o bin/Publish
+dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist/
 ```
 
 ---
