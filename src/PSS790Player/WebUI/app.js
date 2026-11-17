@@ -2072,8 +2072,6 @@ function renderRecorderChannels() {
 }
 
 // --- Musical Pitch & Real-Time Live Chord Analyzer ---
-const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
 function noteToPitch(noteNumber) {
     if (noteNumber === undefined || noteNumber === null || noteNumber < 0 || noteNumber > 127) return "-";
     const octave = Math.floor(noteNumber / 12) - 1;

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.4] - 2026-11-17
+
+### Fixed
+- **Resolved Fatal SyntaxError on Startup (`NOTE_NAMES` redeclaration)**:
+  - Eliminated duplicate top-level `const NOTE_NAMES` declaration in `app.js` that caused Chromium/V8 to throw `Uncaught SyntaxError: Identifier 'NOTE_NAMES' has already been declared` during script evaluation.
+  - Fixes the root issue that prevented `app.js` from executing, ensuring `startApp()`, device population, mixer channel rendering, and host communication initialize completely and without errors.
+
 ## [1.18.3] - 2026-11-17
 
 ### Fixed
