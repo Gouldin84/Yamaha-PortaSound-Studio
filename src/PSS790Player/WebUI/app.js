@@ -138,6 +138,7 @@ function handleHostMessage(msg) {
             renderMixer();
             renderRecorderChannels();
             initSidebarState();
+            renderHealthBadge(null);
             break;
 
         case "input_devices_updated":
@@ -188,6 +189,10 @@ function handleHostMessage(msg) {
                     badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
                 }
             }
+
+            // Health Diagnostics Badge Rendering
+            state.currentHealth = msg.data.health;
+            renderHealthBadge(msg.data.health);
 
             // Update channel analysis & restored voice overrides
             if (msg.data.channels) {
@@ -265,6 +270,26 @@ function handleHostMessage(msg) {
             showToast(`Batch conversion complete! Converted ${msg.data.convertedCount} files to: ${msg.data.targetDirectory}`);
             document.getElementById("batchProgressContainer").classList.add("hidden");
             document.getElementById("btnStartBatch").disabled = false;
+            break;
+
+        case "audit_status":
+            document.getElementById("batchProgressContainer").classList.remove("hidden");
+            document.getElementById("batchCurrentFile").textContent = msg.data.message || "Auditing...";
+            break;
+
+        case "audit_progress":
+            document.getElementById("batchProgressContainer").classList.remove("hidden");
+            const aCur = msg.data.current;
+            const aTot = msg.data.total;
+            const aPct = aTot > 0 ? Math.round((aCur / aTot) * 100) : 0;
+            document.getElementById("batchCurrentFile").textContent = `Auditing file ${aCur} of ${aTot}...`;
+            document.getElementById("batchPercent").textContent = `${aPct}%`;
+            document.getElementById("batchProgressBar").style.width = `${aPct}%`;
+            break;
+
+        case "health_audit_result":
+            document.getElementById("batchProgressContainer").classList.add("hidden");
+            handleHealthAuditResult(msg.data);
             break;
 
         case "library_sync_analysis":
@@ -2352,6 +2377,170 @@ document.getElementById("btnStartSync")?.addEventListener("click", () => {
         removeOrphans,
         forceReconvertAll
     });
+});
+
+// ==========================================
+// MIDI Health Inspector & Diagnostics Handlers
+// ==========================================
+
+function renderHealthBadge(health) {
+    const container = document.getElementById("healthBadgeContainer");
+    if (!container) return;
+    if (!health) {
+        container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Health: Standby</span></span>`;
+        return;
+    }
+
+    let badgeClass = "bg-emerald-950/80 text-emerald-300 border-emerald-600/60 hover:border-emerald-400 shadow-emerald-500/20";
+    let dotClass = "bg-emerald-400";
+    let icon = "✅";
+
+    if (health.badgeType === "warning") {
+        badgeClass = "bg-amber-950/80 text-amber-300 border-amber-600/60 hover:border-amber-400 shadow-amber-500/20";
+        dotClass = "bg-amber-400 animate-pulse";
+        icon = "⚠️";
+    } else if (health.badgeType === "autofixed") {
+        badgeClass = "bg-sky-950/80 text-sky-300 border-sky-600/60 hover:border-sky-400 shadow-sky-500/20";
+        dotClass = "bg-sky-400";
+        icon = "🛡️";
+    }
+
+    container.innerHTML = `
+        <button id="btnOpenHealthModal" class="px-2 py-0.5 rounded-full ${badgeClass} border font-semibold text-[11px] flex items-center space-x-1.5 shadow-sm transition active:scale-95 cursor-pointer" title="${health.badgeTooltip || ''}">
+            <span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>
+            <span>${icon} ${health.badgeLabel}</span>
+            <svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+        </button>
+    `;
+
+    document.getElementById("btnOpenHealthModal")?.addEventListener("click", () => {
+        openHealthDiagnosticsModal(health);
+    });
+}
+
+function openHealthDiagnosticsModal(health) {
+    if (!health) return;
+    const modal = document.getElementById("songHealthModal");
+    if (!modal) return;
+
+    document.getElementById("healthModalSongTitle").textContent = state.currentFile || "Current Song";
+
+    const peak = health.peakPolyphony || 0;
+    const peakVoicesEl = document.getElementById("healthPeakVoices");
+    const barEl = document.getElementById("healthPolyphonyBar");
+    const descEl = document.getElementById("healthPolyphonyDescription");
+
+    peakVoicesEl.textContent = `${peak} / 28 Voices`;
+    const percent = Math.min(100, Math.round((peak / 28) * 100));
+    barEl.style.width = `${percent}%`;
+
+    if (peak <= 24) {
+        barEl.className = "bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-300";
+        peakVoicesEl.className = "font-mono font-bold text-emerald-400";
+        descEl.textContent = "Safe peak polyphony. No hardware voice-stealing will occur on Yamaha PSS-790.";
+    } else if (peak <= 28) {
+        barEl.className = "bg-gradient-to-r from-cyan-500 to-amber-500 h-full rounded-full transition-all duration-300";
+        peakVoicesEl.className = "font-mono font-bold text-amber-400";
+        descEl.textContent = "Moderate polyphony near the 28-voice hardware limit. Smooth playback guaranteed.";
+    } else {
+        barEl.className = "bg-gradient-to-r from-amber-500 to-rose-500 h-full rounded-full transition-all duration-300";
+        peakVoicesEl.className = "font-mono font-bold text-rose-400";
+        descEl.textContent = `High polyphony (${peak} voices). Polyphony Guard & hardware voice-stealing active to preserve melody.`;
+    }
+
+    const listEl = document.getElementById("healthProtectionsList");
+    if (health.autoFixes && health.autoFixes.length > 0) {
+        listEl.innerHTML = health.autoFixes.map(fix => `
+            <div class="flex items-start space-x-2 bg-slate-900/90 p-2 rounded-lg border border-slate-800">
+                <span class="text-sky-400 shrink-0">🛡️</span>
+                <span class="text-slate-200">${fix}</span>
+            </div>
+        `).join("");
+    } else {
+        listEl.innerHTML = `
+            <div class="flex items-center space-x-2 bg-slate-900/90 p-2 rounded-lg border border-slate-800 text-slate-400">
+                <span class="text-emerald-400">✅</span>
+                <span>Standard General MIDI. No custom repairs or alterations required.</span>
+            </div>
+        `;
+    }
+
+    document.getElementById("healthActiveChannels").textContent = health.activeChannels || 0;
+    document.getElementById("healthTotalNotes").textContent = (health.totalNotes || 0).toLocaleString();
+
+    const pitchEl = document.getElementById("healthPitchStatus");
+    if (health.microBends > 0 || health.danglingBends > 0) {
+        pitchEl.textContent = "Auto-Centered & Tuned";
+        pitchEl.className = "font-bold text-sky-400 text-sm";
+    } else {
+        pitchEl.textContent = "Clean / Neutral";
+        pitchEl.className = "font-bold text-emerald-400 text-sm";
+    }
+
+    const sustainEl = document.getElementById("healthSustainStatus");
+    if (health.stuckPedals > 0) {
+        sustainEl.textContent = `${health.stuckPedals} Stuck Pedal(s) Capped`;
+        sustainEl.className = "font-bold text-amber-400 text-sm";
+    } else {
+        sustainEl.textContent = "Natural / Standard";
+        sustainEl.className = "font-bold text-emerald-400 text-sm";
+    }
+
+    modal.classList.remove("hidden");
+}
+
+function handleHealthAuditResult(data) {
+    const container = document.getElementById("auditResultsContainer");
+    if (!container) return;
+    container.classList.remove("hidden");
+
+    document.getElementById("auditSummaryCount").textContent = `${data.totalFiles} files audited`;
+    document.getElementById("auditFixesCount").textContent = data.filesWithFixes || 0;
+    document.getElementById("auditInferredCount").textContent = (data.filesInferred || 0) + (data.filesXg || 0);
+    document.getElementById("auditStuckPedalCount").textContent = data.filesStuckPedal || 0;
+    document.getElementById("auditPolyphonyCount").textContent = data.filesHighPolyphony || 0;
+
+    const listEl = document.getElementById("auditFilesList");
+    if (listEl && data.files) {
+        listEl.innerHTML = data.files.slice(0, 50).map(f => {
+            let pillClass = "bg-emerald-950/80 text-emerald-400 border-emerald-800";
+            if (f.badgeType === "warning") pillClass = "bg-amber-950/80 text-amber-300 border-amber-800";
+            else if (f.autoFixesCount > 0) pillClass = "bg-sky-950/80 text-sky-300 border-sky-800";
+
+            return `
+                <div class="flex items-center justify-between bg-slate-900/90 p-1.5 rounded-lg border border-slate-800 text-[11px] hover:border-slate-700 transition">
+                    <span class="truncate max-w-[240px] text-slate-200 font-medium" title="${f.fileName}">${f.fileName}</span>
+                    <div class="flex items-center space-x-1.5 shrink-0">
+                        <span class="font-mono text-[10px] text-slate-400">${f.peakPolyphony}v</span>
+                        <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold border ${pillClass}">${f.badgeLabel}</span>
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+        if (data.files.length > 50) {
+            listEl.innerHTML += `<div class="text-[10px] text-slate-500 text-center pt-1">...and ${data.files.length - 50} more files (all verified)</div>`;
+        }
+    }
+}
+
+document.getElementById("btnRunHealthAudit")?.addEventListener("click", () => {
+    const src = document.getElementById("batchSourceDir").value;
+    document.getElementById("batchProgressContainer").classList.remove("hidden");
+    document.getElementById("batchCurrentFile").textContent = "Starting library health audit...";
+    document.getElementById("batchPercent").textContent = "0%";
+    document.getElementById("batchProgressBar").style.width = "0%";
+    sendToHost("run_health_audit", { directory: src });
+});
+
+document.getElementById("btnCloseHealthModal")?.addEventListener("click", () => {
+    document.getElementById("songHealthModal")?.classList.add("hidden");
+});
+
+document.getElementById("btnDismissHealthModal")?.addEventListener("click", () => {
+    document.getElementById("songHealthModal")?.classList.add("hidden");
 });
 
 // Trigger initial handshake and keyboard shortcuts

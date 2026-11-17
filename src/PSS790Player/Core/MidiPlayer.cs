@@ -403,15 +403,20 @@ namespace PSS790Player.Core
                     _activeNotes.Clear();
                 }
 
-                // 2. Also send All Notes Off (CC 123) across all channels (recognized by PSS-790 per MIDI Implementation Chart)
+                // 2. Also send All Notes Off (CC 123), Sustain Release (CC 64), Reset Controllers (CC 121), and Pitch Center (8192)
                 for (int ch = 0; ch < 16; ch++)
                 {
                     try
                     {
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0)
-                        {
-                            Channel = (FourBitNumber)ch
-                        });
+                        var fourBitCh = (FourBitNumber)ch;
+                        // All Notes Off
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh });
+                        // Damper / Sustain Pedal Release (CC 64 = 0)
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });
+                        // Reset All Controllers (CC 121 = 0)
+                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh });
+                        // Center Pitch Bend (8192)
+                        _outputDevice.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
                     }
                     catch { }
                 }

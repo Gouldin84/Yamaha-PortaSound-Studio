@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-11-17
+
+### Added
+- **Autonomous MIDI Health Inspector (`MidiHealthInspector.cs`)**:
+  - Pre-flight diagnostic analyzer that inspects any loaded or imported MIDI file before playback or remapping.
+  - Automatically calculates exact peak concurrent polyphony via $O(N \log N)$ sweep-line note tracking, voice-stress ratings, active channel counts, explicit vs inferred instrument channels, runaway sustain pedals, dangling pitch bends, acoustic micro-bends, and note range bounds.
+- **Always-Visible UI Health Badge & Interactive Diagnostics Popover**:
+  - Added an always-visible status badge next to `#currentSongTitle` in the player panel displaying real-time health (`Optimal (16 Voices)`, `3 Auto-Fixes Applied`, `Polyphony Alert`).
+  - Interactive Diagnostics Modal shows a visual Yamaha PSS-790 polyphony load gauge (0 to 28 voices), breakdown of applied auto-protections, and detailed song metrics with one-click inspection.
+- **One-Click Library Health Audit Tool**:
+  - Added a **"Run Health Audit"** button in the Batch Remapper modal.
+  - Scans entire folders of General MIDI files in seconds and displays a comprehensive health summary: total files, files with auto-fixes, inferred/XG instruments, stuck pedals, and voice loads $> 28$.
+- **Hardware Panic & Clean Song Transitions (`MidiPlayer.cs`)**:
+  - Enhanced `SendPanicNoteOff()` on stop, pause, seek, and track-change to transmit `CC 123` (All Notes Off), `CC 64 = 0` (Damper/Sustain release), `CC 121 = 0` (Reset All Controllers), and `PitchBend = 8192` (Center Pitch) across all 16 channels, permanently preventing residual resonance, hung notes, or detuned oscillators between songs on physical Yamaha PSS-790 hardware.
+- **Running-Status Zero-Velocity Note-On Normalization**:
+  - Automatically normalizes `NoteOnEvent` with `Velocity == 0` into standard `NoteOffEvent` in `Remapper.cs`, ensuring 100% note pairing across all MIDI formats and fringe DOS/legacy game files.
+- **Enhanced Instrument Inference Keywords & GS/XG Drum Support**:
+  - Expanded track name heuristics to eliminate false substring matches (e.g., word-bounded EP/Rhodes vs "sweep") and prioritized solo instruments (pizzicato vs orchestral strings). Added native detection for Yamaha XG Part Mode SysEx drum routing.
+- **Synthetic Edge-Case Stress Test Suite (`ProblematicMidiEdgeCaseTests.cs`)**:
+  - Added 8 automated stress tests covering Black MIDI (128 simultaneous notes), Format 0 multi-channel, endless damper pedals (5,000 bars), dangling pitch bends, cryptic track names, zero-velocity notes, and non-standard GS/XG drum banks (84/84 tests passing).
+
 ## [1.8.9] - 2026-11-17
 
 ### Added

@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
 using Microsoft.Web.WebView2.Wpf;
@@ -260,6 +261,11 @@ namespace PSS790Player.Bridge
                         break;
                     case "cancel_batch":
                         _batchCts?.Cancel();
+                        break;
+                    case "run_health_audit":
+                        var auditDir = root.TryGetProperty("directory", out var aProp) && !string.IsNullOrEmpty(aProp.GetString())
+                            ? aProp.GetString()! : AppPaths.GmMidiDir;
+                        RunHealthAudit(auditDir);
                         break;
                     case "select_input_device":
                         var inDev = root.GetProperty("deviceName").GetString();
@@ -1293,6 +1299,7 @@ namespace PSS790Player.Bridge
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
+                var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, title);
 
                 SendToJs("file_loaded", new
                 {
@@ -1304,7 +1311,8 @@ namespace PSS790Player.Bridge
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo,
-                    hasCustomOverrides = false
+                    hasCustomOverrides = false,
+                    health = BuildHealthPayload(health)
                 });
             }
             catch (Exception ex)
@@ -1352,6 +1360,7 @@ namespace PSS790Player.Bridge
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
+                var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(resolvedPath));
 
                 SendToJs("file_loaded", new
                 {
@@ -1363,7 +1372,8 @@ namespace PSS790Player.Bridge
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo,
-                    hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath)
+                    hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath),
+                    health = BuildHealthPayload(health)
                 });
 
                 if (autoPlay)
@@ -1398,6 +1408,7 @@ namespace PSS790Player.Bridge
         {
             var channelPrograms = new Dictionary<int, byte>();
             var channelNotes = new HashSet<int>();
+            var inferredPrograms = new Dictionary<int, (byte Prog, string InferredSource)>();
 
             foreach (var te in midi.GetTimedEvents())
             {
@@ -1415,11 +1426,75 @@ namespace PSS790Player.Bridge
                 }
             }
 
+            // If General MIDI has active channels missing explicit ProgramChange, scan for XG SysEx and track-text heuristics
+            if (format != MidiFormat.Pss790Native)
+            {
+                var tracksWithNotes = new Dictionary<int, TrackChunk>();
+                foreach (var track in midi.GetTrackChunks())
+                {
+                    foreach (var evt in track.Events)
+                    {
+                        if (evt is NoteOnEvent n && n.Velocity > 0 && n.Channel != (FourBitNumber)9)
+                        {
+                            tracksWithNotes.TryAdd((int)n.Channel, track);
+                        }
+                        else if (evt is NormalSysExEvent sysex && sysex.Data.Length > 6)
+                        {
+                            var d = sysex.Data;
+                            if (d[0] == 0x43 && d[2] == 0x4C)
+                            {
+                                if (d[1] == 0x00 && d[5] == 0x08 && d[7] == 0x00 && d.Length > 10)
+                                {
+                                    int part = d[6];
+                                    byte p = d[10];
+                                    if (part >= 0 && part < 16 && !channelPrograms.ContainsKey(part))
+                                    {
+                                        inferredPrograms[part] = (p, "XG SysEx");
+                                    }
+                                }
+                                else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x03 && d.Length > 6)
+                                {
+                                    int part = d[4];
+                                    byte p = d[6];
+                                    if (part >= 0 && part < 16 && !channelPrograms.ContainsKey(part))
+                                    {
+                                        inferredPrograms[part] = (p, "XG SysEx");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                foreach (var (ch, tr) in tracksWithNotes)
+                {
+                    if (!channelPrograms.ContainsKey(ch) && !inferredPrograms.ContainsKey(ch))
+                    {
+                        foreach (var textEvt in tr.Events.OfType<BaseTextEvent>())
+                        {
+                            var inf = Remapper.InferGmProgramFromText(textEvt.Text);
+                            if (inf.HasValue)
+                            {
+                                inferredPrograms[ch] = (inf.Value, "Inferred");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             var list = new List<object>();
             for (int ch = 0; ch < 16; ch++)
             {
                 bool hasNotes = channelNotes.Contains(ch);
                 byte? prog = channelPrograms.TryGetValue(ch, out var p) ? p : null;
+                string? inferredTag = null;
+                if (!prog.HasValue && inferredPrograms.TryGetValue(ch, out var inf))
+                {
+                    prog = inf.Prog;
+                    inferredTag = inf.InferredSource;
+                }
+
                 bool isDrum = (format == MidiFormat.Pss790Native) ? (ch == 15) : (ch == 9);
 
                 string role = isDrum
@@ -1453,12 +1528,25 @@ namespace PSS790Player.Bridge
                 }
                 else // General MIDI
                 {
-                    detectedInstrument = isDrum
-                        ? "GM Standard Drum Kit"
-                        : (prog.HasValue ? GetGmInstrumentName(prog.Value) : "Default Piano");
-
-                    defaultPssVoice = isDrum ? 96 : (prog.HasValue ? Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0) : 0);
-                    defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO";
+                    if (isDrum)
+                    {
+                        detectedInstrument = "GM Standard Drum Kit";
+                        defaultPssVoice = 96;
+                        defaultPssVoiceName = "PERCUSSIONS";
+                    }
+                    else if (prog.HasValue)
+                    {
+                        var gmName = Remapper.GetGmInstrumentName(prog.Value);
+                        detectedInstrument = inferredTag != null ? $"{gmName} [{inferredTag}]" : gmName;
+                        defaultPssVoice = Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0);
+                        defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO";
+                    }
+                    else
+                    {
+                        detectedInstrument = "Default Piano";
+                        defaultPssVoice = 0;
+                        defaultPssVoiceName = "PIANO";
+                    }
                 }
 
                 int? voiceOverride = _options.ChannelVoiceOverrides.TryGetValue(ch, out var vo) ? vo : null;
@@ -1479,6 +1567,110 @@ namespace PSS790Player.Bridge
             }
 
             return list;
+        }
+
+        private static object BuildHealthPayload(MidiHealthReport health)
+        {
+            return new
+            {
+                peakPolyphony = health.PeakPolyphony,
+                voiceStress = health.VoiceStressRating,
+                activeChannels = health.ActiveChannelCount,
+                totalNotes = health.TotalNoteCount,
+                stuckPedals = health.StuckPedalIntervalsCount,
+                danglingBends = health.DanglingPitchBendsCount,
+                microBends = health.AcousticMicroBendsNeutralized,
+                outOfBounds = health.OutOfBoundsNotesCount,
+                inferredCount = health.InferredProgramChannels.Count,
+                inferredDetails = health.InferredProgramChannels,
+                xgSysExCount = health.XgSysExChannels.Count,
+                xgDetails = health.XgSysExChannels,
+                autoFixes = health.AppliedAutoFixes,
+                badgeType = health.BadgeType,
+                badgeLabel = health.BadgeLabel,
+                badgeTooltip = health.BadgeTooltip
+            };
+        }
+
+        private void RunHealthAudit(string directory)
+        {
+            var resolvedDir = Directory.Exists(directory) ? directory : AppPaths.GmMidiDir;
+            Task.Run(() =>
+            {
+                try
+                {
+                    SendToJs("audit_status", new { status = "scanning", message = "Scanning MIDI library files..." });
+
+                    var files = Directory.GetFiles(resolvedDir, "*.*", SearchOption.AllDirectories)
+                        .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
+                                    f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    var reports = new List<MidiHealthReport>();
+                    int processed = 0;
+                    int total = files.Count;
+
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            var midi = MidiFile.Read(file, Constants.DefaultReadingSettings);
+                            var report = MidiHealthInspector.Analyze(midi, fileName: Path.GetRelativePath(resolvedDir, file));
+                            reports.Add(report);
+                        }
+                        catch (Exception)
+                        {
+                            // Skip corrupt files in audit
+                        }
+                        processed++;
+                        if (processed % 10 == 0 || processed == total)
+                        {
+                            SendToJs("audit_progress", new { current = processed, total });
+                        }
+                    }
+
+                    int totalWithFixes = reports.Count(r => r.AppliedAutoFixes.Count > 0);
+                    int totalHighPolyphony = reports.Count(r => r.PeakPolyphony > 28);
+                    int totalInferred = reports.Count(r => r.InferredProgramChannels.Count > 0);
+                    int totalXg = reports.Count(r => r.XgSysExChannels.Count > 0);
+                    int totalStuckPedal = reports.Count(r => r.StuckPedalIntervalsCount > 0);
+                    int totalDanglingBends = reports.Count(r => r.DanglingPitchBendsCount > 0);
+                    int totalMicroBends = reports.Count(r => r.AcousticMicroBendsNeutralized > 0);
+
+                    var fileList = reports
+                        .OrderByDescending(r => r.AppliedAutoFixes.Count)
+                        .ThenByDescending(r => r.PeakPolyphony)
+                        .Select(r => new
+                        {
+                            fileName = r.FileName,
+                            peakPolyphony = r.PeakPolyphony,
+                            voiceStress = r.VoiceStressRating,
+                            autoFixesCount = r.AppliedAutoFixes.Count,
+                            autoFixes = r.AppliedAutoFixes,
+                            badgeType = r.BadgeType,
+                            badgeLabel = r.BadgeLabel,
+                            badgeTooltip = r.BadgeTooltip
+                        })
+                        .ToList();
+
+                    SendToJs("health_audit_result", new
+                    {
+                        totalFiles = reports.Count,
+                        filesWithFixes = totalWithFixes,
+                        filesHighPolyphony = totalHighPolyphony,
+                        filesInferred = totalInferred,
+                        filesXg = totalXg,
+                        filesStuckPedal = totalStuckPedal,
+                        filesDanglingBends = totalDanglingBends,
+                        filesMicroBends = totalMicroBends,
+                        files = fileList
+                    });
+                }
+                catch (Exception ex)
+                {
+                    SendToJs("error", new { message = $"Health audit failed: {ex.Message}" });
+                }
+            });
         }
 
         private static string GetGmInstrumentName(byte program)

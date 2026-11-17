@@ -95,6 +95,22 @@ namespace PSS790Player.Core
             // 0. Intelligent Tempo Normalization & Adjustment
             ApplyTempoAdjustments(remapped, options);
 
+            // Normalize zero-velocity NoteOn events to standard NoteOff events to guarantee note pairing across all parsers
+            foreach (var track in remapped.GetTrackChunks())
+            {
+                for (int i = 0; i < track.Events.Count; i++)
+                {
+                    if (track.Events[i] is NoteOnEvent noteOn && (byte)noteOn.Velocity == 0)
+                    {
+                        track.Events[i] = new NoteOffEvent(noteOn.NoteNumber, (SevenBitNumber)0)
+                        {
+                            Channel = noteOn.Channel,
+                            DeltaTime = noteOn.DeltaTime
+                        };
+                    }
+                }
+            }
+
             // Pre-scan for GM Programs per channel to identify acoustic vs synth/solo channels
             var channelGmPrograms = new Dictionary<int, byte>();
 
@@ -225,6 +241,15 @@ namespace PSS790Player.Core
                     if (evt is ControlChangeEvent cc && cc.ControlNumber == 0 && (cc.ControlValue == 127 || cc.ControlValue == 128))
                     {
                         drumChannels.Add(cc.Channel);
+                    }
+                    if (evt is NormalSysExEvent sysex && sysex.Data.Length > 6)
+                    {
+                        var d = sysex.Data;
+                        // Yamaha XG SysEx Part Mode Drum (08 [part] 07 > 0)
+                        if (d[0] == 0x43 && d[2] == 0x4C && d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
+                        {
+                            drumChannels.Add(d[4]);
+                        }
                     }
                 }
             }
@@ -545,11 +570,13 @@ namespace PSS790Player.Core
             if (string.IsNullOrWhiteSpace(text)) return null;
             var lower = text.ToLowerInvariant();
 
-            if (lower.Contains("bass"))
+            if (lower.Contains("bass") || lower.Contains("bss"))
             {
                 if (lower.Contains("ac") || lower.Contains("acoustic") || lower.Contains("upright")) return 32; // Acoustic Bass
                 if (lower.Contains("slap")) return 36; // Slap Bass 1
-                if (lower.Contains("synth")) return 38; // Synth Bass 1
+                if (lower.Contains("synth") || lower.Contains("syn")) return 38; // Synth Bass 1
+                if (lower.Contains("pick")) return 34; // Electric Bass (pick)
+                if (lower.Contains("fretless")) return 35; // Fretless Bass
                 return 33; // Electric Bass (finger)
             }
             if (lower.Contains("guitar") || lower.Contains("gtr"))
@@ -558,22 +585,55 @@ namespace PSS790Player.Core
                 if (lower.Contains("mute")) return 28; // Muted Guitar
                 if (lower.Contains("e ") || lower.Contains("electric") || lower.Contains("clean")) return 27; // Clean Guitar
                 if (lower.Contains("nylon")) return 24; // Nylon Guitar
+                if (lower.Contains("jazz")) return 26; // Electric Guitar (jazz)
                 return 25; // Steel Acoustic Guitar
             }
-            if (lower.Contains("piano") || lower.Contains("intro")) return 0; // Acoustic Grand Piano
-            if (lower.Contains("organ")) return 16; // Drawbar Organ
-            if (lower.Contains("string") || lower.Contains("violin") || lower.Contains("viola") || lower.Contains("cello") || lower.Contains("contrabass")) return 48; // String Ensemble 1
+            if (lower.Contains("piano") || lower.Contains("pno") || lower.Contains("grand") || lower.Contains("intro"))
+            {
+                if (lower.Contains("honky") || lower.Contains("tack")) return 3; // Honky-tonk Piano
+                return 0; // Acoustic Grand Piano
+            }
+            if (lower.Contains("rhodes") || lower.Contains("electric piano") || lower.Contains("e.piano") || lower.Contains("e-piano") || lower.Contains("wurlitzer") || lower.Contains("wurli") || lower.StartsWith("ep ") || lower.EndsWith(" ep") || lower.Contains(" ep ") || lower == "ep")
+            {
+                return 4; // Electric Piano 1 (Rhodes)
+            }
+            if (lower.Contains("clav") || lower.Contains("clavi")) return 7; // Clavinet
+            if (lower.Contains("harpsi") || lower.Contains("harpsichord")) return 6; // Harpsichord
+            if (lower.Contains("organ") || lower.Contains("hammond") || lower.Contains("b3")) return 16; // Drawbar Organ
+            if (lower.Contains("accord") || lower.Contains("harmonica") || lower.Contains("bandoneon")) return 21; // Accordion
+            if (lower.Contains("vibes") || lower.Contains("vibraphone")) return 11; // Vibraphone
+            if (lower.Contains("marimba")) return 12; // Marimba
+            if (lower.Contains("xylophone") || lower.Contains("xylo")) return 13; // Xylophone
+            if (lower.Contains("timpani")) return 47; // Timpani
+            if (lower.Contains("pizz") || lower.Contains("pizzicato")) return 45; // Pizzicato Strings
+            if (lower.Contains("string") || lower.Contains("str ") || lower.Contains("str.") || lower.Contains("violin") || lower.Contains("viola") || lower.Contains("cello") || lower.Contains("contrabass") || lower.Contains("orch")) return 48; // String Ensemble 1
             if (lower.Contains("choir") || lower.Contains("aah")) return 52; // Choir Aahs
             if (lower.Contains("vocal") || lower.Contains("voice") || lower.Contains("ooh")) return 54; // Voice Oohs
-            if (lower.Contains("trumpet") || lower.Contains("brass") || lower.Contains("horn") || lower.Contains("trombone")) return 61; // Brass Section
+            if (lower.Contains("trumpet") || lower.Contains("brass") || lower.Contains("horn") || lower.Contains("trombone") || lower.Contains("tuba")) return 61; // Brass Section
             if (lower.Contains("sax")) return 66; // Tenor Sax
-            if (lower.Contains("flute") || lower.Contains("pan") || lower.Contains("pipe")) return 73; // Flute
-            if (lower.Contains("bell") || lower.Contains("chime") || lower.Contains("glock")) return 9; // Glockenspiel / Bells
+            if (lower.Contains("flute") || lower.Contains("pan") || lower.Contains("pipe") || lower.Contains("piccolo")) return 73; // Flute
+            if (lower.Contains("oboe") || lower.Contains("clarinet") || lower.Contains("bassoon")) return 68; // Oboe
+            if (lower.Contains("bell") || lower.Contains("chime") || lower.Contains("glock") || lower.Contains("celesta")) return 9; // Glockenspiel / Bells
             if (lower.Contains("harp")) return 46; // Orchestral Harp
-            if (lower.Contains("pad") || lower.Contains("warm")) return 89; // Warm Pad
-            if (lower.Contains("lead") || lower.Contains("synth")) return 80; // Lead 1 (square)
+            if (lower.Contains("pad") || lower.Contains("warm") || lower.Contains("sweep")) return 89; // Warm Pad
+            if (lower.Contains("lead") || lower.Contains("synth") || lower.Contains("syn ") || lower.Contains("syn.") || lower.Contains("saw") || lower.Contains("square") || lower.Contains("arp")) return 80; // Lead 1 (square)
 
             return null;
+        }
+
+        public static string GetGmInstrumentName(byte program)
+        {
+            if (Constants.GmToPss790VoiceMap.TryGetValue(program, out var pssVoice) &&
+                Constants.Pss790Voices.TryGetValue(pssVoice, out var voiceInfo))
+            {
+                return voiceInfo.Name;
+            }
+            return $"GM Instrument {program}";
+        }
+
+        public static MidiHealthReport AnalyzeHealth(MidiFile originalMidi, MidiFile? remappedMidi = null, string? fileName = null)
+        {
+            return MidiHealthInspector.Analyze(originalMidi, remappedMidi, fileName);
         }
 
         public static void ApplySustainPedalEmulation(MidiFile midi, Dictionary<int, byte>? channelGmPrograms = null)
