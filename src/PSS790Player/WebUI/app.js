@@ -238,6 +238,24 @@ function handleHostMessage(msg) {
             }
             break;
 
+        case "playback_format_updated":
+            renderFormatBadge(msg.data.format, msg.data.isGmPassthrough);
+            if (msg.data.channels) {
+                msg.data.channels.forEach(chInfo => {
+                    const ch = state.channels[chInfo.channel];
+                    if (ch) {
+                        ch.hasNotes = chInfo.hasNotes;
+                        ch.isDrum = chInfo.isDrum;
+                        ch.detectedInstrument = chInfo.detectedInstrument;
+                        ch.defaultPssVoice = chInfo.defaultPssVoice;
+                        ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
+                        ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                    }
+                });
+                renderMixer();
+            }
+            break;
+
         case "file_loaded":
             state.currentFile = msg.data.fileName;
             state.currentFilePath = msg.data.filePath;
@@ -250,14 +268,7 @@ function handleHostMessage(msg) {
             document.getElementById("fileStatusBadge").textContent = "Loaded";
 
             // Format Badge Rendering
-            const badgeContainer = document.getElementById("formatBadgeContainer");
-            if (badgeContainer) {
-                if (msg.data.format === "pss790") {
-                    badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha PSS-790. Direct passthrough active."><span>⚡</span><span>PSS-790 Ready</span></span>`;
-                } else {
-                    badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
-                }
-            }
+            renderFormatBadge(msg.data.format, msg.data.isGmPassthrough);
 
             // Health Diagnostics Badge Rendering
             state.currentHealth = msg.data.health;
@@ -405,6 +416,19 @@ function handleHostMessage(msg) {
 }
 
 // --- DOM Rendering & Device Selectors ---
+
+function renderFormatBadge(format, isGmPassthrough) {
+    const badgeContainer = document.getElementById("formatBadgeContainer");
+    if (!badgeContainer) return;
+
+    if (format === "pss790") {
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha PSS-790. Direct passthrough active."><span>⚡</span><span>PSS-790 Ready</span></span>`;
+    } else if (isGmPassthrough) {
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-blue-500/20" title="Playing original unmodified General MIDI file directly through Microsoft GS Wavetable Synth for Windows reference."><span>🎹</span><span>Windows GS Synth (Original GM Passthrough)</span></span>`;
+    } else {
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
+    }
+}
 
 function renderDeviceSelect(preferredDevice) {
     const sel = document.getElementById("deviceSelect");

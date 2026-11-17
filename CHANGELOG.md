@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-11-17
+
+### Added
+- **Microsoft GS Wavetable Synth Unmodified GM Passthrough**:
+  - General MIDI files now play completely unmodified (raw GM passthrough) whenever **Microsoft GS Wavetable Synth** is selected as the output device.
+  - Allows you to check how the original MIDI arrangement sounds natively in Windows (full GM instrument set 0..127, Channel 10 percussion, original velocities, and native CC 11 expression swells).
+  - Dynamically detects Microsoft GS Wavetable Synth via `Constants.IsMicrosoftGsWavetableSynth(deviceName)`.
+- **Live Mid-Song A-B Testing & Device Switching**:
+  - Switching between Microsoft GS Wavetable Synth and your Yamaha PSS-790 (or hardware adapter) while playback is active preserves the current playback position ($t_{\text{current}}$) and switches tracks in real time.
+  - Seamlessly compare standard Windows playback with hardware-tailored Yamaha AWM remapping on the fly.
+- **Dynamic Visual Badge & Channel Tagging**:
+  - Added dedicated blue format badge `[ 🎹 Windows GS Synth (Original GM Passthrough) ]` with tooltip.
+  - Updated channel role tagging in mixer to distinguish between `Standard GM Rhythm (Ch 10)` in Windows mode and `Drums (Remapped to Ch 16)` in PSS-790 mode.
+- **Export Safety**:
+  - The `Export / Save Remapped` button maintains the fully remapped PSS-790 file in memory, ensuring that saving or exporting for hardware remains 100% functional regardless of output device selection.
+- **Test Suite Expansion (`MicrosoftGsSynthTests.cs`)**:
+  - Added 4 unit tests verifying device detection, GM passthrough, hardware remapping engagement, and PSS-790 native file preservation (114/114 tests passing).
+
 ## [1.13.0] - 2026-11-17
 
 ### Added

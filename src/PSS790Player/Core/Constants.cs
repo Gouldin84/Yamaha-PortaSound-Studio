@@ -487,5 +487,12 @@ namespace PSS790Player.Core
             }
             Pss790MidiProgramToGmMap = new ReadOnlyDictionary<byte, byte>(map);
         }
+
+        public static bool IsMicrosoftGsWavetableSynth(string? deviceName)
+        {
+            if (string.IsNullOrWhiteSpace(deviceName)) return false;
+            return deviceName.IndexOf("Microsoft GS Wavetable", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   deviceName.IndexOf("GS Wavetable", System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
     }
 }

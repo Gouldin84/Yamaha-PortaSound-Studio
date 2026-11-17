@@ -444,6 +444,17 @@ body.theme-light .text-indigo-300 {
     color: #4f46e5 !important;
 }
 
+body.theme-light .bg-blue-950,
+body.theme-light .bg-blue-950\/80 {
+    background-color: #dbeafe !important;
+    border-color: #bfdbfe !important;
+}
+
+body.theme-light .text-blue-400,
+body.theme-light .text-blue-300 {
+    color: #1d4ed8 !important;
+}
+
 /* Toast Notification */
 body.theme-light #notificationToast {
     background-color: #ffffff !important;

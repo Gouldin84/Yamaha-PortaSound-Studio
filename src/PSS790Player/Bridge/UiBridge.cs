@@ -163,6 +163,7 @@ namespace PSS790Player.Bridge
             if (!string.IsNullOrEmpty(currentOut) && e.RemovedOutputs.Contains(currentOut, StringComparer.OrdinalIgnoreCase))
             {
                 _player.SetOutputDevice((string?)null);
+                HandleDeviceSelectionChanged();
                 toast = $"MIDI Output disconnected: {currentOut}";
             }
             else if (string.IsNullOrEmpty(currentOut) && e.OutputDevices.Count > 0)
@@ -171,6 +172,7 @@ namespace PSS790Player.Bridge
                 if (!string.IsNullOrEmpty(targetOut))
                 {
                     _player.SetOutputDevice(targetOut);
+                    HandleDeviceSelectionChanged();
                     toast = $"MIDI Output connected: {targetOut}";
                 }
             }
@@ -284,6 +286,7 @@ namespace PSS790Player.Bridge
                         if (dev != null)
                         {
                             _player.SetOutputDevice(dev);
+                            HandleDeviceSelectionChanged();
                             SendDevicesUpdated();
                         }
                         break;
@@ -1601,6 +1604,9 @@ namespace PSS790Player.Bridge
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
                 ReapplyRemapping(preservePosition: false);
 
+                bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
+
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
                 var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(resolvedPath));
@@ -1611,7 +1617,9 @@ namespace PSS790Player.Bridge
                     filePath = resolvedPath,
                     relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
                     format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
-                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)",
+                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
+                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)"),
+                    isGmPassthrough = isGmPassthrough,
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo,
@@ -1630,6 +1638,28 @@ namespace PSS790Player.Bridge
             }
         }
 
+        private void HandleDeviceSelectionChanged()
+        {
+            if (_loadedOriginalMidi != null)
+            {
+                var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
+
+                ReapplyRemapping(preservePosition: true);
+
+                var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
+                SendToJs("playback_format_updated", new
+                {
+                    format = format == MidiFormat.Pss790Native ? "pss790" : "gm",
+                    formatLabel = format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
+                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)"),
+                    isGmPassthrough = isGmPassthrough,
+                    channels = channelInfo
+                });
+            }
+        }
+
         private void ReapplyRemapping(bool preservePosition = false)
         {
             if (_loadedOriginalMidi == null) return;
@@ -1638,7 +1668,19 @@ namespace PSS790Player.Bridge
             var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
 
             _loadedRemappedMidi = Remapper.Remap(_loadedOriginalMidi, _options);
-            _player.LoadMidi(_loadedRemappedMidi);
+
+            var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+            bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+
+            if (isMsGs && format != MidiFormat.Pss790Native)
+            {
+                // Play unmodified General MIDI directly through Microsoft GS Wavetable Synth
+                _player.LoadMidi(_loadedOriginalMidi);
+            }
+            else
+            {
+                _player.LoadMidi(_loadedRemappedMidi);
+            }
 
             if (wasPlaying && preservePosition)
             {
@@ -1740,8 +1782,12 @@ namespace PSS790Player.Bridge
 
                 bool isDrum = (format == MidiFormat.Pss790Native) ? (ch == 15) : (ch == 9);
 
+                bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
+
                 string role = isDrum
-                    ? (format == MidiFormat.Pss790Native ? "Fixed Rhythm (Ch 16)" : "Drums (Remapped to Ch 16)")
+                    ? (format == MidiFormat.Pss790Native ? "Fixed Rhythm (Ch 16)" :
+                       (isGmPassthrough ? "Standard GM Rhythm (Ch 10)" : "Drums (Remapped to Ch 16)"))
                     : $"Channel {ch + 1}";
 
                 string detectedInstrument;
