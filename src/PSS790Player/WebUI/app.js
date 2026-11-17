@@ -1203,6 +1203,7 @@ function renderFolderNode(folder, depth, catKey, query) {
         </div>
         <span class="text-[9px] font-mono text-slate-500 ml-1">(${count})</span>
     `;
+    folderHeader.title = `Folder: ${folder.name} (${count} song${count === 1 ? '' : 's'})\nClick to expand/collapse • Right-click for folder actions • Drag to move folder`;
 
     folderHeader.draggable = true;
     folderHeader.addEventListener("dragstart", (e) => {
@@ -1351,6 +1352,7 @@ function renderLibraryTree() {
             </div>
             <span class="text-[10px] font-mono text-slate-500 font-medium">(${catSongCount})</span>
         `;
+        catHeader.title = `${cat.title} (${catSongCount} songs)\nClick to expand/collapse • Right-click for options • Drag songs here to move to library root`;
         catHeader.addEventListener("click", () => toggleCategory(cat.key));
         attachDropTarget(catHeader, cat.key, "", tree.fullPath);
         catHeader.addEventListener("contextmenu", (e) => {
@@ -1391,6 +1393,7 @@ function renderLibraryTree() {
                     </div>
                     <span class="text-[9px] font-mono text-slate-500 ml-1">(${filteredRootFiles.length})</span>
                 `;
+                rootHeader.title = `Root Library Songs (${filteredRootFiles.length} song${filteredRootFiles.length === 1 ? '' : 's'})\nClick to expand/collapse • Drag songs here to move to root`;
                 rootHeader.addEventListener("click", () => toggleFolder(rootKey));
                 attachDropTarget(rootHeader, cat.key, "", tree.fullPath);
                 rootHeader.addEventListener("contextmenu", (e) => {
@@ -1466,13 +1469,13 @@ function createSongItemElement(file) {
 
     div.innerHTML = `
         <div class="flex items-center space-x-1.5 min-w-0 flex-1">
-            <input type="checkbox" class="song-checkbox w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 cursor-pointer mr-0.5 accent-cyan-500 shrink-0 ${chkVisibility}" ${isChecked ? 'checked' : ''}>
-            <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}">
+            <input type="checkbox" class="song-checkbox w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 cursor-pointer mr-0.5 accent-cyan-500 shrink-0 ${chkVisibility}" ${isChecked ? 'checked' : ''} title="Select song for batch moving or deletion">
+            <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}" title="${isPlaying ? 'Currently playing' : (isSelected ? 'Currently selected' : 'MIDI song file')}">
                 ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
             </span>
             <span class="song-title truncate font-medium">${escapeHtml(file.fileName)}</span>
         </div>
-        <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${isPss ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' : 'bg-indigo-950 text-indigo-400 border border-indigo-800/60'}">
+        <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${isPss ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/60' : 'bg-indigo-950 text-indigo-400 border border-indigo-800/60'}" title="${isPss ? 'Native Yamaha PSS-790 converted file (plays via direct hardware passthrough)' : 'Standard General MIDI file (auto-remapped on the fly)'}">
             ${isPss ? 'PSS' : 'GM'}
         </span>
     `;
@@ -1759,23 +1762,23 @@ function renderMixer() {
 
         card.innerHTML = `
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}">CH ${ch.channelDisplay}</span>
-                <span id="led-${ch.channel}" class="meter-led w-2 h-2 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700"></span>
+                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}" title="Channel ${ch.channelDisplay} (${isDrum ? 'Drums / Percussion (Chart 1)' : 'Melody / Accompaniment'})">CH ${ch.channelDisplay}</span>
+                <span id="led-${ch.channel}" class="meter-led w-2 h-2 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
             <div class="space-y-0.5">
                 <div class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
                     ${ch.detectedInstrument}
                 </div>
-                <div class="text-[9px] text-slate-400 truncate">
+                <div class="text-[9px] text-slate-400 truncate" title="${isDrum ? 'Channel 10 rhythm fixed to Chart 1 drums' : (ch.defaultPssVoiceName ? `Mapped to AWM Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset')}">
                     ${isDrum ? 'Chart 1 Fixed' : (ch.defaultPssVoiceName ? `Auto: ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
                 </div>
             </div>
 
             <!-- Voice Override Combobox -->
             <div class="space-y-0.5">
-                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight">Voice Override</label>
-                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight" title="Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-790 AWM preset voices">Voice Override</label>
+                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="${isDrum ? 'Channel 10 Drums use fixed Yamaha Chart 1 rhythm mappings' : `Override Channel ${ch.channelDisplay} preset voice (00-99)`}">
                     <option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>
                     ${state.voices.map(v => `
                         <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
@@ -1788,16 +1791,16 @@ function renderMixer() {
             <!-- Fader & Controls -->
             <div class="flex items-center justify-between space-x-1.5 pt-0.5">
                 <div class="flex-1 space-y-0.5">
-                    <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800">
+                    <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800" title="Channel ${ch.channelDisplay} Volume (CC 7): Adjust playback level (0-127)">
                     <div class="flex justify-between text-[8px] text-slate-500 font-mono">
-                        <span>VOL</span>
-                        <span id="vol-val-${ch.channel}">${ch.volume}</span>
+                        <span title="MIDI Channel Volume (CC 7)">VOL</span>
+                        <span id="vol-val-${ch.channel}" title="Current volume level (0-127)">${ch.volume}</span>
                     </div>
                 </div>
 
                 <div class="flex space-x-0.5">
-                    <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">M</button>
-                    <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition">S</button>
+                    <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'bg-rose-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} transition" title="Mute Channel ${ch.channelDisplay}: Silence this channel during playback">M</button>
+                    <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-400 hover:text-white'} transition" title="Solo Channel ${ch.channelDisplay}: Isolate this channel and silence all other channels">S</button>
                 </div>
             </div>
         `;
@@ -1906,16 +1909,17 @@ function renderRecorderChannels() {
         const card = document.createElement("div");
         card.id = `rec-card-${ch.channel}`;
         card.className = "glass-card p-3 rounded-xl border border-slate-800/80 flex items-center justify-between space-x-2 transition-all duration-150";
+        card.title = `Inbound MIDI Channel ${ch.channelDisplay}${ch.isDrum ? ' (Drums / Percussion)' : ' (Melody / Harmonic)'}`;
 
         card.innerHTML = `
             <div class="flex items-center space-x-2">
-                <span id="rec-led-${ch.channel}" class="inbound-led w-3 h-3 rounded-full bg-slate-800 border border-slate-700"></span>
+                <span id="rec-led-${ch.channel}" class="inbound-led w-3 h-3 rounded-full bg-slate-800 border border-slate-700" title="Inbound Signal LED: Glows rose when MIDI messages arrive on Channel ${ch.channelDisplay}"></span>
                 <div>
-                    <div class="text-[11px] font-bold ${ch.isDrum ? 'text-amber-400' : 'text-slate-300'}">CH ${ch.channelDisplay}</div>
-                    <div id="rec-note-${ch.channel}" class="text-[10px] font-mono text-slate-500">-</div>
+                    <div class="text-[11px] font-bold ${ch.isDrum ? 'text-amber-400' : 'text-slate-300'}" title="MIDI Channel ${ch.channelDisplay}">CH ${ch.channelDisplay}</div>
+                    <div id="rec-note-${ch.channel}" class="text-[10px] font-mono text-slate-500" title="Last MIDI note sounding on Channel ${ch.channelDisplay}">-</div>
                 </div>
             </div>
-            <span id="rec-vel-${ch.channel}" class="text-[10px] font-mono text-slate-600">0</span>
+            <span id="rec-vel-${ch.channel}" class="text-[10px] font-mono text-slate-600" title="Last note strike velocity (0-127)">0</span>
         `;
 
         grid.appendChild(card);
@@ -2555,7 +2559,7 @@ function renderHealthBadge(health) {
     const container = document.getElementById("healthBadgeContainer");
     if (!container) return;
     if (!health) {
-        container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Health: Standby</span></span>`;
+        container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5" title="Song Health Status: Load a song to inspect polyphony voice load, pitch bend range, and sustain health"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Health: Standby</span></span>`;
         return;
     }
 
@@ -2574,7 +2578,7 @@ function renderHealthBadge(health) {
     }
 
     container.innerHTML = `
-        <button id="btnOpenHealthModal" class="px-2 py-0.5 rounded-full ${badgeClass} border font-semibold text-[11px] flex items-center space-x-1.5 shadow-sm transition active:scale-95 cursor-pointer" title="${health.badgeTooltip || ''}">
+        <button id="btnOpenHealthModal" class="px-2 py-0.5 rounded-full ${badgeClass} border font-semibold text-[11px] flex items-center space-x-1.5 shadow-sm transition active:scale-95 cursor-pointer" title="${health.badgeTooltip || 'Click to view detailed MIDI health diagnostics and hardware safeguard audit'}">
             <span class="w-1.5 h-1.5 rounded-full ${dotClass}"></span>
             <span>${icon} ${health.badgeLabel}</span>
             <svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2775,13 +2779,13 @@ function renderSysExLibrary(dumps) {
                             <span class="text-slate-500">${dump.createdTime || ''}</span>
                         </div>
                     </div>
-                    <button class="btn-select-sysex shrink-0 px-2.5 py-1 rounded-lg ${isSelected ? 'bg-indigo-600 text-white font-semibold' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'} text-[11px] border border-slate-700/60 transition active:scale-95" data-filepath="${dump.filePath}">
+                    <button class="btn-select-sysex shrink-0 px-2.5 py-1 rounded-lg ${isSelected ? 'bg-indigo-600 text-white font-semibold' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'} text-[11px] border border-slate-700/60 transition active:scale-95" data-filepath="${dump.filePath}" title="${isSelected ? 'This dump is loaded into the staging area for transmission' : 'Select this dump to stage and transmit to your synthesizer'}">
                         ${isSelected ? '✓ Selected' : 'Select'}
                     </button>
                 </div>
 
                 <div class="flex items-center justify-between border-t border-slate-800/80 pt-2 text-[11px]">
-                    <button class="btn-inspect-sysex flex items-center space-x-1 text-slate-400 hover:text-cyan-300 transition" data-filepath="${dump.filePath}">
+                    <button class="btn-inspect-sysex flex items-center space-x-1 text-slate-400 hover:text-cyan-300 transition" data-filepath="${dump.filePath}" title="Open hex viewer to inspect binary SysEx packets, headers, and checksums">
                         <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -2789,11 +2793,11 @@ function renderSysExLibrary(dumps) {
                         <span>Inspect Hex</span>
                     </button>
                     <div class="flex items-center space-x-2">
-                        <button class="btn-rename-sysex text-slate-400 hover:text-slate-200 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Rename Dump">
+                        <button class="btn-rename-sysex text-slate-400 hover:text-slate-200 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Rename this SysEx dump file">
                             Rename
                         </button>
                         <span class="text-slate-700">•</span>
-                        <button class="btn-delete-sysex text-rose-400/80 hover:text-rose-300 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Delete Dump">
+                        <button class="btn-delete-sysex text-rose-400/80 hover:text-rose-300 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Permanently delete this SysEx dump file from disk">
                             Delete
                         </button>
                     </div>

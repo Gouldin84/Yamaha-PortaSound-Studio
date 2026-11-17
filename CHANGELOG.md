@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-11-17
+
+### Added
+- **Comprehensive Tooltips Across Entire Application**:
+  - Added descriptive, technically accurate, and user-friendly `title` tooltips to every interactive control, status indicator, LED meter, modal dialog, and dynamic component across the Yamaha PSS-790 MIDI Workstation.
+  - **Header & Navigation**: Tooltips for AWM Engine badge, workspace navigation tabs (Player Deck, Studio Recorder, SysEx Vault), recording status pill, hardware connection status dot, MIDI output device selector, refresh button, quick sidebar toggle, folder browser, save/export remapped button, batch processor, about dialog, and dark/light theme toggle.
+  - **Song Library Sidebar**: Tooltips for batch selection mode toggle, collapse-all folders button, song counter, search filter input with clear button, batch action controls (Select All, Deselect All, Move Selected, Delete Selected), library reload button, and library sync button.
+  - **Library Hierarchy & Song Items**: Tooltips on category headers, root folder headers, individual subfolders, song selection checkboxes, playing/selected state icons, and file format badges (`PSS` vs `GM`).
+  - **Playback Deck & Transport**: Tooltips for current song title, format badge, channel summary breakdown, Play/Pause/Stop controls, speed modifiers (`0.75x`, `1.0x`, `1.25x`, `1.5x`), loop mode toggle, 28-voice Polyphony Guard switch, time scrubber slider with elapsed/total timers, and voice override reset button.
+  - **16-Channel Hardware Mixer**: Tooltips for individual channel labels with role description, signal activity meter LEDs, voice override dropdowns (highlighting Yamaha 100-preset AWM engine and Chart 1 drum rules), channel volume faders (CC 7) with numeric indicators, and channel Mute/Solo buttons.
+  - **Studio MIDI Recorder**: Tooltips for MIDI input hardware connection status dot, input device selector, MIDI Thru pass-through switch, Loop Guard pill, BPM tempo numerical input and slider, 4-beat count-in toggle, metronome click toggle, metronome flash LED, recording elapsed timer, musical measure/beat counter, note/event/status metrics, Record arm/disarm button, preview take playback controls, take filename input, save buttons (Yamaha PSS-790 format and General MIDI format), load-take-into-player button, live inbound event ticker, and 16-channel inbound activity cards.
+  - **SysEx Vault & Hardware Librarian**: Tooltips for quick hardware setup buttons (General MIDI System On, Yamaha XG System On, Master Volume 100%, All Notes Off / Controller Reset), open SysEx folder in Windows Explorer, live dump capture pulse LED, capture status badge, packet/byte counters, capture start/stop buttons, selected dump metadata, transmission packet delay selector, transmit and cancel buttons, import SysEx file button, SysEx library search input, dump card select buttons, hex inspection viewer buttons, and dump file rename/delete controls.
+  - **Modal Dialogs & Context Menus**: Tooltips for all controls, safeguards, and options across Batch Remapper, MIDI Health Diagnostics Inspector, Library Sync Analyzer, Library Right-Click Context Menu, File Action Modal, SysEx Hex Inspector, and About Dialog.
+
 ## [1.14.0] - 2026-11-17
 
 ### Added

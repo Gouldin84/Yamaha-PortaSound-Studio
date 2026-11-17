@@ -31,7 +31,7 @@
     <!-- Top Navigation Header -->
     <header class="glass-panel shrink-0 z-30 px-2.5 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800/80 flex items-center justify-between gap-1.5 sm:gap-2">
         <!-- Logo & Title -->
-        <div class="flex items-center space-x-2 shrink-0">
+        <div class="flex items-center space-x-2 shrink-0" title="Yamaha PortaSound PSS-790 (1990) Multi-Timbral 28-Voice Synthesizer Workstation">
             <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center shadow-md shadow-cyan-500/20 shrink-0">
                 <svg class="w-4 h-4 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
@@ -40,7 +40,7 @@
             <div>
                 <div class="flex items-center space-x-1.5">
                     <h1 class="text-xs sm:text-sm font-bold tracking-tight text-white whitespace-nowrap"><span class="hidden xs:inline">PSS-790 </span>MIDI<span class="hidden sm:inline"> Remapper</span></h1>
-                    <span class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block">AWM Engine</span>
+                    <span title="Advanced Wave Memory (AWM) 12-bit sample playback engine with 100 preset voices &amp; 28-voice polyphony" class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block cursor-help">AWM Engine</span>
                 </div>
                 <p class="hidden 2xl:block text-[10px] text-slate-400">Multi-Timbral 16-Channel Voice & Drum Synthesizer Bridge</p>
             </div>
@@ -48,19 +48,19 @@
 
         <!-- Workspace Tab Switcher -->
         <div class="flex items-center bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 shadow-inner shrink-0">
-            <button id="tabBtnPlayer" class="tab-btn active flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition-all">
+            <button id="tabBtnPlayer" title="Player Workspace: Load, preview, and play back MIDI files with real-time Yamaha PSS-790 remapping" class="tab-btn active flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-300 hover:text-white transition-all">
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
                 <span>Player</span>
             </button>
-            <button id="tabBtnRecorder" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
+            <button id="tabBtnRecorder" title="Studio Recorder Workspace: Record live MIDI keyboard performances with metronome and count-in" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
                 <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
                 <span>Studio</span>
-                <span id="recordingPill" class="hidden px-1.5 py-0.2 bg-rose-500/20 text-rose-400 text-[9px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
+                <span id="recordingPill" title="Active Recording: Incoming MIDI notes and events are currently being captured" class="hidden px-1.5 py-0.2 bg-rose-500/20 text-rose-400 text-[9px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
             </button>
-            <button id="tabBtnSysex" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
+            <button id="tabBtnSysex" title="SysEx Vault Workspace: Backup keyboard memory dumps, restore bank snapshots, and send system commands" class="tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all">
                 <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
                 </svg>
@@ -71,12 +71,12 @@
         <!-- MIDI Hardware Device Selector & Actions Toolbar -->
         <div class="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
             <div class="flex items-center space-x-1 sm:space-x-1.5 bg-slate-900/80 px-2 sm:px-2.5 py-1 rounded-lg border border-slate-800">
-                <span id="outputStatusDot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0"></span>
+                <span id="outputStatusDot" title="Output Status: Green pulse indicates an active, ready MIDI output port connection" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0"></span>
                 <label for="deviceSelect" class="text-[11px] font-medium text-slate-400 hidden xl:inline-block">Port:</label>
-                <select id="deviceSelect" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[130px] md:max-w-[160px]">
+                <select id="deviceSelect" title="MIDI Output Device: Select the hardware MIDI interface or software synth for playback" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[110px] sm:max-w-[130px] md:max-w-[160px]">
                     <option value="" disabled selected>Scanning devices...</option>
                 </select>
-                <button id="btnRefreshDevices" title="Rescan MIDI Devices (Hot-Swap)" class="text-slate-400 hover:text-cyan-400 transition p-0.5 active:scale-90" aria-label="Rescan MIDI Devices">
+                <button id="btnRefreshDevices" title="Rescan MIDI Devices (Hot-Swap): Detect newly plugged or unplugged MIDI hardware interfaces without restarting" class="text-slate-400 hover:text-cyan-400 transition p-0.5 active:scale-90" aria-label="Rescan MIDI Devices">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                     </svg>
@@ -84,7 +84,7 @@
             </div>
 
             <!-- Quick-Pick Sidebar Toggle -->
-            <button id="btnToggleSidebar" title="Toggle Quick-Pick Library Tree (Ctrl+B)" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnToggleSidebar" title="Toggle Library Sidebar (Ctrl+B): Show or collapse the quick-pick folder tree" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/>
                 </svg>
@@ -92,7 +92,7 @@
             </button>
 
             <!-- Browse & Load Button -->
-            <button id="btnBrowse" title="Load MIDI File from Disk" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnBrowse" title="Load MIDI File: Open Windows file picker to load an external .mid or .midi song" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                 </svg>
@@ -102,13 +102,13 @@
             <!-- Quick General MIDI Library Picker (Hidden - superseded by Library Sidebar) -->
             <div class="hidden items-center space-x-1.5 bg-slate-900/80 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0">
                 <label for="librarySelect" class="text-[11px] font-medium text-slate-400">Quick:</label>
-                <select id="librarySelect" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[130px]">
+                <select id="librarySelect" title="Select song from library" class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[130px]">
                     <option value="" selected disabled>Library Loading...</option>
                 </select>
             </div>
 
             <!-- Open Explorer Folder Button -->
-            <button id="btnOpenFolder" title="Open Music\Midi in Windows Explorer" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnOpenFolder" title="Open MIDI Folder: Reveal Music\Midi library in Windows File Explorer" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                 </svg>
@@ -116,7 +116,7 @@
             </button>
 
             <!-- Save Remapped MIDI Button -->
-            <button id="btnSaveRemapped" title="Export Remapped MIDI File" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-md shadow-cyan-600/30 transition active:scale-95 shrink-0">
+            <button id="btnSaveRemapped" title="Export Remapped MIDI: Save active song converted for native Yamaha PSS-790 playback (Ch 16 drums, Chart 1 percussion, Chart 2 voices)" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-md shadow-cyan-600/30 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
                 </svg>
@@ -124,7 +124,7 @@
             </button>
 
             <!-- Batch Remapper Button -->
-            <button id="btnOpenBatch" title="Batch Remap Folder of MIDIs" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnOpenBatch" title="Batch Remapper: Convert entire folders of General MIDI files to PSS-790 format with polyphony guard and pitch tuning" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
@@ -132,7 +132,7 @@
             </button>
 
             <!-- About & Legal Info Button -->
-            <button id="btnAbout" title="About & Legal Credits" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnAbout" title="About &amp; Legal Notices: View software version, MIT license, author credits, and hardware trademark disclaimers" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
@@ -140,7 +140,7 @@
             </button>
 
             <!-- Light / Dark Theme Toggle Button -->
-            <button id="btnThemeToggle" title="Toggle Light / Dark Studio Theme" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnThemeToggle" title="Toggle Theme: Switch between Dark Studio and Light Studio visual appearance" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <span id="themeToggleIcon" class="text-xs">☀️</span>
                 <span id="themeToggleText" class="hidden lg:inline text-[11px]">Theme</span>
             </button>
@@ -164,10 +164,10 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Library</h3>
                     </div>
                     <div class="flex items-center space-x-1">
-                        <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
-                        <button id="btnCollapseAll" title="Collapse All / Expand All Folders" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
-                        <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">0 songs</span>
-                        <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B)" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
+                        <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode: Enable checkboxes on all songs for batch moving or deleting" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
+                        <button id="btnCollapseAll" title="Collapse / Expand All: Toggle expansion state for all folders in the library tree" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
+                        <span id="sidebarSongCount" title="Total songs indexed across General MIDI and PSS-790 library folders" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60 cursor-help">0 songs</span>
+                        <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B): Hide library panel to maximize mixer and transport deck view" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                             </svg>
@@ -177,11 +177,11 @@
 
                 <!-- Real-Time Search Filter -->
                 <div class="relative shrink-0">
-                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, folders..." class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
+                    <input type="text" id="sidebarSearchInput" placeholder="Search songs, folders..." title="Instant Search: Filter songs and folders by title, category, or subfolder path" class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
                     <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                     </svg>
-                    <button id="btnClearSearch" class="hidden absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs font-bold">×</button>
+                    <button id="btnClearSearch" title="Clear Search: Reset filter and show all library folders and files" class="hidden absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs font-bold">×</button>
                 </div>
 
                 <!-- Tree View Container -->
@@ -192,19 +192,19 @@
                 <!-- Floating / Docked Batch Action Bar -->
                 <div id="sidebarBatchBar" class="hidden shrink-0 p-2 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-1.5 select-none">
                     <div class="flex items-center justify-between text-xs">
-                        <span id="batchCountBadge" class="font-bold text-cyan-400 text-[11px]">0 selected</span>
+                        <span id="batchCountBadge" title="Number of songs currently selected for batch operations" class="font-bold text-cyan-400 text-[11px] cursor-help">0 selected</span>
                         <div class="space-x-2">
-                            <button id="btnBatchSelectAll" class="text-[10px] text-slate-400 hover:text-cyan-300">All</button>
+                            <button id="btnBatchSelectAll" title="Select All: Check all songs currently visible in the filtered view" class="text-[10px] text-slate-400 hover:text-cyan-300">All</button>
                             <span class="text-slate-600 text-[10px]">•</span>
-                            <button id="btnBatchClear" class="text-[10px] text-slate-400 hover:text-rose-400">Clear</button>
+                            <button id="btnBatchClear" title="Clear Selection: Deselect all currently checked songs" class="text-[10px] text-slate-400 hover:text-rose-400">Clear</button>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-1.5">
-                        <button id="btnBatchMove" class="px-2.5 py-2 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 active:bg-cyan-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                        <button id="btnBatchMove" title="Batch Move: Relocate all checked songs into a selected destination folder" class="px-2.5 py-2 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 active:bg-cyan-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
                             <span>📦</span>
                             <span>Move</span>
                         </button>
-                        <button id="btnBatchDelete" class="px-2.5 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:bg-rose-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
+                        <button id="btnBatchDelete" title="Batch Delete: Permanently remove all checked songs from disk" class="px-2.5 py-2 rounded-lg bg-rose-600/90 hover:bg-rose-500 active:bg-rose-700 text-white font-semibold text-xs flex items-center justify-center space-x-1.5 transition shadow-sm">
                             <span>🗑️</span>
                             <span>Delete</span>
                         </button>
@@ -214,12 +214,12 @@
                 <!-- Bottom Quick Explorer Actions & Tip -->
                 <div class="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
                     <div class="flex items-center space-x-1.5">
-                        <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Rescan Music\Midi folders">
+                        <button id="btnSidebarRefresh" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Refresh Library: Scan Music\Midi folders for newly added, renamed, or converted files">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                             <span>Refresh</span>
                         </button>
                         <span class="text-slate-600">|</span>
-                        <button id="btnSidebarSync" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Sync & Align GM and PSS-790 libraries">
+                        <button id="btnSidebarSync" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Sync &amp; Align: Inspect parity between General MIDI source songs and PSS-790 converted songs">
                             <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
@@ -245,13 +245,13 @@
                         </div>
                         <div class="min-w-0">
                             <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
-                                <h2 id="currentSongTitle" class="text-sm sm:text-base font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-[340px]">No File Loaded</h2>
+                                <h2 id="currentSongTitle" title="Current loaded MIDI song filename and path" class="text-sm sm:text-base font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-[340px]">No File Loaded</h2>
                                 <div id="formatBadgeContainer" class="shrink-0"></div>
                                 <div id="healthBadgeContainer" class="shrink-0"></div>
                             </div>
                             <div class="flex items-center space-x-2 text-[11px] text-slate-400">
-                                <span id="fileStatusBadge" class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-medium">Idle</span>
-                                <span id="channelSummary">16 Channels Ready</span>
+                                <span id="fileStatusBadge" title="Playback Engine State: Idle, Playing, Paused, or Stopped" class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-medium cursor-help">Idle</span>
+                                <span id="channelSummary" title="Active Channels: Number of MIDI channels carrying musical notes in the loaded song" class="cursor-help">16 Channels Ready</span>
                             </div>
                         </div>
                     </div>
@@ -259,7 +259,7 @@
                     <!-- Primary Transport Buttons -->
                     <div class="flex items-center space-x-2 shrink-0">
                         <!-- Play / Pause -->
-                        <button id="btnPlayPause" class="w-9 h-9 rounded-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 flex items-center justify-center shadow-md shadow-cyan-500/30 transition-all duration-200 hover:scale-105 active:scale-95">
+                        <button id="btnPlayPause" title="Play / Pause (Spacebar): Start playback or pause at current position" class="w-9 h-9 rounded-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 flex items-center justify-center shadow-md shadow-cyan-500/30 transition-all duration-200 hover:scale-105 active:scale-95">
                             <svg id="playIcon" class="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
@@ -269,7 +269,7 @@
                         </button>
 
                         <!-- Stop -->
-                        <button id="btnStop" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-rose-600/80 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/60 transition-all duration-200 hover:scale-105 active:scale-95">
+                        <button id="btnStop" title="Stop (Esc): Halt playback, silence all sounding voices, and rewind to beginning" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-rose-600/80 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/60 transition-all duration-200 hover:scale-105 active:scale-95">
                             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                                 <path d="M6 6h12v12H6z"/>
                             </svg>
@@ -277,14 +277,14 @@
 
                         <!-- Speed Multiplier -->
                         <div class="flex items-center bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60 space-x-0.5">
-                            <button data-speed="0.75" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">0.75x</button>
-                            <button data-speed="1.0" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded bg-cyan-500 text-slate-950 shadow-sm transition">1.0x</button>
-                            <button data-speed="1.25" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">1.25x</button>
-                            <button data-speed="1.5" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">1.5x</button>
+                            <button data-speed="0.75" title="Playback Speed 0.75x: Slow playback to 75% tempo for practice, study, or transcription" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">0.75x</button>
+                            <button data-speed="1.0" title="Playback Speed 1.0x: Standard original recorded song tempo" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded bg-cyan-500 text-slate-950 shadow-sm transition">1.0x</button>
+                            <button data-speed="1.25" title="Playback Speed 1.25x: Accelerate playback to 125% tempo" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">1.25x</button>
+                            <button data-speed="1.5" title="Playback Speed 1.5x: Accelerate playback to 150% tempo" class="speed-btn px-1.5 py-0.5 text-[11px] font-semibold rounded text-slate-400 hover:text-white transition">1.5x</button>
                         </div>
 
                         <!-- Loop Toggle -->
-                        <button id="btnLoop" class="px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-400 hover:text-white border border-slate-700/60 transition flex items-center space-x-1">
+                        <button id="btnLoop" title="Loop Playback: Continuously repeat the current song from start when it finishes" class="px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-400 hover:text-white border border-slate-700/60 transition flex items-center space-x-1">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
@@ -293,9 +293,9 @@
                     </div>
 
                     <!-- Smart Polyphony Guard Toggle -->
-                    <div class="flex items-center space-x-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0">
-                        <input type="checkbox" id="polyphonyGuardToggle" checked class="w-3.5 h-3.5 rounded text-cyan-500 focus:ring-0 focus:outline-none cursor-pointer accent-cyan-500">
-                        <label for="polyphonyGuardToggle" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">
+                    <div class="flex items-center space-x-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing">
+                        <input type="checkbox" id="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" checked class="w-3.5 h-3.5 rounded text-cyan-500 focus:ring-0 focus:outline-none cursor-pointer accent-cyan-500">
+                        <label for="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">
                             Smart Polyphony Guard
                         </label>
                         <span class="text-[9px] text-emerald-400 bg-emerald-950/60 px-1 py-0.2 rounded border border-emerald-800/60">Protected</span>
@@ -304,10 +304,10 @@
 
                 <!-- Timeline Scrubber -->
                 <div class="space-y-0.5 pt-0.5">
-                    <input type="range" id="timeScrubber" min="0" max="100" value="0" step="0.1" class="w-full h-1.5 cursor-pointer">
+                    <input type="range" id="timeScrubber" min="0" max="100" value="0" step="0.1" title="Timeline Scrubber: Click or drag to jump to any point in the song" class="w-full h-1.5 cursor-pointer">
                     <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
-                        <span id="currentTimeDisplay">00:00</span>
-                        <span id="totalTimeDisplay">00:00</span>
+                        <span id="currentTimeDisplay" title="Elapsed playback time (MM:SS)" class="cursor-help">00:00</span>
+                        <span id="totalTimeDisplay" title="Total song length (MM:SS)" class="cursor-help">00:00</span>
                     </div>
                 </div>
             </section>
@@ -319,7 +319,7 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">16-Channel Mixer & Voice Selector</h3>
                         <p class="text-[10px] text-slate-500">Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)</p>
                     </div>
-                    <button id="btnResetOverrides" class="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
+                    <button id="btnResetOverrides" title="Reset Overrides: Restore all 16 channels back to their default auto-mapped General MIDI voices" class="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
                 </div>
 
                 <!-- Mixer Grid (16 Channel Strips) -->
@@ -339,13 +339,13 @@
                     <!-- MIDI Input Selector -->
                     <div class="flex items-center space-x-3">
                         <div class="flex items-center space-x-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-800">
-                            <span id="inputStatusDot" class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                            <span id="inputStatusDot" title="Input Port Status: Red pulse indicates an active listening MIDI input port connection" class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
                             <label for="recorderInputDeviceSelect" class="text-xs font-medium text-slate-400">MIDI In:</label>
-                            <select id="recorderInputDeviceSelect" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[220px]">
+                            <select id="recorderInputDeviceSelect" title="MIDI Input Device: Select the hardware keyboard or controller port to record from" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[220px]">
                                 <option value="" disabled selected>Scanning input ports...</option>
                             </select>
                         </div>
-                        <button id="btnRefreshInputs" title="Refresh MIDI In Ports" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-105 active:scale-95">
+                        <button id="btnRefreshInputs" title="Rescan MIDI Inputs: Refresh available hardware MIDI input ports" class="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition-all duration-200 hover:scale-105 active:scale-95">
                             <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
@@ -354,13 +354,13 @@
 
                     <!-- Safety Guard & Thru Settings -->
                     <div class="flex items-center space-x-4">
-                        <div class="flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800/80" title="Echoes incoming MIDI directly to the output device. Keep disabled if keyboard soft-thru is active to avoid loopback.">
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="chkMidiThru" class="sr-only peer">
+                        <div class="flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-xl border border-slate-800/80" title="MIDI Thru Forward: Echo incoming MIDI directly to output synth. Keep disabled if keyboard has local control ON to prevent double notes">
+                            <label class="relative inline-flex items-center cursor-pointer" title="MIDI Thru Forward: Echo incoming MIDI directly to output synth. Keep disabled if keyboard has local control ON to prevent double notes">
+                                <input type="checkbox" id="chkMidiThru" title="MIDI Thru Forward: Echo incoming MIDI directly to output synth. Keep disabled if keyboard has local control ON to prevent double notes" class="sr-only peer">
                                 <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
                             </label>
                             <span class="text-xs font-medium text-slate-300">MIDI Thru Forward</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800/60" title="Prevents infinite feedback loops between PSS-790 OUT and IN">Loop Guard</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800/60 cursor-help" title="Loop Guard: Hardware safety circuit preventing MIDI feedback loops between PSS-790 OUT and IN">Loop Guard</span>
                         </div>
                     </div>
 
@@ -368,18 +368,18 @@
                     <div class="flex items-center space-x-4 bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-800">
                         <div class="flex items-center space-x-2">
                             <span class="text-xs font-medium text-slate-400">Tempo:</span>
-                            <input type="number" id="recorderBpmInput" min="40" max="240" value="120" class="w-14 px-2 py-0.5 rounded bg-slate-800 text-xs font-mono font-bold text-cyan-400 border border-slate-700 text-center focus:outline-none">
+                            <input type="number" id="recorderBpmInput" min="40" max="240" value="120" title="Recording Tempo: Set metronome speed in Beats Per Minute (40-240 BPM)" class="w-14 px-2 py-0.5 rounded bg-slate-800 text-xs font-mono font-bold text-cyan-400 border border-slate-700 text-center focus:outline-none">
                             <span class="text-[11px] text-slate-400">BPM</span>
                         </div>
-                        <input type="range" id="recorderBpmSlider" min="40" max="240" value="120" class="w-24 h-1.5 bg-slate-800">
+                        <input type="range" id="recorderBpmSlider" min="40" max="240" value="120" title="Tempo Slider: Drag to adjust recording speed smoothly" class="w-24 h-1.5 bg-slate-800 cursor-pointer">
 
                         <div class="flex items-center space-x-2 border-l border-slate-800 pl-4">
-                            <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
-                                <input type="checkbox" id="chkCountIn" checked class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+                            <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer" title="1-Bar Count-In: Plays a 4-beat audible countdown before recording begins">
+                                <input type="checkbox" id="chkCountIn" title="1-Bar Count-In: Plays a 4-beat audible countdown before recording begins" checked class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
                                 <span>1-Bar Count-In</span>
                             </label>
-                            <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer ml-3">
-                                <input type="checkbox" id="chkMetronome" checked class="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0">
+                            <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer ml-3" title="Click Track: Generates an audible metronome click track during recording">
+                                <input type="checkbox" id="chkMetronome" title="Click Track: Generates an audible metronome click track during recording" checked class="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0">
                                 <span>Click Track</span>
                             </label>
                         </div>
@@ -399,25 +399,25 @@
                 <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                     <!-- Left: Large Digital Clock & Beat Meter -->
                     <div class="flex items-center space-x-6">
-                        <div class="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner">
+                        <div class="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shadow-inner" title="Metronome Beat Flash: Flashes high-pitch on beat 1 (downbeat) and standard pulse on beats 2-4">
                             <span id="metroLed" class="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 transition-colors duration-75"></span>
                         </div>
                         <div>
                             <div class="flex items-baseline space-x-3">
-                                <span id="recorderTimerDisplay" class="text-4xl font-extrabold font-mono tracking-tight text-white">00:00:00.0</span>
-                                <span id="recorderBeatDisplay" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-900 text-amber-400 border border-slate-800">BAR 01 : 1</span>
+                                <span id="recorderTimerDisplay" title="Recording Duration: High-precision elapsed time (HH:MM:SS.ms)" class="text-4xl font-extrabold font-mono tracking-tight text-white cursor-help">00:00:00.0</span>
+                                <span id="recorderBeatDisplay" title="Bar and Beat Counter: Displays current measure and quarter-note beat" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-900 text-amber-400 border border-slate-800 cursor-help">BAR 01 : 1</span>
                             </div>
                             <div class="flex items-center space-x-4 text-xs text-slate-400 mt-1">
-                                <span>Notes: <strong id="recNoteCounter" class="text-emerald-400 font-mono">0</strong></span>
-                                <span>Events: <strong id="recEventCounter" class="text-cyan-400 font-mono">0</strong></span>
-                                <span>Status: <strong id="recStatusLabel" class="text-slate-300">Idle</strong></span>
+                                <span title="Total Note-On messages captured in current take">Notes: <strong id="recNoteCounter" class="text-emerald-400 font-mono">0</strong></span>
+                                <span title="Total MIDI events captured (notes, pitch bends, control changes, program changes)">Events: <strong id="recEventCounter" class="text-cyan-400 font-mono">0</strong></span>
+                                <span title="Studio Recorder Status: Idle, Counting In, Recording, or Reviewing Take">Status: <strong id="recStatusLabel" class="text-slate-300">Idle</strong></span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Center: Big Primary Record Button -->
                     <div class="flex items-center space-x-4">
-                        <button id="btnRecord" class="flex items-center space-x-3 px-8 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all duration-200 hover:scale-105 active:scale-95">
+                        <button id="btnRecord" title="Record / Stop Recording: Start a new recording take or end the active take" class="flex items-center space-x-3 px-8 py-4 rounded-2xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-white font-bold text-sm shadow-xl shadow-rose-600/30 transition-all duration-200 hover:scale-105 active:scale-95">
                             <span id="recordIconDot" class="w-4 h-4 rounded-full bg-white shadow-sm"></span>
                             <span id="recordButtonText">Start Recording</span>
                         </button>
@@ -426,12 +426,12 @@
                     <!-- Right: Quick Audition Preview Controls -->
                     <div class="flex items-center space-x-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800/80">
                         <span class="text-xs font-medium text-slate-400">Take Preview:</span>
-                        <button id="btnPreviewTake" disabled class="p-2.5 rounded-lg bg-slate-800 hover:bg-cyan-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white transition">
+                        <button id="btnPreviewTake" disabled title="Preview Take: Audition the freshly recorded take before saving" class="p-2.5 rounded-lg bg-slate-800 hover:bg-cyan-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white transition">
                             <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
                                 <path d="M8 5v14l11-7z"/>
                             </svg>
                         </button>
-                        <button id="btnStopPreviewTake" disabled class="p-2.5 rounded-lg bg-slate-800 hover:bg-rose-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white transition">
+                        <button id="btnStopPreviewTake" disabled title="Stop Audition: Halt preview playback" class="p-2.5 rounded-lg bg-slate-800 hover:bg-rose-600 disabled:opacity-40 disabled:hover:bg-slate-800 text-white transition">
                             <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24">
                                 <path d="M6 6h12v12H6z"/>
                             </svg>
@@ -458,14 +458,14 @@
                     <!-- File Name Input -->
                     <div class="flex items-center space-x-2">
                         <label for="takeFilenameInput" class="text-xs font-medium text-slate-400">Song Title:</label>
-                        <input type="text" id="takeFilenameInput" value="Take_Recording" class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-white focus:outline-none focus:border-cyan-500 w-56">
+                        <input type="text" id="takeFilenameInput" value="Take_Recording" title="Take Title: Enter the desired base filename for saving this take" class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-white focus:outline-none focus:border-cyan-500 w-56">
                     </div>
                 </div>
 
                 <!-- 3 Action Pathways -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                     <!-- Action 1: Save Native PSS-790 Take -->
-                    <button id="btnSaveTakePss790" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-emerald-950/40 to-slate-900 border border-emerald-800/60 hover:border-emerald-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
+                    <button id="btnSaveTakePss790" title="Save Native PSS-790 Take: Store direct 1:1 capture to PSS-790 Midi folder for immediate playback on hardware" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-emerald-950/40 to-slate-900 border border-emerald-800/60 hover:border-emerald-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-emerald-400 font-bold text-xs mb-1">
                             <span>⚡</span>
                             <span>Save Native (PSS-790 Ready)</span>
@@ -474,7 +474,7 @@
                     </button>
 
                     <!-- Action 2: Export to General MIDI -->
-                    <button id="btnSaveTakeGm" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-indigo-950/40 to-slate-900 border border-indigo-800/60 hover:border-indigo-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
+                    <button id="btnSaveTakeGm" title="Export General MIDI: Reverse-remaps Channel 16 drums to Channel 10 and PSS-790 voices to GM programs for DAW or PC use" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-indigo-950/40 to-slate-900 border border-indigo-800/60 hover:border-indigo-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-indigo-400 font-bold text-xs mb-1">
                             <span>🎵</span>
                             <span>Export to General MIDI (DAW/PC)</span>
@@ -483,7 +483,7 @@
                     </button>
 
                     <!-- Action 3: Send to Player -->
-                    <button id="btnSendTakeToPlayer" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-cyan-950/40 to-slate-900 border border-cyan-800/60 hover:border-cyan-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
+                    <button id="btnSendTakeToPlayer" title="Send to Player: Load the new take into Tab 1 player deck to review and inspect channels immediately" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-cyan-950/40 to-slate-900 border border-cyan-800/60 hover:border-cyan-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-xs mb-1">
                             <span>🎧</span>
                             <span>Send to Player (Audition)</span>
@@ -500,7 +500,7 @@
                         <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
                         <h3 class="text-sm font-bold text-white tracking-tight">Live Inbound Channel Monitor</h3>
                     </div>
-                    <div id="recorderLiveTicker" class="text-xs font-mono text-slate-400 truncate max-w-md">
+                    <div id="recorderLiveTicker" title="Real-time incoming MIDI event stream log" class="text-xs font-mono text-slate-400 truncate max-w-md cursor-help">
                         Waiting for MIDI input notes...
                     </div>
                 </div>
@@ -533,19 +533,19 @@
                 <!-- Quick SysEx Hardware Controls -->
                 <div class="flex items-center space-x-1.5 flex-wrap">
                     <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Quick Commands:</span>
-                    <button id="btnQuickGmOn" title="Send GM System On (F0 7E 7F 09 01 F7)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
+                    <button id="btnQuickGmOn" title="Send GM System On SysEx (F0 7E 7F 09 01 F7): Resets General MIDI devices to power-on default parameters" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
                         GM On
                     </button>
-                    <button id="btnQuickXgOn" title="Send Yamaha XG System On (F0 43 10 4C 00 00 7E 00 F7)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-cyan-300 hover:text-white border border-cyan-800/40 transition active:scale-95">
+                    <button id="btnQuickXgOn" title="Send Yamaha XG System On SysEx (F0 43 10 4C 00 00 7E 00 F7): Initializes Yamaha XG synthesizer sound banks" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-cyan-300 hover:text-white border border-cyan-800/40 transition active:scale-95">
                         Yamaha XG On
                     </button>
-                    <button id="btnQuickMasterVol" title="Send Master Volume Full 127 (F0 7F 7F 04 01 7F 7F F7)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
+                    <button id="btnQuickMasterVol" title="Send Universal Master Volume SysEx (F0 7F 7F 04 01 7F 7F F7): Sets synthesizer master volume to maximum (127)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
                         Master Vol 100%
                     </button>
-                    <button id="btnQuickAllReset" title="Send All Notes Off & Sound Controllers Reset" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-[11px] font-medium text-rose-300 hover:text-white border border-rose-800/40 transition active:scale-95">
+                    <button id="btnQuickAllReset" title="Emergency Sound Reset: Sends All Notes Off (CC 123) and Reset All Controllers (CC 121) across all 16 channels to silence stuck notes" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-[11px] font-medium text-rose-300 hover:text-white border border-rose-800/40 transition active:scale-95">
                         All Reset
                     </button>
-                    <button id="btnOpenSysExFolder" title="Open Music\Midi\SysEx Library in Windows Explorer" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 ml-1">
+                    <button id="btnOpenSysExFolder" title="Open SysEx Folder: Reveal Music\Midi\SysEx directory in Windows Explorer" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 ml-1">
                         <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                         </svg>
@@ -563,10 +563,10 @@
                     <div class="glass-panel p-4 rounded-xl border border-slate-800/80 shadow-xl space-y-3">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-2">
                             <div class="flex items-center space-x-2">
-                                <span id="sysexCapturePulse" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-colors duration-300"></span>
+                                <span id="sysexCapturePulse" title="SysEx Capture Listener: Pulsing indicates background listener is awaiting hardware bulk dump" class="w-2.5 h-2.5 rounded-full bg-slate-600 transition-colors duration-300"></span>
                                 <h3 class="text-xs font-bold uppercase tracking-wider text-white">Live SysEx Capture</h3>
                             </div>
-                            <span id="sysexCaptureStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">Idle</span>
+                            <span id="sysexCaptureStatusBadge" title="Capture State: Idle, Listening, or Capturing" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 cursor-help">Idle</span>
                         </div>
 
                         <!-- Hardware Instructions Callout -->
@@ -585,15 +585,15 @@
 
                         <!-- Capture Metrics -->
                         <div class="grid grid-cols-3 gap-2 text-center">
-                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800" title="Total SysEx packets received in current capture stream">
                                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Packets</span>
                                 <span id="sysexCapturePackets" class="text-base font-extrabold text-cyan-400 font-mono">0</span>
                             </div>
-                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800" title="Total raw byte count received">
                                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Bytes In</span>
                                 <span id="sysexCaptureBytes" class="text-base font-extrabold text-white font-mono">0 B</span>
                             </div>
-                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800" title="Detected sending manufacturer or MIDI hardware port">
                                 <span class="text-[10px] uppercase font-bold text-slate-400 block">Device</span>
                                 <span id="sysexCaptureDevice" class="text-[11px] font-semibold text-emerald-400 truncate block mt-0.5">Ready</span>
                             </div>
@@ -601,13 +601,13 @@
 
                         <!-- Capture Action Buttons -->
                         <div class="flex items-center space-x-2 pt-1">
-                            <button id="btnStartSysexCapture" class="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition active:scale-95">
+                            <button id="btnStartSysexCapture" title="Listen for Bulk Dump: Arm listener to capture internal memory transmitted from the PSS-790 MEMORY BULK DUMP button" class="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition active:scale-95">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/>
                                 </svg>
                                 <span>Listen for Bulk Dump</span>
                             </button>
-                            <button id="btnStopSysexCapture" class="hidden px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/25 transition active:scale-95">
+                            <button id="btnStopSysexCapture" title="Stop Capture: Cancel listening and finalize any received dump file" class="hidden px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-600/25 transition active:scale-95">
                                 <span>Stop</span>
                             </button>
                         </div>
@@ -626,7 +626,7 @@
                         </div>
 
                         <!-- Target File Preview -->
-                        <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1.5">
+                        <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800 space-y-1.5" title="Selected SysEx File: Metadata preview of the dump prepared for keyboard transmission">
                             <div class="text-[10px] uppercase font-bold text-slate-400">Selected Dump:</div>
                             <div id="sysexSelectedDumpTitle" class="text-xs font-bold text-white truncate font-mono">No dump selected</div>
                             <div class="flex items-center space-x-3 text-[11px] text-slate-400">
@@ -642,7 +642,7 @@
                                 <label for="sysexPacketDelaySelect" class="font-semibold text-slate-300">Paced Packet Delay:</label>
                                 <div class="text-[10px] text-slate-400">Prevents PSS-790 &lt;bu full&gt; overflow</div>
                             </div>
-                            <select id="sysexPacketDelaySelect" class="bg-slate-800 text-xs font-semibold text-white px-2.5 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer">
+                            <select id="sysexPacketDelaySelect" title="Paced Packet Delay: Inter-packet delay interval to prevent hardware buffer overrun ('bu full' error on PSS-790 LCD)" class="bg-slate-800 text-xs font-semibold text-white px-2.5 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer">
                                 <option value="15">15 ms (Fast)</option>
                                 <option value="25">25 ms (Safe)</option>
                                 <option value="30" selected>30 ms (Recommended)</option>
@@ -664,13 +664,13 @@
 
                         <!-- Transmit Actions -->
                         <div class="flex items-center space-x-2 pt-1">
-                            <button id="btnTransmitSysex" class="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-600/25 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
+                            <button id="btnTransmitSysex" title="Transmit SysEx: Send the selected bulk dump snapshot back into the PSS-790 to restore its memory banks" class="flex-1 flex items-center justify-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-600/25 transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                 </svg>
                                 <span>Transmit to PSS-790</span>
                             </button>
-                            <button id="btnCancelSysexTransmit" class="hidden px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition active:scale-95">
+                            <button id="btnCancelSysexTransmit" title="Cancel Transmission: Abort active SysEx packet transmission immediately" class="hidden px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition active:scale-95">
                                 <span>Cancel</span>
                             </button>
                         </div>
@@ -687,21 +687,21 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
                             </svg>
                             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">SysEx Vault Library</h3>
-                            <span id="sysexLibraryCount" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-indigo-400 border border-slate-700">0 dumps</span>
+                            <span id="sysexLibraryCount" title="Total saved .syx memory dumps in local storage" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-indigo-400 border border-slate-700 cursor-help">0 dumps</span>
                         </div>
 
                         <div class="flex items-center space-x-2">
                             <!-- Import SysEx file -->
-                            <button id="btnImportSysex" title="Import external .syx file into SysEx Library" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                            <button id="btnImportSysex" title="Import SysEx File: Load an external .syx or .bin memory dump into the vault library" class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
                                 <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
                                 </svg>
                                 <span>Import .syx</span>
                             </button>
-                            <input type="file" id="inputImportSysex" accept=".syx,.bin,.raw" class="hidden">
+                            <input type="file" id="inputImportSysex" accept=".syx,.bin,.raw" title="File picker for importing SysEx dumps (.syx, .bin, .raw)" class="hidden">
 
                             <!-- Refresh Library -->
-                            <button id="btnRefreshSysexLibrary" title="Refresh SysEx Library" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                            <button id="btnRefreshSysexLibrary" title="Refresh SysEx Library: Scan folder for newly added dump files" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
                                 <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                 </svg>
@@ -711,7 +711,7 @@
 
                     <!-- Search & Filter Bar -->
                     <div class="relative shrink-0">
-                        <input type="text" id="sysexSearchInput" placeholder="Search bulk dumps by filename, date, or manufacturer..." class="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+                        <input type="text" id="sysexSearchInput" placeholder="Search bulk dumps by filename, date, or manufacturer..." title="Search Dumps: Filter SysEx files by filename, date, or manufacturer" class="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/90 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
                         <svg class="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                         </svg>
@@ -744,7 +744,7 @@
                     </div>
                     <h3 class="text-base font-bold text-white">Batch Remapper & Exporter</h3>
                 </div>
-                <button id="btnCloseBatch" class="text-slate-400 hover:text-white transition">
+                <button id="btnCloseBatch" title="Close batch remapper dialog" class="text-slate-400 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -758,39 +758,39 @@
             <div class="space-y-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
                 <div>
                     <label class="block text-slate-400 font-medium mb-1">Source Directory:</label>
-                    <input type="text" id="batchSourceDir" value="General MIDI" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    <input type="text" id="batchSourceDir" value="General MIDI" title="Source Folder: Subdirectory within Music\Midi containing General MIDI files to convert" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
                 </div>
                 <div>
                     <label class="block text-slate-400 font-medium mb-1">Target Directory:</label>
-                    <input type="text" id="batchTargetDir" value="Remapped" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    <input type="text" id="batchTargetDir" value="Remapped" title="Target Folder: Subdirectory within Music\Midi where converted PSS-790 files will be written" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
                 </div>
             </div>
 
             <!-- Intelligent Remapping Safeguards -->
             <div class="space-y-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
                 <span class="block text-slate-300 font-bold mb-1 text-[11px] uppercase tracking-wider text-cyan-400">Automated Remapping Engine</span>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchSustain" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Sustain Emulation: Extends staccato piano notes naturally for PSS-790 envelope reproduction">
+                    <input type="checkbox" id="chkBatchSustain" title="Sustain Emulation: Extends staccato piano notes naturally for PSS-790 envelope reproduction" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>Sustain Pedal Emulation (CC 64):</strong> Extends staccato piano notes naturally</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchPitchTune" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings">
+                    <input type="checkbox" id="chkBatchPitchTune" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>Acoustic Auto-Tune:</strong> Neutralizes micro-pitch bends & detune drift on piano/strings</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchPolyphony" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="28-Voice Polyphony Guard: Protects lead melody from voice stealing during heavy multi-channel chords">
+                    <input type="checkbox" id="chkBatchPolyphony" title="28-Voice Polyphony Guard: Protects lead melody from voice stealing during heavy multi-channel chords" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>28-Voice Polyphony Guard:</strong> Protects lead melody from voice stealing</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchReverb" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)">
+                    <input type="checkbox" id="chkBatchReverb" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>Yamaha DSP Reverb Boost:</strong> Engages PSS-790 digital reverb (CC 91)</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchExpressionFold" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Expression Swell Folding: Maps CC 11 expression curves into CC 7 volume to preserve dynamics">
+                    <input type="checkbox" id="chkBatchExpressionFold" title="Expression Swell Folding: Maps CC 11 expression curves into CC 7 volume to preserve dynamics" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>Expression Swell Folding (CC 11 &rarr; CC 7):</strong> Enables dynamic swells and fadeouts</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white">
-                    <input type="checkbox" id="chkBatchVelocityNorm" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="AWM Dynamic Velocity Sweet Spot: Lifts quiet notes and prevents harsh sample clipping">
+                    <input type="checkbox" id="chkBatchVelocityNorm" title="AWM Dynamic Velocity Sweet Spot: Lifts quiet notes and prevents harsh sample clipping" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>AWM Dynamic Velocity Sweet Spot:</strong> Lifts quiet notes and prevents harsh sample clipping</span>
                 </label>
             </div>
@@ -816,19 +816,19 @@
                     <span id="auditSummaryCount" class="font-mono text-cyan-400 font-bold">0 files</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center py-1">
-                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Total songs repaired with automatic GM to PSS-790 voice and drum translations">
                         <div id="auditFixesCount" class="text-sm font-bold text-sky-400">0</div>
                         <div class="text-[10px] text-slate-400">Auto-Fixes</div>
                     </div>
-                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Songs inferred from Yamaha XG banks or non-standard GM mappings">
                         <div id="auditInferredCount" class="text-sm font-bold text-purple-400">0</div>
                         <div class="text-[10px] text-slate-400">Inferred/XG</div>
                     </div>
-                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Songs with unreleased CC 64 sustain pedals repaired to avoid stuck notes">
                         <div id="auditStuckPedalCount" class="text-sm font-bold text-amber-400">0</div>
                         <div class="text-[10px] text-slate-400">Stuck Pedals</div>
                     </div>
-                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Songs with note bursts exceeding 28 simultaneous voices protected by Polyphony Guard">
                         <div id="auditPolyphonyCount" class="text-sm font-bold text-emerald-400">0</div>
                         <div class="text-[10px] text-slate-400">&gt;28 Voices</div>
                     </div>
@@ -839,15 +839,15 @@
 
             <!-- Modal Action Buttons -->
             <div class="flex items-center justify-between pt-2">
-                <button id="btnRunHealthAudit" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-400 border border-slate-700/80 transition flex items-center space-x-1.5 cursor-pointer">
+                <button id="btnRunHealthAudit" title="Run Health Audit: Scan all files in library and generate diagnostic summary without modifying any files" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-400 border border-slate-700/80 transition flex items-center space-x-1.5 cursor-pointer">
                     <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                     </svg>
                     <span>Run Health Audit</span>
                 </button>
                 <div class="flex items-center space-x-2">
-                    <button id="btnCancelBatch" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Close</button>
-                    <button id="btnStartBatch" class="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs font-semibold text-slate-950 shadow-lg shadow-amber-500/20 transition">Start Conversion</button>
+                    <button id="btnCancelBatch" title="Close batch remapper dialog" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Close</button>
+                    <button id="btnStartBatch" title="Start Batch Conversion: Process all General MIDI files in source folder with selected safeguards" class="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-xs font-semibold text-slate-950 shadow-lg shadow-amber-500/20 transition">Start Conversion</button>
                 </div>
             </div>
         </div>
@@ -867,7 +867,7 @@
                         <p id="healthModalSongTitle" class="text-xs text-slate-400 truncate max-w-[320px]">Song Diagnostics</p>
                     </div>
                 </div>
-                <button id="btnCloseHealthModal" class="text-slate-400 hover:text-white transition">
+                <button id="btnCloseHealthModal" title="Close MIDI diagnostics modal" class="text-slate-400 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -881,9 +881,9 @@
                         <span>🎹</span>
                         <span>Yamaha PSS-790 Polyphony Load</span>
                     </span>
-                    <span id="healthPeakVoices" class="font-mono font-bold text-cyan-400">18 / 28 Voices</span>
+                    <span id="healthPeakVoices" title="Peak concurrent note count vs. 28-voice hardware limit of the Yamaha PSS-790" class="font-mono font-bold text-cyan-400 cursor-help">18 / 28 Voices</span>
                 </div>
-                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5">
+                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5" title="Peak concurrent note count vs. 28-voice hardware limit of the Yamaha PSS-790">
                     <div id="healthPolyphonyBar" class="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-300" style="width: 64%;"></div>
                 </div>
                 <div id="healthPolyphonyDescription" class="text-[11px] text-slate-400">
@@ -901,19 +901,19 @@
 
             <!-- Detailed Song Metrics -->
             <div class="grid grid-cols-2 gap-2 text-xs">
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800" title="Total MIDI channels carrying active musical notes in this song">
                     <span class="text-slate-400 text-[10px] block">Active Channels</span>
                     <span id="healthActiveChannels" class="font-bold text-white text-sm">16</span>
                 </div>
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800" title="Cumulative note count across all channels in the song">
                     <span class="text-slate-400 text-[10px] block">Total Notes</span>
                     <span id="healthTotalNotes" class="font-bold text-white text-sm">2,410</span>
                 </div>
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800" title="Pitch bend status: Verifies whether pitch wheels return to center (8192) to prevent detuning">
                     <span class="text-slate-400 text-[10px] block">Pitch Bend Status</span>
                     <span id="healthPitchStatus" class="font-bold text-emerald-400 text-sm">Centered</span>
                 </div>
-                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800" title="Sustain pedal status: Verifies proper CC 64 releases to prevent stuck hanging notes">
                     <span class="text-slate-400 text-[10px] block">Sustain Pedal (CC 64)</span>
                     <span id="healthSustainStatus" class="font-bold text-emerald-400 text-sm">Protected</span>
                 </div>
@@ -921,7 +921,7 @@
 
             <!-- Close Button -->
             <div class="flex justify-end pt-1">
-                <button id="btnDismissHealthModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close Diagnostics</button>
+                <button id="btnDismissHealthModal" title="Close MIDI diagnostics modal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close Diagnostics</button>
             </div>
         </div>
     </div>
@@ -944,7 +944,7 @@
                         <p class="text-[11px] text-slate-400">Keep GM Midi and PSS-790 Midi libraries 100% in parity</p>
                     </div>
                 </div>
-                <button id="btnCloseSyncModal" class="text-slate-400 hover:text-white transition">
+                <button id="btnCloseSyncModal" title="Close library sync dialog" class="text-slate-400 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -962,17 +962,17 @@
 
             <!-- Metrics Card Grid -->
             <div class="grid grid-cols-3 gap-2">
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of General MIDI songs that do not yet have a converted PSS-790 version">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Missing PSS</div>
                     <div id="syncMetricMissing" class="text-lg font-black text-cyan-400">0</div>
                     <div class="text-[10px] text-slate-500">Need conversion</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of PSS-790 files whose original GM source file has a newer modification date">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Outdated</div>
                     <div id="syncMetricOutdated" class="text-lg font-black text-amber-400">0</div>
                     <div class="text-[10px] text-slate-500">GM file is newer</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Files in PSS-790 folder that no longer correspond to any existing GM file">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Orphan PSS</div>
                     <div id="syncMetricOrphans" class="text-lg font-black text-rose-400">0</div>
                     <div class="text-[10px] text-slate-500">No GM source</div>
@@ -981,24 +981,24 @@
 
             <!-- Sync Options Checkboxes -->
             <div class="space-y-2 pt-1 text-xs">
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none">
-                    <input type="checkbox" id="chkSyncMissing" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Convert missing GM songs to PSS-790 format applying full voice and drum remapping">
+                    <input type="checkbox" id="chkSyncMissing" title="Convert missing GM songs to PSS-790 format applying full voice and drum remapping" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
                     <div class="min-w-0">
                         <span class="font-semibold text-slate-200">Convert missing GM songs to PSS-790 format</span>
                         <div class="text-[11px] text-slate-400">Applies full Chart 1/Chart 2 voices & polyphony guard</div>
                     </div>
                 </label>
 
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none">
-                    <input type="checkbox" id="chkSyncOutdated" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Re-convert any PSS-790 files whose source GM files have been modified">
+                    <input type="checkbox" id="chkSyncOutdated" title="Re-convert any PSS-790 files whose source GM files have been modified" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
                     <div class="min-w-0">
                         <span class="font-semibold text-slate-200">Update out-of-date PSS-790 songs</span>
                         <div class="text-[11px] text-slate-400">Re-converts any PSS files whose GM original has been edited</div>
                     </div>
                 </label>
 
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none">
-                    <input type="checkbox" id="chkSyncOrphans" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 accent-rose-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Remove orphaned PSS-790 files that have no matching source GM file">
+                    <input type="checkbox" id="chkSyncOrphans" title="Remove orphaned PSS-790 files that have no matching source GM file" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 accent-rose-500" checked>
                     <div class="min-w-0">
                         <span class="font-semibold text-rose-300">Clean up orphan files in PSS-790 folder</span>
                         <div class="text-[11px] text-slate-400">Removes files in PSS-790 folder that no longer exist in GM Midi</div>
@@ -1006,8 +1006,8 @@
                 </label>
 
                 <div class="pt-2 border-t border-slate-800/80">
-                    <label class="flex items-start space-x-2.5 cursor-pointer select-none">
-                        <input type="checkbox" id="chkSyncForceAll" class="w-4 h-4 mt-0.5 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500">
+                    <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Force re-conversion of the entire library with the latest remapping and SysEx rules">
+                        <input type="checkbox" id="chkSyncForceAll" title="Force re-conversion of the entire library with the latest remapping and SysEx rules" class="w-4 h-4 mt-0.5 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500">
                         <div class="min-w-0">
                             <span class="font-semibold text-amber-300">Force re-convert entire library</span>
                             <div class="text-[11px] text-slate-400">Re-runs all 113+ files with latest SysEx filtering and pitch bend rules</div>
@@ -1029,32 +1029,32 @@
 
             <!-- Action Buttons -->
             <div class="flex items-center justify-end space-x-3 pt-2">
-                <button id="btnCancelSyncModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
-                <button id="btnStartSync" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition">Align & Sync Now</button>
+                <button id="btnCancelSyncModal" title="Close library sync dialog" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
+                <button id="btnStartSync" title="Align &amp; Sync Now: Execute selected synchronization actions to bring folders into 100% parity" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition">Align & Sync Now</button>
             </div>
         </div>
     </div>
 
     <!-- Library Context Menu -->
     <div id="libraryContextMenu" class="fixed z-50 hidden min-w-[190px] bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700/80 shadow-2xl py-1 text-xs text-slate-200 select-none">
-        <div id="ctxItemNewFolder" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
+        <div id="ctxItemNewFolder" title="Create a new subfolder in the active category" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
             <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
             <span>New Folder...</span>
         </div>
-        <div id="ctxItemMove" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
+        <div id="ctxItemMove" title="Move the selected song or folder to another directory" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
             <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
             <span>Move to Folder...</span>
         </div>
-        <div id="ctxItemRename" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
+        <div id="ctxItemRename" title="Rename the selected song or folder" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
             <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
             <span>Rename...</span>
         </div>
-        <div id="ctxItemReveal" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
+        <div id="ctxItemReveal" title="Reveal the file or folder location in Windows File Explorer" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer transition">
             <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             <span>Reveal in Explorer</span>
         </div>
         <div id="ctxSeparator" class="my-1 border-t border-slate-800"></div>
-        <div id="ctxItemDelete" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-rose-950/70 text-rose-300 hover:text-rose-200 cursor-pointer transition">
+        <div id="ctxItemDelete" title="Permanently delete the selected song or folder from disk" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-rose-950/70 text-rose-300 hover:text-rose-200 cursor-pointer transition">
             <svg class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             <span>Delete...</span>
         </div>
@@ -1069,7 +1069,7 @@
                     <span id="actionModalIcon" class="text-base text-cyan-400">📁</span>
                     <h3 id="actionModalTitle" class="text-sm font-bold text-white">Manage Library File</h3>
                 </div>
-                <button id="btnCloseActionModal" class="text-slate-400 hover:text-white transition">
+                <button id="btnCloseActionModal" title="Cancel operation and close dialog" class="text-slate-400 hover:text-white transition">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -1081,19 +1081,19 @@
             <!-- Dynamic Input Container (for New Folder / Rename) -->
             <div id="actionModalInputContainer" class="space-y-1">
                 <label id="actionModalInputLabel" class="block text-slate-400 font-medium text-xs">Name:</label>
-                <input type="text" id="actionModalInput" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-white text-xs font-medium focus:outline-none focus:border-cyan-500 transition">
+                <input type="text" id="actionModalInput" title="Enter new name for folder or file" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-white text-xs font-medium focus:outline-none focus:border-cyan-500 transition">
             </div>
 
             <!-- Dynamic Folder Selection (for Move to Folder) -->
             <div id="actionModalMoveContainer" class="space-y-3 hidden">
                 <div class="space-y-1">
                     <label class="block text-slate-400 font-medium text-xs">Destination Folder:</label>
-                    <select id="actionModalFolderSelect" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-white text-xs font-medium focus:outline-none focus:border-cyan-500 cursor-pointer">
+                    <select id="actionModalFolderSelect" title="Select target destination folder" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-white text-xs font-medium focus:outline-none focus:border-cyan-500 cursor-pointer">
                     </select>
                 </div>
                 <div id="actionModalLinkedMoveContainer" class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 hidden">
-                    <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none">
-                        <input type="checkbox" id="chkAlsoMoveLinked" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-cyan-500" checked>
+                    <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also move the corresponding version in the mirrored library folder (GM <-> PSS-790)">
+                        <input type="checkbox" id="chkAlsoMoveLinked" title="Also move the corresponding version in the mirrored library folder (GM <-> PSS-790)" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-cyan-500" checked>
                         <div class="space-y-0.5 min-w-0">
                             <span class="font-semibold text-cyan-300">Also move matching linked version to mirrored folder</span>
                             <div id="actionModalLinkedMovePathLabel" class="text-[11px] font-mono text-slate-400 truncate">PSS-790 Midi\...</div>
@@ -1104,8 +1104,8 @@
 
             <!-- Dynamic Linked Deletion Checkbox (for GM Delete with matching PSS-790) -->
             <div id="actionModalLinkedDeleteContainer" class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 hidden">
-                <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none">
-                    <input type="checkbox" id="chkAlsoDeleteLinked" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-rose-500">
+                <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also delete the corresponding converted PSS-790 file">
+                    <input type="checkbox" id="chkAlsoDeleteLinked" title="Also delete the corresponding converted PSS-790 file" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-rose-500">
                     <div class="space-y-0.5 min-w-0">
                         <span class="font-semibold text-rose-300">Also delete matching PSS-790 version</span>
                         <div id="actionModalLinkedPathLabel" class="text-[11px] font-mono text-slate-400 truncate">PSS-790 Midi\...</div>
@@ -1115,8 +1115,8 @@
 
             <!-- Modal Action Buttons -->
             <div class="flex items-center justify-end space-x-2.5 pt-2">
-                <button id="btnCancelActionModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
-                <button id="btnConfirmActionModal" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition">Confirm</button>
+                <button id="btnCancelActionModal" title="Cancel operation and close dialog" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
+                <button id="btnConfirmActionModal" title="Confirm and execute file operation" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-semibold text-white shadow-lg shadow-cyan-500/20 transition">Confirm</button>
             </div>
         </div>
     </div>
@@ -1134,10 +1134,10 @@
                     </div>
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 MIDI Remapper & Studio v1.14.0</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 MIDI Remapper & Studio v1.15.0</p>
                     </div>
                 </div>
-                <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close">
+                <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -1215,7 +1215,7 @@
 
             <!-- Modal Footer -->
             <div class="flex items-center justify-end border-t border-slate-800 pt-3 shrink-0">
-                <button id="btnDismissAboutModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close</button>
+                <button id="btnDismissAboutModal" title="Close About and legal notices dialog" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close</button>
             </div>
         </div>
     </div>
@@ -1234,7 +1234,7 @@
                         <p id="sysexInspectSubtitle" class="text-[11px] text-slate-400">SysEx Binary Structure & Hex Inspection</p>
                     </div>
                 </div>
-                <button id="btnCloseSysexInspectModal" class="text-slate-400 hover:text-white transition">
+                <button id="btnCloseSysexInspectModal" title="Close hex inspector modal" class="text-slate-400 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                     </svg>
@@ -1243,15 +1243,15 @@
 
             <!-- Inspect Metrics Banner -->
             <div class="grid grid-cols-3 gap-2 shrink-0">
-                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center">
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center" title="Total binary size of inspected SysEx file">
                     <span class="text-[10px] uppercase font-bold text-slate-400 block">Total Size</span>
                     <span id="sysexInspectBytes" class="text-sm font-bold text-white font-mono">0 B</span>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center">
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center" title="Number of discrete F0...F7 SysEx message packets in file">
                     <span class="text-[10px] uppercase font-bold text-slate-400 block">SysEx Packets</span>
                     <span id="sysexInspectPackets" class="text-sm font-bold text-cyan-400 font-mono">0</span>
                 </div>
-                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center">
+                <div class="p-2 rounded-xl bg-slate-900/80 border border-slate-800 text-center" title="Manufacturer ID identified from SysEx header bytes">
                     <span class="text-[10px] uppercase font-bold text-slate-400 block">Detected Device</span>
                     <span id="sysexInspectMfr" class="text-sm font-bold text-indigo-400">Yamaha</span>
                 </div>
@@ -1266,8 +1266,8 @@
             <div class="flex items-center justify-between border-t border-slate-800 pt-3 shrink-0">
                 <span class="text-[10px] text-slate-500">First 512 bytes displayed with ASCII representation</span>
                 <div class="flex items-center space-x-2">
-                    <button id="btnCopySysexHex" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition">Copy Hex</button>
-                    <button id="btnDismissSysexInspectModal" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">Done</button>
+                    <button id="btnCopySysexHex" title="Copy formatted hex dump to Windows clipboard" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 hover:text-white transition">Copy Hex</button>
+                    <button id="btnDismissSysexInspectModal" title="Close hex inspector modal" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition">Done</button>
                 </div>
             </div>
         </div>
