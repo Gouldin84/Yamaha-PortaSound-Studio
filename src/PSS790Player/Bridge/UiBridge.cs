@@ -20,6 +20,7 @@ namespace PSS790Player.Bridge
         private readonly WebView2 _webView;
         private readonly MidiPlayer _player;
         private readonly MidiRecorder _recorder;
+        private readonly SysExManager _sysexManager;
         private readonly RemapperOptions _options = new();
         private MidiFile? _loadedOriginalMidi;
         private MidiFile? _loadedRemappedMidi;
@@ -88,6 +89,47 @@ namespace PSS790Player.Bridge
                     noteCount = e.NoteCount,
                     bar = e.CurrentBar,
                     beat = e.CurrentBeat
+                });
+            };
+
+            _sysexManager = new SysExManager(_player, _recorder);
+
+            _sysexManager.CaptureProgress += (s, e) =>
+            {
+                SendToJs("sysex_capture_progress", new
+                {
+                    packetCount = e.PacketCount,
+                    byteCount = e.ByteCount,
+                    statusMessage = e.StatusMessage
+                });
+            };
+
+            _sysexManager.DumpCaptured += (s, dump) =>
+            {
+                SendToJs("sysex_dump_captured", new
+                {
+                    fileName = dump.FileName,
+                    filePath = dump.FilePath,
+                    fileSize = dump.FileSizeFormatted,
+                    createdAt = dump.CreatedAtFormatted,
+                    packetCount = dump.PacketCount,
+                    manufacturer = dump.Manufacturer,
+                    dumpType = dump.DumpType,
+                    hexPreview = dump.HexPreview
+                });
+                SendSysExLibraryUpdate();
+                SendToJs("notification", new { message = $"SysEx bulk dump auto-saved: {dump.FileName}" });
+            };
+
+            _sysexManager.TransmitProgress += (s, e) =>
+            {
+                SendToJs("sysex_transmit_progress", new
+                {
+                    currentPacket = e.CurrentPacket,
+                    totalPackets = e.TotalPackets,
+                    percent = e.Percent,
+                    statusMessage = e.StatusMessage,
+                    isCompleted = e.IsCompleted
                 });
             };
         }
@@ -333,6 +375,104 @@ namespace PSS790Player.Bridge
                         var thru = root.GetProperty("enabled").GetBoolean();
                         _recorder.MidiThruEnabled = thru;
                         break;
+                    case "get_sysex_library":
+                        SendSysExLibraryUpdate();
+                        break;
+                    case "start_sysex_capture":
+                        _sysexManager.StartCapture();
+                        break;
+                    case "stop_sysex_capture":
+                        _sysexManager.StopCapture(autoSave: true);
+                        break;
+                    case "transmit_sysex_dump":
+                        var txPath = root.TryGetProperty("filePath", out var txP) ? txP.GetString() : null;
+                        var txDelay = root.TryGetProperty("delayMs", out var txdP) ? txdP.GetInt32() : 30;
+                        if (!string.IsNullOrEmpty(txPath))
+                        {
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    await _sysexManager.TransmitDumpAsync(txPath, txDelay);
+                                }
+                                catch (Exception ex)
+                                {
+                                    SendToJs("error", new { message = $"SysEx transmission failed: {ex.Message}" });
+                                }
+                            });
+                        }
+                        break;
+                    case "cancel_sysex_transmit":
+                        _sysexManager.CancelTransmission();
+                        break;
+                    case "delete_sysex_dump":
+                        var delPath = root.TryGetProperty("filePath", out var delP) ? delP.GetString() : null;
+                        if (!string.IsNullOrEmpty(delPath))
+                        {
+                            _sysexManager.DeleteDump(delPath);
+                            SendSysExLibraryUpdate();
+                            SendToJs("notification", new { message = "SysEx backup deleted." });
+                        }
+                        break;
+                    case "rename_sysex_dump":
+                        var renPath = root.TryGetProperty("filePath", out var renP) ? renP.GetString() : null;
+                        var newName = root.TryGetProperty("newName", out var nnP) ? nnP.GetString() : null;
+                        if (!string.IsNullOrEmpty(renPath) && !string.IsNullOrEmpty(newName))
+                        {
+                            try
+                            {
+                                _sysexManager.RenameDump(renPath, newName);
+                                SendSysExLibraryUpdate();
+                                SendToJs("notification", new { message = $"Renamed to: {newName}" });
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = ex.Message });
+                            }
+                        }
+                        break;
+                    case "import_sysex_dump":
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            var dlg = new OpenFileDialog
+                            {
+                                Filter = "SysEx Files (*.syx)|*.syx|All Files (*.*)|*.*",
+                                Title = "Import System Exclusive Dump File"
+                            };
+                            if (dlg.ShowDialog() == true)
+                            {
+                                var imported = _sysexManager.ImportDump(dlg.FileName);
+                                SendSysExLibraryUpdate();
+                                SendToJs("notification", new { message = $"Imported SysEx dump: {Path.GetFileName(imported)}" });
+                            }
+                        });
+                        break;
+                    case "inspect_sysex_dump":
+                        var inspPath = root.TryGetProperty("filePath", out var ipP) ? ipP.GetString() : null;
+                        if (!string.IsNullOrEmpty(inspPath))
+                        {
+                            try
+                            {
+                                var info = SysExManager.ParseDumpInfo(inspPath);
+                                SendToJs("sysex_dump_inspected", info);
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = $"Failed to inspect SysEx dump: {ex.Message}" });
+                            }
+                        }
+                        break;
+                    case "send_quick_sysex":
+                        var cmd = root.TryGetProperty("command", out var cCmd) ? cCmd.GetString() : null;
+                        if (!string.IsNullOrEmpty(cmd))
+                        {
+                            _sysexManager.SendQuickCommand(cmd);
+                            SendToJs("notification", new { message = $"Transmitted SysEx command: {cmd.ToUpperInvariant()}" });
+                        }
+                        break;
+                    case "open_sysex_folder":
+                        AppPaths.OpenSysExFolderInExplorer();
+                        break;
                 }
             }
             catch (Exception ex)
@@ -369,7 +509,8 @@ namespace PSS790Player.Bridge
                 defaultBatchSource = AppPaths.GmMidiDir,
                 defaultBatchTarget = AppPaths.Pss790MidiDir,
                 midiThru = _recorder.MidiThruEnabled,
-                recorderBpm = _recorder.Bpm
+                recorderBpm = _recorder.Bpm,
+                sysexLibrary = _sysexManager.GetSysExLibrary()
             });
 
             if (devices.Count > 0)
@@ -1867,10 +2008,17 @@ namespace PSS790Player.Bridge
             }
         }
 
+        private void SendSysExLibraryUpdate()
+        {
+            var list = _sysexManager.GetSysExLibrary();
+            SendToJs("sysex_library_updated", new { dumps = list });
+        }
+
         public void Dispose()
         {
             _batchCts?.Cancel();
             _syncCts?.Cancel();
+            _sysexManager.Dispose();
             _recorder.Dispose();
             _player.Dispose();
             GC.SuppressFinalize(this);

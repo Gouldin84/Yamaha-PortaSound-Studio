@@ -48,7 +48,14 @@ let state = {
         isActive: false,
         velocity: 0,
         lastNote: "-"
-    }))
+    })),
+    // SysEx Vault State
+    sysexLibrary: [],
+    selectedSysexDump: null,
+    isSysexCapturing: false,
+    isSysexTransmitting: false,
+    sysexSearchQuery: "",
+    lastInspectedHex: ""
 };
 
 // --- Web Audio Metronome Click ---
@@ -82,18 +89,30 @@ function getNoteName(noteNumber) {
 function switchTab(tab) {
     state.activeTab = tab;
     const isPlayer = tab === "player";
-    document.getElementById("viewPlayer").classList.toggle("hidden", !isPlayer);
-    document.getElementById("viewRecorder").classList.toggle("hidden", isPlayer);
+    const isRecorder = tab === "recorder";
+    const isSysex = tab === "sysex";
+
+    const viewPlayer = document.getElementById("viewPlayer");
+    const viewRecorder = document.getElementById("viewRecorder");
+    const viewSysex = document.getElementById("viewSysex");
+
+    if (viewPlayer) viewPlayer.classList.toggle("hidden", !isPlayer);
+    if (viewRecorder) viewRecorder.classList.toggle("hidden", !isRecorder);
+    if (viewSysex) viewSysex.classList.toggle("hidden", !isSysex);
 
     const tabPlayer = document.getElementById("tabBtnPlayer");
     const tabRec = document.getElementById("tabBtnRecorder");
+    const tabSysex = document.getElementById("tabBtnSysex");
 
-    if (isPlayer) {
-        tabPlayer.className = "tab-btn active flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all";
-        tabRec.className = "tab-btn flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all";
-    } else {
-        tabPlayer.className = "tab-btn flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-all";
-        tabRec.className = "tab-btn active flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white transition-all";
+    const activeCls = "tab-btn active flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-white transition-all";
+    const inactiveCls = "tab-btn flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md text-xs font-semibold text-slate-400 hover:text-white transition-all";
+
+    if (tabPlayer) tabPlayer.className = isPlayer ? activeCls : inactiveCls;
+    if (tabRec) tabRec.className = isRecorder ? activeCls : inactiveCls;
+    if (tabSysex) tabSysex.className = isSysex ? activeCls : inactiveCls;
+
+    if (isSysex) {
+        renderSysExLibrary();
     }
 }
 
@@ -131,6 +150,10 @@ function handleHostMessage(msg) {
             }
             if (msg.data.defaultBatchSource) document.getElementById("batchSourceDir").value = msg.data.defaultBatchSource;
             if (msg.data.defaultBatchTarget) document.getElementById("batchTargetDir").value = msg.data.defaultBatchTarget;
+            if (msg.data.sysexLibrary) {
+                state.sysexLibrary = msg.data.sysexLibrary;
+                renderSysExLibrary();
+            }
             renderDeviceSelect();
             renderInputDeviceSelect();
             renderLibrarySelect();
@@ -302,6 +325,27 @@ function handleHostMessage(msg) {
 
         case "sync_completed":
             handleSyncCompleted(msg.data);
+            break;
+
+        case "sysex_capture_progress":
+            updateSysexCaptureProgress(msg.data);
+            break;
+
+        case "sysex_dump_captured":
+            handleSysexDumpCaptured(msg.data);
+            break;
+
+        case "sysex_transmit_progress":
+            updateSysexTransmitProgress(msg.data);
+            break;
+
+        case "sysex_library_updated":
+            state.sysexLibrary = msg.data || [];
+            renderSysExLibrary();
+            break;
+
+        case "sysex_dump_inspected":
+            showSysexInspectModal(msg.data);
             break;
 
         case "notification":
@@ -1961,6 +2005,7 @@ function showToast(message, isError = false) {
 // Workspace Tabs
 document.getElementById("tabBtnPlayer").addEventListener("click", () => switchTab("player"));
 document.getElementById("tabBtnRecorder").addEventListener("click", () => switchTab("recorder"));
+document.getElementById("tabBtnSysex")?.addEventListener("click", () => switchTab("sysex"));
 
 // Primary Hardware Output Select
 document.getElementById("deviceSelect").addEventListener("change", (e) => {
@@ -2541,6 +2586,388 @@ document.getElementById("btnCloseHealthModal")?.addEventListener("click", () => 
 
 document.getElementById("btnDismissHealthModal")?.addEventListener("click", () => {
     document.getElementById("songHealthModal")?.classList.add("hidden");
+});
+
+// ==========================================
+// SysEx Vault & Bulk Dump Engine Frontend
+// ==========================================
+
+function formatBytes(bytes) {
+    if (bytes === 0 || !bytes || isNaN(bytes)) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+function renderSysExLibrary(dumps) {
+    if (dumps) state.sysexLibrary = dumps;
+    const listEl = document.getElementById("sysexLibraryList");
+    const countEl = document.getElementById("sysexLibraryCount");
+    if (!listEl) return;
+
+    let items = state.sysexLibrary || [];
+    if (state.sysexSearchQuery) {
+        const q = state.sysexSearchQuery.toLowerCase();
+        items = items.filter(d => 
+            (d.fileName && d.fileName.toLowerCase().includes(q)) ||
+            (d.manufacturer && d.manufacturer.toLowerCase().includes(q)) ||
+            (d.createdTime && d.createdTime.toLowerCase().includes(q))
+        );
+    }
+
+    if (countEl) countEl.textContent = `${items.length} dump${items.length === 1 ? '' : 's'}`;
+
+    if (items.length === 0) {
+        listEl.innerHTML = `
+            <div class="p-8 text-center text-slate-500 text-xs flex flex-col items-center justify-center space-y-2">
+                <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                </svg>
+                <p>${state.sysexSearchQuery ? 'No SysEx dumps match your search.' : 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and press MEMORY BULK DUMP on your PSS-790.'}</p>
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = items.map((dump) => {
+        const isSelected = state.selectedSysexDump && state.selectedSysexDump.filePath === dump.filePath;
+        const isYamaha = dump.manufacturer && dump.manufacturer.toLowerCase().includes("yamaha");
+        const mfrBadgeClass = isYamaha 
+            ? "bg-indigo-950/80 text-indigo-300 border-indigo-700/60" 
+            : "bg-slate-800 text-slate-300 border-slate-700";
+
+        return `
+            <div class="p-3 rounded-xl border ${isSelected ? 'bg-indigo-950/30 border-indigo-500/80 shadow-lg shadow-indigo-950/40' : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'} transition-all space-y-2 group">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-xs text-indigo-400 font-mono">💾</span>
+                            <span class="text-xs font-bold text-white truncate font-mono" title="${dump.fileName}">${dump.fileName}</span>
+                        </div>
+                        <div class="flex items-center space-x-2 text-[10px] text-slate-400 mt-1 flex-wrap gap-y-1">
+                            <span class="px-1.5 py-0.2 rounded font-semibold border ${mfrBadgeClass}">${dump.manufacturer || 'SysEx'}</span>
+                            <span class="font-mono text-slate-300">${dump.formattedSize || formatBytes(dump.byteSize)}</span>
+                            <span class="font-mono text-cyan-400">${dump.packetCount} pkt${dump.packetCount === 1 ? '' : 's'}</span>
+                            <span class="text-slate-500">${dump.createdTime || ''}</span>
+                        </div>
+                    </div>
+                    <button class="btn-select-sysex shrink-0 px-2.5 py-1 rounded-lg ${isSelected ? 'bg-indigo-600 text-white font-semibold' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'} text-[11px] border border-slate-700/60 transition active:scale-95" data-filepath="${dump.filePath}">
+                        ${isSelected ? '✓ Selected' : 'Select'}
+                    </button>
+                </div>
+
+                <div class="flex items-center justify-between border-t border-slate-800/80 pt-2 text-[11px]">
+                    <button class="btn-inspect-sysex flex items-center space-x-1 text-slate-400 hover:text-cyan-300 transition" data-filepath="${dump.filePath}">
+                        <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                        </svg>
+                        <span>Inspect Hex</span>
+                    </button>
+                    <div class="flex items-center space-x-2">
+                        <button class="btn-rename-sysex text-slate-400 hover:text-slate-200 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Rename Dump">
+                            Rename
+                        </button>
+                        <span class="text-slate-700">•</span>
+                        <button class="btn-delete-sysex text-rose-400/80 hover:text-rose-300 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Delete Dump">
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    listEl.querySelectorAll(".btn-select-sysex").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const fp = btn.getAttribute("data-filepath");
+            const d = state.sysexLibrary.find(x => x.filePath === fp);
+            if (d) selectSysexDumpForTransmit(d);
+        });
+    });
+
+    listEl.querySelectorAll(".btn-inspect-sysex").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const fp = btn.getAttribute("data-filepath");
+            sendToHost("inspect_sysex_dump", { filePath: fp });
+        });
+    });
+
+    listEl.querySelectorAll(".btn-rename-sysex").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const fp = btn.getAttribute("data-filepath");
+            const fn = btn.getAttribute("data-filename");
+            const newName = prompt(`Enter new filename for SysEx dump:`, fn);
+            if (newName && newName.trim() && newName.trim() !== fn) {
+                sendToHost("rename_sysex_dump", { filePath: fp, newFileName: newName.trim() });
+            }
+        });
+    });
+
+    listEl.querySelectorAll(".btn-delete-sysex").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const fp = btn.getAttribute("data-filepath");
+            const fn = btn.getAttribute("data-filename");
+            if (confirm(`Permanently delete SysEx dump "${fn}"?`)) {
+                sendToHost("delete_sysex_dump", { filePath: fp });
+            }
+        });
+    });
+}
+
+function selectSysexDumpForTransmit(dump) {
+    state.selectedSysexDump = dump;
+    const titleEl = document.getElementById("sysexSelectedDumpTitle");
+    const sizeEl = document.getElementById("sysexSelectedDumpSize");
+    const pktsEl = document.getElementById("sysexSelectedDumpPackets");
+    const mfrEl = document.getElementById("sysexSelectedDumpMfr");
+    const btnTransmit = document.getElementById("btnTransmitSysex");
+
+    if (titleEl) titleEl.textContent = dump.fileName;
+    if (sizeEl) sizeEl.textContent = dump.formattedSize || formatBytes(dump.byteSize);
+    if (pktsEl) pktsEl.textContent = `${dump.packetCount} packets`;
+    if (mfrEl) mfrEl.textContent = dump.manufacturer || "Generic SysEx";
+    if (btnTransmit) btnTransmit.removeAttribute("disabled");
+
+    renderSysExLibrary();
+}
+
+function startSysexCapture() {
+    state.isSysexCapturing = true;
+    sendToHost("start_sysex_capture");
+    const btnStart = document.getElementById("btnStartSysexCapture");
+    const btnStop = document.getElementById("btnStopSysexCapture");
+    const badge = document.getElementById("sysexCaptureStatusBadge");
+    const pulse = document.getElementById("sysexCapturePulse");
+
+    if (btnStart) btnStart.classList.add("hidden");
+    if (btnStop) btnStop.classList.remove("hidden");
+    if (badge) {
+        badge.textContent = "Listening...";
+        badge.className = "px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800 animate-pulse";
+    }
+    if (pulse) pulse.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping";
+    showToast("SysEx Capture active: waiting for PSS-790 Memory Bulk Dump...");
+}
+
+function stopSysexCapture() {
+    state.isSysexCapturing = false;
+    sendToHost("stop_sysex_capture");
+    const btnStart = document.getElementById("btnStartSysexCapture");
+    const btnStop = document.getElementById("btnStopSysexCapture");
+    const badge = document.getElementById("sysexCaptureStatusBadge");
+    const pulse = document.getElementById("sysexCapturePulse");
+
+    if (btnStart) btnStart.classList.remove("hidden");
+    if (btnStop) btnStop.classList.add("hidden");
+    if (badge) {
+        badge.textContent = "Idle";
+        badge.className = "px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700";
+    }
+    if (pulse) pulse.className = "w-2.5 h-2.5 rounded-full bg-slate-600";
+}
+
+function updateSysexCaptureProgress(data) {
+    const pktsEl = document.getElementById("sysexCapturePackets");
+    const bytesEl = document.getElementById("sysexCaptureBytes");
+    const badge = document.getElementById("sysexCaptureStatusBadge");
+    const pulse = document.getElementById("sysexCapturePulse");
+
+    if (pktsEl) pktsEl.textContent = data.packetCount || 0;
+    if (bytesEl) bytesEl.textContent = formatBytes(data.byteCount || 0);
+
+    if (data.status) {
+        if (badge) badge.textContent = data.status;
+    }
+    if (data.packetCount > 0 && pulse) {
+        pulse.className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+    }
+}
+
+function handleSysexDumpCaptured(data) {
+    stopSysexCapture();
+    showToast(`Saved SysEx dump: ${data.fileName} (${formatBytes(data.totalBytes)})`);
+    sendToHost("get_sysex_library");
+    selectSysexDumpForTransmit({
+        fileName: data.fileName,
+        filePath: data.filePath,
+        byteSize: data.totalBytes,
+        packetCount: data.totalPackets,
+        manufacturer: data.manufacturer,
+        formattedSize: formatBytes(data.totalBytes)
+    });
+}
+
+function startSysexTransmit() {
+    if (!state.selectedSysexDump) {
+        showToast("Please select a SysEx dump from the library first.", true);
+        return;
+    }
+
+    const delayEl = document.getElementById("sysexPacketDelaySelect");
+    const delay = delayEl ? (parseInt(delayEl.value) || 30) : 30;
+
+    const confirmed = confirm(
+        `Restore "${state.selectedSysexDump.fileName}" to Yamaha PSS-790?\n\n` +
+        `WARNING: This will overwrite keyboard Song Memory and Vector Voice registers.\n` +
+        `Pacing delay: ${delay}ms per packet.\n\n` +
+        `Ensure your PSS-790 is powered on and connected to MIDI OUT.`
+    );
+    if (!confirmed) return;
+
+    state.isSysexTransmitting = true;
+    const btnTransmit = document.getElementById("btnTransmitSysex");
+    const btnCancel = document.getElementById("btnCancelSysexTransmit");
+    const progressContainer = document.getElementById("sysexTransmitProgressContainer");
+
+    if (btnTransmit) btnTransmit.classList.add("hidden");
+    if (btnCancel) btnCancel.classList.remove("hidden");
+    if (progressContainer) progressContainer.classList.remove("hidden");
+
+    sendToHost("transmit_sysex_dump", {
+        filePath: state.selectedSysexDump.filePath,
+        packetDelayMs: delay
+    });
+}
+
+function cancelSysexTransmit() {
+    sendToHost("cancel_sysex_transmit");
+}
+
+function updateSysexTransmitProgress(data) {
+    const progressContainer = document.getElementById("sysexTransmitProgressContainer");
+    const statusText = document.getElementById("sysexTransmitStatusText");
+    const percentEl = document.getElementById("sysexTransmitPercent");
+    const progressBar = document.getElementById("sysexTransmitProgressBar");
+    const btnTransmit = document.getElementById("btnTransmitSysex");
+    const btnCancel = document.getElementById("btnCancelSysexTransmit");
+
+    if (statusText) {
+        statusText.textContent = `Transmitting packet ${data.currentPacket}/${data.totalPackets} (${formatBytes(data.currentBytes)} / ${formatBytes(data.totalBytes)})`;
+    }
+    if (percentEl) percentEl.textContent = `${data.percent}%`;
+    if (progressBar) progressBar.style.width = `${data.percent}%`;
+
+    if (data.isCompleted) {
+        state.isSysexTransmitting = false;
+        if (btnTransmit) btnTransmit.classList.remove("hidden");
+        if (btnCancel) btnCancel.classList.add("hidden");
+        showToast("SysEx bulk dump successfully restored to Yamaha PSS-790!");
+        setTimeout(() => {
+            if (!state.isSysexTransmitting && progressContainer) progressContainer.classList.add("hidden");
+        }, 2000);
+    } else if (data.isCancelled) {
+        state.isSysexTransmitting = false;
+        if (btnTransmit) btnTransmit.classList.remove("hidden");
+        if (btnCancel) btnCancel.classList.add("hidden");
+        showToast("SysEx transmission cancelled.");
+        if (progressContainer) progressContainer.classList.add("hidden");
+    }
+}
+
+function showSysexInspectModal(data) {
+    if (data.error) {
+        showToast(data.error, true);
+        return;
+    }
+
+    state.lastInspectedHex = data.hexDump || "";
+    const modal = document.getElementById("sysexInspectModal");
+    const titleEl = document.getElementById("sysexInspectTitle");
+    const bytesEl = document.getElementById("sysexInspectBytes");
+    const pktsEl = document.getElementById("sysexInspectPackets");
+    const mfrEl = document.getElementById("sysexInspectMfr");
+    const contentEl = document.getElementById("sysexInspectHexContent");
+
+    if (titleEl) titleEl.textContent = data.fileName || "SysEx Dump";
+    if (bytesEl) bytesEl.textContent = data.formattedSize || formatBytes(data.byteSize);
+    if (pktsEl) pktsEl.textContent = `${data.packetCount} packets`;
+    if (mfrEl) mfrEl.textContent = data.manufacturer || "Generic SysEx";
+    if (contentEl) contentEl.textContent = data.hexDump || "No binary content";
+
+    if (modal) modal.classList.remove("hidden");
+}
+
+// SysEx Vault Event Listeners
+document.getElementById("btnStartSysexCapture")?.addEventListener("click", startSysexCapture);
+document.getElementById("btnStopSysexCapture")?.addEventListener("click", stopSysexCapture);
+document.getElementById("btnTransmitSysex")?.addEventListener("click", startSysexTransmit);
+document.getElementById("btnCancelSysexTransmit")?.addEventListener("click", cancelSysexTransmit);
+
+document.getElementById("sysexSearchInput")?.addEventListener("input", (e) => {
+    state.sysexSearchQuery = e.target.value;
+    renderSysExLibrary();
+});
+
+document.getElementById("btnImportSysex")?.addEventListener("click", () => {
+    document.getElementById("inputImportSysex")?.click();
+});
+
+document.getElementById("inputImportSysex")?.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const arrayBuf = evt.target.result;
+        const bytes = new Uint8Array(arrayBuf);
+        let binary = "";
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = btoa(binary);
+        sendToHost("import_sysex_dump", { fileName: file.name, base64Data: b64 });
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+});
+
+document.getElementById("btnRefreshSysexLibrary")?.addEventListener("click", () => {
+    sendToHost("get_sysex_library");
+});
+
+document.getElementById("btnQuickGmOn")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "gm_on" });
+    showToast("Sent GM System On (F0 7E 7F 09 01 F7)");
+});
+
+document.getElementById("btnQuickXgOn")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "xg_on" });
+    showToast("Sent Yamaha XG System On (F0 43 10 4C ... F7)");
+});
+
+document.getElementById("btnQuickMasterVol")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "master_volume_max" });
+    showToast("Sent Master Volume Full (127)");
+});
+
+document.getElementById("btnQuickAllReset")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "all_reset" });
+    showToast("Sent All Notes Off & Reset Controllers");
+});
+
+document.getElementById("btnOpenSysExFolder")?.addEventListener("click", () => {
+    sendToHost("open_sysex_folder");
+});
+
+// Hex Inspect Modal Dismiss & Copy
+document.getElementById("btnCloseSysexInspectModal")?.addEventListener("click", () => {
+    document.getElementById("sysexInspectModal")?.classList.add("hidden");
+});
+
+document.getElementById("btnDismissSysexInspectModal")?.addEventListener("click", () => {
+    document.getElementById("sysexInspectModal")?.classList.add("hidden");
+});
+
+document.getElementById("btnCopySysexHex")?.addEventListener("click", () => {
+    if (state.lastInspectedHex) {
+        navigator.clipboard.writeText(state.lastInspectedHex).then(() => {
+            showToast("SysEx hex dump copied to clipboard!");
+        }).catch(() => {
+            showToast("Failed to copy hex to clipboard.", true);
+        });
+    }
 });
 
 // Trigger initial handshake and keyboard shortcuts

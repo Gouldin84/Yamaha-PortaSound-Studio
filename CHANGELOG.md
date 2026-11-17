@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-11-17
+
+### Added
+- **SysEx Vault & Memory Bulk Dump Librarian (Tab 3)**:
+  - Added a dedicated 3rd tab to the application: **`SysEx Vault`** for full bidirectional Yamaha PSS-790 memory bulk dumps, backup archiving, hardware restoration, and low-level system messaging.
+- **Hardware Bulk Dump Capture (`SysExManager.cs`)**:
+  - Live capture deck listens for PSS-790 `MEMORY BULK DUMP` panel transfers (triggered by pressing the button twice with countdown display `b-8`).
+  - Seamless stream completion detection via 1.5s idle timer automatically writes binary captures directly to disk as `PSS790_Backup_YYYYMMDD_HHMMSS.syx`.
+- **Dedicated SysEx Library Isolation**:
+  - All `.syx` archives are isolated in `Music\Midi\SysEx Library\`, completely separate from song playlists and the Player/Studio tree.
+  - SysEx Explorer provides search/filtering, card metadata (packet count, byte size, timestamp, manufacturer detection), renaming, and deletion.
+- **Paced SysEx Transmission with Buffer Overflow Guard (`<bu full>`)**:
+  - Safely restores bulk memory dumps back to the Yamaha PSS-790 with configurable inter-packet delay (15ms, 25ms, default 30ms, 50ms, 100ms) and live byte/packet countdown progress bar.
+  - Protects the 8-bit Yamaha microcomputer from hardware buffer overflow error `<bu full>`.
+- **Integrated Binary Hex Inspector**:
+  - Visual modal inspects any `.syx` file with monospace address offsets, hex byte formatting, and ASCII character translation. Includes one-click copy to clipboard.
+- **Quick SysEx Hardware Control Deck**:
+  - One-click transmission of hardware commands: GM System On (`F0 7E 7F 09 01 F7`), Yamaha XG System On (`F0 43 10 4C 00 00 7E 00 F7`), Master Volume Full (`F0 7F 7F 04 01 7F 7F F7`), and All Reset.
+- **SysEx Test Suite (`SysExManagerTests.cs`)**:
+  - Added 7 unit tests covering packet boundary extraction, framing fallbacks, Yamaha manufacturer ID detection, hex preview column generation, file renaming, and deletion (92/92 tests passing).
+
 ## [1.9.0] - 2026-11-17
 
 ### Added

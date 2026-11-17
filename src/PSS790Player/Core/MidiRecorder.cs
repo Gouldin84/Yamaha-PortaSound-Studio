@@ -62,6 +62,7 @@ namespace PSS790Player.Core
         public event EventHandler<ChannelActivityEventArgs>? InputActivity;
         public event EventHandler<RecorderStateEventArgs>? StateChanged;
         public event EventHandler<RecorderTickEventArgs>? Tick;
+        public event EventHandler<NormalSysExEvent>? SysExReceived;
 
         public MidiRecorder()
         {
@@ -123,6 +124,12 @@ namespace PSS790Player.Core
 
         private void OnInputEventReceived(object? sender, MidiEventReceivedEventArgs e)
         {
+            if (e.Event is NormalSysExEvent sysex)
+            {
+                SysExReceived?.Invoke(this, sysex);
+                return;
+            }
+
             if (e.Event is ChannelEvent channelEvent)
             {
                 int ch = channelEvent.Channel;
