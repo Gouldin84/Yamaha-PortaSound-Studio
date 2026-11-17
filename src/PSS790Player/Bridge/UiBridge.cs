@@ -678,47 +678,54 @@ namespace PSS790Player.Bridge
             }
         }
 
-        private void HandleGetInitialData()
+        public void HandleGetInitialData()
         {
-            var devices = MidiPlayer.GetOutputDeviceNames();
-            var inputDevices = MidiRecorder.GetInputDeviceNames();
-            var voices = Constants.Pss790Voices.Values
-                .OrderBy(v => v.VoiceNumber)
-                .Select(v => new
+            try
+            {
+                var devices = MidiPlayer.GetOutputDeviceNames();
+                var inputDevices = MidiRecorder.GetInputDeviceNames();
+                var voices = Constants.Pss790Voices.Values
+                    .OrderBy(v => v.VoiceNumber)
+                    .Select(v => new
+                    {
+                        number = v.VoiceNumber,
+                        name = v.Name,
+                        category = v.Category,
+                        midiProgram = v.MidiProgram
+                    })
+                    .ToList();
+
+                var libraryData = ScanLibraryFiles();
+
+                SendToJs("initial_data", new
                 {
-                    number = v.VoiceNumber,
-                    name = v.Name,
-                    category = v.Category,
-                    midiProgram = v.MidiProgram
-                })
-                .ToList();
+                    devices,
+                    inputDevices,
+                    voices,
+                    library = libraryData,
+                    defaultDevice = devices.FirstOrDefault(),
+                    defaultInputDevice = inputDevices.FirstOrDefault(),
+                    defaultBatchSource = AppPaths.GmMidiDir,
+                    defaultBatchTarget = AppPaths.Pss790MidiDir,
+                    midiThru = _recorder.MidiThruEnabled,
+                    recorderBpm = _recorder.Bpm,
+                    sysexLibrary = _sysexManager.GetSysExLibrary(),
+                    recordingsLibrary = _recorder.GetRecordingsLibrary()
+                });
 
-            var libraryData = ScanLibraryFiles();
+                if (devices.Count > 0)
+                {
+                    _player.SetOutputDevice(devices[0]);
+                }
 
-            SendToJs("initial_data", new
-            {
-                devices,
-                inputDevices,
-                voices,
-                library = libraryData,
-                defaultDevice = devices.FirstOrDefault(),
-                defaultInputDevice = inputDevices.FirstOrDefault(),
-                defaultBatchSource = AppPaths.GmMidiDir,
-                defaultBatchTarget = AppPaths.Pss790MidiDir,
-                midiThru = _recorder.MidiThruEnabled,
-                recorderBpm = _recorder.Bpm,
-                sysexLibrary = _sysexManager.GetSysExLibrary(),
-                recordingsLibrary = _recorder.GetRecordingsLibrary()
-            });
-
-            if (devices.Count > 0)
-            {
-                _player.SetOutputDevice(devices[0]);
+                if (inputDevices.Count > 0)
+                {
+                    _recorder.SetInputDevice(inputDevices[0]);
+                }
             }
-
-            if (inputDevices.Count > 0)
+            catch (Exception ex)
             {
-                _recorder.SetInputDevice(inputDevices[0]);
+                SendToJs("error", new { message = $"Failed to get initial data: {ex.Message}" });
             }
         }
 

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.2] - 2026-11-17
+
+### Fixed
+- **WebView2 Interop Handshake & Startup Race Condition**:
+  - Resolved an issue where running the standalone executable directly from Desktop or non-dev locations could hang indefinitely on "Scanning devices..." and "Library Loading...".
+  - **Proactive Push on Navigation Completed**: The WPF/C# host now automatically pushes `initial_data` (devices, libraries, recordings, SysEx, channels) upon `NavigationCompleted`, eliminating reliance on synchronous JavaScript handshake calls.
+  - **Resilient Bridge Queue & Polling**: JavaScript now polls for `window.chrome.webview` and queues any outbound messages until the WebView2 interop bridge is fully connected.
+  - **Document Ready State Safety**: `startApp()` handles both `loading` and already `interactive`/`complete` states gracefully, accompanied by an 800ms watchdog handshake retry.
+  - **Defensive Element Population**: Added safety null checks across all initial data element bindings to prevent unexpected runtime errors from halting mixer and device dropdown population.
+  - **Enabled DevTools in Single-File Executable**: Set `AreDevToolsEnabled = true` to facilitate instant diagnostic inspection.
+
 ## [1.18.1] - 2026-11-17
 
 ### Added

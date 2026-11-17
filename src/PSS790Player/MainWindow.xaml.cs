@@ -65,6 +65,12 @@ namespace PSS790Player
                     webUiDir,
                     CoreWebView2HostResourceAccessKind.Allow);
 
+                try
+                {
+                    MainWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+                }
+                catch { }
+
                 // Clear HTTP disk cache to ensure fresh assets between updates
                 try
                 {
@@ -76,6 +82,15 @@ namespace PSS790Player
                 MainWebView.CoreWebView2.WebMessageReceived += (s, args) =>
                 {
                     _uiBridge.HandleMessage(args.WebMessageAsJson);
+                };
+
+                // Proactively push initial data as soon as web navigation completes
+                MainWebView.CoreWebView2.NavigationCompleted += (s, args) =>
+                {
+                    if (args.IsSuccess && _uiBridge != null)
+                    {
+                        _uiBridge.HandleGetInitialData();
+                    }
                 };
 
                 MainWebView.CoreWebView2.Navigate($"https://app.pss790/index.html?t={DateTime.UtcNow.Ticks}");
@@ -114,12 +129,16 @@ namespace PSS790Player
                             Directory.CreateDirectory(destFolder);
                         }
 
-                        using var stream = assembly.GetManifestResourceStream(resName);
-                        if (stream != null)
+                        try
                         {
-                            using var fs = new FileStream(destFile, FileMode.Create, FileAccess.Write);
-                            stream.CopyTo(fs);
+                            using var stream = assembly.GetManifestResourceStream(resName);
+                            if (stream != null)
+                            {
+                                using var fs = new FileStream(destFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                                stream.CopyTo(fs);
+                            }
                         }
+                        catch { }
                     }
                 }
             }

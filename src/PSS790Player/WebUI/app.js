@@ -69,7 +69,8 @@ let state = {
     vuRightPeakTimer: null,
     recordingsLibrary: [],
     recordingsSearchQuery: "",
-    activePreviewRecordingPath: null
+    activePreviewRecordingPath: null,
+    initialDataReceived: false
 };
 
 // --- Theme Management ---
@@ -168,39 +169,110 @@ function switchTab(tab) {
 }
 
 // --- Interop with C# Host ---
-function sendToHost(action, data = {}) {
+let bridgeListenerAttached = false;
+const pendingHostMessages = [];
+let bridgePollInterval = null;
+
+function setupBridgeListener() {
+    if (bridgeListenerAttached) return;
     if (window.chrome && window.chrome.webview) {
-        window.chrome.webview.postMessage({ action, ...data });
-    } else {
-        console.warn("WebView2 bridge not found. Action:", action, data);
+        window.chrome.webview.addEventListener('message', (event) => {
+            handleHostMessage(event.data);
+        });
+        bridgeListenerAttached = true;
     }
 }
 
-if (window.chrome && window.chrome.webview) {
-    window.chrome.webview.addEventListener('message', (event) => {
-        handleHostMessage(event.data);
-    });
+function flushPendingMessages() {
+    if (window.chrome && window.chrome.webview) {
+        while (pendingHostMessages.length > 0) {
+            const item = pendingHostMessages.shift();
+            try {
+                window.chrome.webview.postMessage({ action: item.action, ...item.data });
+            } catch (e) {
+                console.error("WebView2 flush message error:", e);
+            }
+        }
+    }
 }
+
+function sendToHost(action, data = {}) {
+    setupBridgeListener();
+    if (window.chrome && window.chrome.webview) {
+        try {
+            window.chrome.webview.postMessage({ action, ...data });
+        } catch (e) {
+            console.error("WebView2 postMessage failed:", e);
+        }
+    } else {
+        pendingHostMessages.push({ action, data });
+        ensureBridgeConnected();
+    }
+}
+
+function ensureBridgeConnected(onReady) {
+    setupBridgeListener();
+    if (window.chrome && window.chrome.webview) {
+        flushPendingMessages();
+        if (bridgePollInterval) {
+            clearInterval(bridgePollInterval);
+            bridgePollInterval = null;
+        }
+        if (onReady) onReady();
+        return;
+    }
+
+    if (!bridgePollInterval) {
+        let attempts = 0;
+        bridgePollInterval = setInterval(() => {
+            attempts++;
+            if (window.chrome && window.chrome.webview) {
+                clearInterval(bridgePollInterval);
+                bridgePollInterval = null;
+                setupBridgeListener();
+                flushPendingMessages();
+                if (onReady) onReady();
+            } else if (attempts > 120) {
+                clearInterval(bridgePollInterval);
+                bridgePollInterval = null;
+                console.warn("WebView2 bridge detection timed out after 3s.");
+            }
+        }, 25);
+    }
+}
+
+setupBridgeListener();
+ensureBridgeConnected();
 
 function handleHostMessage(msg) {
     if (!msg || !msg.type) return;
 
     switch (msg.type) {
         case "initial_data":
+            state.initialDataReceived = true;
             state.devices = msg.data.devices || [];
             state.inputDevices = msg.data.inputDevices || [];
             state.voices = msg.data.voices || [];
             state.library = msg.data.library || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
             if (msg.data.recorderBpm) {
                 state.recorderBpm = msg.data.recorderBpm;
-                document.getElementById("recorderBpmInput").value = state.recorderBpm;
-                document.getElementById("recorderBpmSlider").value = state.recorderBpm;
+                const bpmIn = document.getElementById("recorderBpmInput");
+                const bpmSlide = document.getElementById("recorderBpmSlider");
+                if (bpmIn) bpmIn.value = state.recorderBpm;
+                if (bpmSlide) bpmSlide.value = state.recorderBpm;
             }
             if (msg.data.midiThru !== undefined) {
-                document.getElementById("chkMidiThru").checked = msg.data.midiThru;
+                const chk = document.getElementById("chkMidiThru");
+                if (chk) chk.checked = msg.data.midiThru;
             }
-            if (msg.data.defaultBatchSource) document.getElementById("batchSourceDir").value = msg.data.defaultBatchSource;
-            if (msg.data.defaultBatchTarget) document.getElementById("batchTargetDir").value = msg.data.defaultBatchTarget;
+            if (msg.data.defaultBatchSource) {
+                const bSrc = document.getElementById("batchSourceDir");
+                if (bSrc) bSrc.value = msg.data.defaultBatchSource;
+            }
+            if (msg.data.defaultBatchTarget) {
+                const bTgt = document.getElementById("batchTargetDir");
+                if (bTgt) bTgt.value = msg.data.defaultBatchTarget;
+            }
             if (msg.data.sysexLibrary) {
                 state.sysexLibrary = msg.data.sysexLibrary;
                 renderSysExLibrary();
@@ -3591,11 +3663,25 @@ document.getElementById("btnOpenRecordingsFolder")?.addEventListener("click", ()
 });
 
 // Trigger initial handshake and keyboard shortcuts
-window.addEventListener("DOMContentLoaded", () => {
+function startApp() {
     initTheme();
     setupKeyboardShortcuts();
     initSidebarState();
     initVuMeters();
     renderRecordingsLibrary();
     sendToHost("get_initial_data");
-});
+
+    // Watchdog fallback: if initial_data has not arrived after 800ms, retry handshake
+    setTimeout(() => {
+        if (!state.initialDataReceived) {
+            console.log("Initial data not received after 800ms, retrying handshake...");
+            sendToHost("get_initial_data");
+        }
+    }, 800);
+}
+
+if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", startApp);
+} else {
+    startApp();
+}

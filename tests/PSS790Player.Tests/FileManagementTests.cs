@@ -170,6 +170,34 @@ namespace PSS790Player.Tests
             Assert.Contains("\"subFolders\":", json);
             Assert.Contains("\"folders\":", json);
             Assert.Contains("\"files\":", json);
+
+            // Test serializing the full initial_data envelope
+            var devices = MidiPlayer.GetOutputDeviceNames();
+            var inputDevices = MidiRecorder.GetInputDeviceNames();
+            using var player = new MidiPlayer();
+            using var rec = new MidiRecorder();
+            using var sysex = new SysExManager(player, rec);
+            var envelope = new
+            {
+                type = "initial_data",
+                data = new
+                {
+                    devices,
+                    inputDevices,
+                    voices = new List<object>(),
+                    library = result,
+                    defaultDevice = devices.FirstOrDefault(),
+                    defaultInputDevice = inputDevices.FirstOrDefault(),
+                    defaultBatchSource = AppPaths.GmMidiDir,
+                    defaultBatchTarget = AppPaths.Pss790MidiDir,
+                    midiThru = rec.MidiThruEnabled,
+                    recorderBpm = rec.Bpm,
+                    sysexLibrary = sysex.GetSysExLibrary(),
+                    recordingsLibrary = rec.GetRecordingsLibrary()
+                }
+            };
+            var fullJson = System.Text.Json.JsonSerializer.Serialize(envelope);
+            Assert.Contains("\"type\":\"initial_data\"", fullJson);
         }
 
         [Fact]
