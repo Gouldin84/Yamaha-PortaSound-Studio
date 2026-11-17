@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-11-17
+
+### Added
+- **Authentic Synthesizer Icon in UI Header & Modals**:
+  - Replaced generic music note SVG in the top-left navigation bar with the authentic photo-realistic Yamaha PSS-790 application icon (`app_icon.png`), matching the desktop `.exe` icon.
+  - Added matching authentic synthesizer branding inside the About & Legal Notices dialog.
+- **Rebranded to "PSS-790 Studio"**:
+  - Updated primary application header branding from *MIDI Remapper* to **PSS-790 Studio**.
+  - Updated native host window title in `MainWindow.xaml` to **Yamaha PSS-790 Studio**.
+  - Updated HTML document `<title>` to **Yamaha PSS-790 Studio**.
+  - Updated project `<Product>` assembly metadata to **Yamaha PSS-790 Studio**.
+  - Refined subtitle descriptor to *Multi-Timbral 16-Channel Voice & Drum Synthesizer Workstation*.
+
 ## [1.15.0] - 2026-11-17
 
 ### Added

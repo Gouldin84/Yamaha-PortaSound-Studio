@@ -1,5 +1,5 @@
 @echo off
-title Launching Yamaha PSS-790 Player...
+title Launching Yamaha PSS-790 Studio...
 cd /d "%~dp0"
 
 :: Remove Mark of the Web (Zone.Identifier) if present

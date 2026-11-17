@@ -10,14 +10,14 @@
     <AssemblyName>PSS790Player</AssemblyName>
     <Authors>Gouldin84</Authors>
     <Company>Gouldin84</Company>
-    <Product>Yamaha PSS-790 MIDI Workstation</Product>
+    <Product>Yamaha PSS-790 Studio</Product>
     <Copyright>Copyright © 2026 Gouldin84</Copyright>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     
     <!-- Standalone Single-File Configuration -->
-    <Version>1.15.0</Version>
-    <AssemblyVersion>1.15.0</AssemblyVersion>
-    <FileVersion>1.15.0</FileVersion>
+    <Version>1.16.0</Version>
+    <AssemblyVersion>1.16.0</AssemblyVersion>
+    <FileVersion>1.16.0</FileVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
