@@ -339,5 +339,110 @@ namespace PSS790Player.Tests
             Assert.Equal(0, shortenedByCh.GetValueOrDefault(4, 0)); // No vocal harmony truncation
             Assert.Equal(0, shortenedByCh.GetValueOrDefault(5, 0)); // No choir truncation
         }
+
+        [Fact]
+        public void Remapper_BrothersInArms3_InfersInstrumentsFromTextAndInjectsProgramChanges()
+        {
+            var filePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\General MIDI\Brothers In Arms 3.mid"));
+            if (!File.Exists(filePath)) return;
+
+            var original = MidiFile.Read(filePath, Constants.DefaultReadingSettings);
+            var remapped = Remapper.Remap(original, new RemapperOptions());
+
+            var pcs = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<ProgramChangeEvent>()
+                .ToList();
+
+            // All active channels must have program changes
+            Assert.NotEmpty(pcs);
+            var pcChans = pcs.Select(p => (int)p.Channel).ToHashSet();
+
+            // Ch 1 (Guitar) must have a guitar voice (not Voice 00 Grand Piano)
+            Assert.Contains(1, pcChans);
+            var ch1Pc = pcs.First(p => (int)p.Channel == 1);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch1Pc.ProgramNumber, out var ch1Voice));
+            Assert.Contains("GUITAR", ch1Voice.Name);
+
+            // Ch 7 (Acoustic Bass) must have a bass voice
+            Assert.Contains(7, pcChans);
+            var ch7Pc = pcs.First(p => (int)p.Channel == 7);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch7Pc.ProgramNumber, out var ch7Voice));
+            Assert.Contains("BASS", ch7Voice.Name);
+        }
+
+        [Fact]
+        public void Remapper_TheShowMustGoOn_ExtractsXgSysExVoicing()
+        {
+            var filePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\General MIDI\The Show Must Go On - Celestial Trance Version.mid"));
+            if (!File.Exists(filePath)) return;
+
+            var original = MidiFile.Read(filePath, Constants.DefaultReadingSettings);
+            var remapped = Remapper.Remap(original, new RemapperOptions());
+
+            var pcs = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<ProgramChangeEvent>()
+                .ToList();
+
+            Assert.NotEmpty(pcs);
+
+            // Ch 0 (Part 0) was GM 40 (Violin) -> PSS-790 VIOLIN 1 (Voice 30, MidiProgram 10)
+            var ch0Pc = pcs.FirstOrDefault(p => (int)p.Channel == 0);
+            Assert.NotNull(ch0Pc);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch0Pc.ProgramNumber, out var ch0Voice));
+            Assert.Equal("VIOLIN 1", ch0Voice.Name);
+
+            // Ch 1 (Part 1) was GM 32 (Acoustic Bass) -> PSS-790 UPRIGHT BASS (Voice 40)
+            var ch1Pc = pcs.FirstOrDefault(p => (int)p.Channel == 1);
+            Assert.NotNull(ch1Pc);
+            Assert.True(Constants.Pss790MidiProgramToVoice.TryGetValue((byte)ch1Pc.ProgramNumber, out var ch1Voice));
+            Assert.Contains("BASS", ch1Voice.Name);
+        }
+
+        [Fact]
+        public void Remapper_AtZanarkand_UnreleasedPedalProtectedFromVoiceExplosion()
+        {
+            var filePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\General MIDI\At Zanarkand Piano Collection (Unofficial).mid"));
+            if (!File.Exists(filePath)) return;
+
+            var original = MidiFile.Read(filePath, Constants.DefaultReadingSettings);
+            var remapped = Remapper.Remap(original, new RemapperOptions { EmulateSustainPedal = true });
+
+            var notes = remapped.GetNotes().OrderBy(n => n.Time).ToList();
+            var active = new List<Note>();
+            int maxSimul = 0;
+            foreach (var n in notes)
+            {
+                active.RemoveAll(x => x.EndTime <= n.Time);
+                active.Add(n);
+                if (active.Count > maxSimul) maxSimul = active.Count;
+            }
+
+            // Instead of exploding to 929 voices due to stuck CC64=127, it stays well within manageable limits (< 28 voices)
+            Assert.True(maxSimul <= 28, $"Expected peak polyphony <= 28, got {maxSimul}");
+        }
+
+        [Fact]
+        public void Remapper_AquaRemix_NeutralizesAcousticMicroBendsOnUnassignedChannels()
+        {
+            var filePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\..\General MIDI\aqua-remix.mid"));
+            if (!File.Exists(filePath)) return;
+
+            var original = MidiFile.Read(filePath, Constants.DefaultReadingSettings);
+            var remapped = Remapper.Remap(original, new RemapperOptions());
+
+            var pbs = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<PitchBendEvent>()
+                .ToList();
+
+            // Channels 2, 3, 4 (unassigned in orig, defaulted to piano) had micro-bends.
+            // With pre-scan defaulting to GM 0 and NeutralizeAcousticPitchBends, all bends on Ch 2, 3, 4 must be exactly 8192!
+            foreach (var pb in pbs.Where(p => (int)p.Channel is 2 or 3 or 4))
+            {
+                Assert.Equal((ushort)8192, pb.PitchValue);
+            }
+        }
     }
 }

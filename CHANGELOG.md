@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.9] - 2026-11-17
+
+### Added
+- **Multi-Agent Swarm Quality Audit & Engine Hardening**:
+  - Executed a comprehensive parallel swarm audit across all 113 General MIDI files, establishing the [Master Anomaly Matrix](docs/MASTER_ANOMALY_MATRIX.md).
+- **Intelligent Track-Name Instrument Inference**:
+  - Implemented `InferGmProgramFromText` in `Remapper.cs`. When active tracks contain note data without standard `ProgramChangeEvent`s (e.g. *Brothers In Arms 3*), the engine scans track metadata and text events for instrument keywords (`bass`, `guitar`, `strings`, `organ`, `vocal`, `choir`, `brass`, `flute`, `pad`) to automatically assign true GM instruments instead of falling back to Acoustic Piano.
+- **Yamaha XG Multi-Part SysEx Voicing Extractor**:
+  - Added native Yamaha XG bulk dump (`08 [part] 00`) and parameter change (`08 [part] 03`) parsing in `Remapper.cs`. Automatically extracts intended GM voices from files voiced purely through XG SysEx dumps (e.g. *The Show Must Go On - Celestial Trance Version* with 205 SysEx messages) before SysEx is stripped.
+- **Stuck Sustain Pedal (CC 64) Protection**:
+  - Added unreleased damper pedal windowing in `ApplySustainPedalEmulation`. Binds dangling sustain pedal down intervals (where `CC 64 >= 64` was set once and never released, e.g. *At Zanarkand*) and intervals $> 4$ measures to a maximum duration of 2 measures (`tpqn * 8`), permanently eliminating 929-voice polyphony explosions.
+- **Pre-Scan Active Channel Default Initialization**:
+  - Pre-populates unassigned active melodic note channels with GM 0 (Acoustic Grand Piano) in `channelGmPrograms` prior to event processing. Ensures `NeutralizeAcousticPitchBends` neutralizes micro-bends (neutralizing 6,290 detuning pitch bends in *aqua-remix*) and injects explicit PSS-790 Program Changes at Tick 0.
+- **Valid End-of-Track Pitch Bend Zeroing**:
+  - Pitch bend auto-centering now inserts before `EndOfTrackEvent`, ensuring all hardware and MIDI parsers recognize the oscillator reset to 8192 at track end.
+
 ## [1.8.8] - 2026-11-17
 
 ### Fixed

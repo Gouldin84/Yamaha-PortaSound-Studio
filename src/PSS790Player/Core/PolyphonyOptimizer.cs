@@ -29,6 +29,19 @@ namespace PSS790Player.Core
             var allNotes = resultFile.GetNotes().ToList();
             if (allNotes.Count == 0) return resultFile;
 
+            // Pre-scan channel programs to protect vocal and solo lead instruments
+            var channelPrograms = new Dictionary<int, byte>();
+            foreach (var track in resultFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is ProgramChangeEvent pc && !channelPrograms.ContainsKey(pc.Channel))
+                    {
+                        channelPrograms[pc.Channel] = (byte)pc.ProgramNumber;
+                    }
+                }
+            }
+
             // 1. Clamp Percussion Note Durations & Choke Open Hi-Hats on Channel 15
             var drumNotes = allNotes.Where(n => n.Channel == (FourBitNumber)15).OrderBy(n => n.Time).ToList();
             var clampedLengths = new Dictionary<(FourBitNumber Channel, SevenBitNumber NoteNumber, long Time), long>();
@@ -124,7 +137,7 @@ namespace PSS790Player.Core
                         }
                     }
 
-                    // Melodic, vocal, and harmony notes are strictly preserved and never truncated
+                    // Melodic, vocal, and harmony notes are strictly preserved and never dropped
                     break;
                 }
             }
