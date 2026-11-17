@@ -5,7 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.18.2] - 2026-11-17
+## [1.18.3] - 2026-11-17
+
+### Fixed
+- **Instant UI Rendering on App Launch**:
+  - `startApp()` now immediately renders the 16 channel strips, MIDI device selectors, and song library tree upon launch so the mixing console is never a blank void, even while host enumeration is in progress.
+  - Exposes `window.handleHostMessage` globally and adds dual-channel data delivery via `ExecuteScriptAsync` alongside `PostWebMessageAsJson` to guarantee initial data delivery.
+- **Removed Dynamic Dispatch on Anonymous Types in C# Bridge**:
+  - Replaced anonymous types in `ScanLibraryFiles` and `BuildCategoryTree` with strongly typed `FileItemDto`, completely eliminating `RuntimeBinderException` in single-file published builds.
+- **Versioned WebUI Extraction & Cache Busted Assets**:
+  - Standalone executable extracts embedded WebUI assets into version-isolated directories (`WebUI_v{version}`), preventing file locks and cache staleness across releases.
+  - Added explicit asset query cache busters (`styles.css?v=1.18.3`, `app.js?v=1.18.3`) and a global in-app diagnostic error banner.
+- **Smart Polyphony Guard Badge Light Theme Contrast**:
+  - Replaced inline Tailwind opacity utilities with a dedicated `.polyphony-guard-badge` CSS class ensuring crisp, high-contrast dark green text (`#15803d`) against soft mint green background (`#dcfce7`) with border `#86efac` in Light Theme.
 
 ### Fixed
 - **WebView2 Interop Handshake & Startup Race Condition**:

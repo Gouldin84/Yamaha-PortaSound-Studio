@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
+using PSS790Player.Bridge;
 using PSS790Player.Core;
 using Xunit;
 
@@ -198,6 +201,36 @@ namespace PSS790Player.Tests
             };
             var fullJson = System.Text.Json.JsonSerializer.Serialize(envelope);
             Assert.Contains("\"type\":\"initial_data\"", fullJson);
+        }
+
+        [Fact]
+        public void BuildCategoryTree_WithTypeSafeDtos_HandlesFilesAndEmptyGracefully()
+        {
+            var flatList = new List<UiBridge.FileItemDto>();
+            var tempDir = Path.Combine(Path.GetTempPath(), "PSS790_DtoTest_" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(tempDir);
+            try
+            {
+                var midFile = Path.Combine(tempDir, "song1.mid");
+                File.WriteAllBytes(midFile, new byte[] { 0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xE0 });
+
+                var method = typeof(UiBridge).GetMethod("BuildCategoryTree", BindingFlags.NonPublic | BindingFlags.Static);
+                Assert.NotNull(method);
+                var tree = method.Invoke(null, new object[] { tempDir, "TestCat", "gm", flatList });
+                Assert.NotNull(tree);
+
+                Assert.Single(flatList);
+                Assert.Equal("song1.mid", flatList[0].fileName);
+                Assert.Equal("TestCat", flatList[0].category);
+                Assert.Equal("gm", flatList[0].format);
+
+                var json = System.Text.Json.JsonSerializer.Serialize(tree);
+                Assert.Contains("\"fileName\":\"song1.mid\"", json);
+            }
+            finally
+            {
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            }
         }
 
         [Fact]

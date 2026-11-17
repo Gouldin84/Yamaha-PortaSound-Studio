@@ -457,6 +457,19 @@ body.theme-light [class*="text-sky-300"] {
     color: #0284c7 !important;
 }
 
+/* Smart Polyphony Guard Protected Badge */
+.polyphony-guard-badge {
+    background-color: rgba(2, 44, 34, 0.75);
+    color: #34d399;
+    border: 1px solid rgba(6, 95, 70, 0.6);
+}
+
+body.theme-light .polyphony-guard-badge {
+    background-color: #dcfce7 !important;
+    color: #15803d !important;
+    border-color: #86efac !important;
+}
+
 body.theme-light [class*="bg-emerald-950"] {
     background-color: #dcfce7 !important;
     border-color: #86efac !important;

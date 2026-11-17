@@ -1451,13 +1451,13 @@ namespace PSS790Player.Bridge
             AppPaths.EnsureDirectoriesExist();
             AppPaths.SyncMirroredDirectories();
 
-            var allFlat = new List<object>();
+            var allFlat = new List<FileItemDto>();
 
             var gmTree = BuildCategoryTree(AppPaths.GmMidiDir, "GM Midi", "gm", allFlat);
             var pssTree = BuildCategoryTree(AppPaths.Pss790MidiDir, "PSS-790 Midi", "pss790", allFlat);
 
-            var gmFiles = allFlat.Where(f => ((dynamic)f).format == "gm").ToList();
-            var pssFiles = allFlat.Where(f => ((dynamic)f).format == "pss790").ToList();
+            var gmFiles = allFlat.Where(f => f.format == "gm").ToList();
+            var pssFiles = allFlat.Where(f => f.format == "pss790").ToList();
 
             return new
             {
@@ -1471,18 +1471,28 @@ namespace PSS790Player.Bridge
             };
         }
 
-        private class FolderNodeDto
+        public class FileItemDto
+        {
+            public string fileName { get; set; } = "";
+            public string fullPath { get; set; } = "";
+            public string relativePath { get; set; } = "";
+            public string subFolder { get; set; } = "";
+            public string category { get; set; } = "";
+            public string format { get; set; } = "";
+        }
+
+        public class FolderNodeDto
         {
             public string name { get; set; } = "";
             public string fullPath { get; set; } = "";
             public string relativePath { get; set; } = "";
             public List<FolderNodeDto> subFolders { get; set; } = new();
-            public List<object> files { get; set; } = new();
+            public List<FileItemDto> files { get; set; } = new();
             public int directCount { get; set; } = 0;
             public int totalCount { get; set; } = 0;
         }
 
-        private static object BuildCategoryTree(string rootDir, string categoryName, string format, List<object> flatCollector)
+        private static object BuildCategoryTree(string rootDir, string categoryName, string format, List<FileItemDto> flatCollector)
         {
             if (!Directory.Exists(rootDir))
             {
@@ -1494,14 +1504,14 @@ namespace PSS790Player.Bridge
                     subFolders = new List<FolderNodeDto>(),
                     folders = new List<object>(),
                     allFolders = new List<object>(),
-                    files = new List<object>(),
+                    files = new List<FileItemDto>(),
                     directCount = 0,
                     count = 0
                 };
             }
 
             var allFoldersList = new List<object>();
-            var folderGroups = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+            var folderGroups = new Dictionary<string, List<FileItemDto>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var dir in Directory.GetDirectories(rootDir, "*", SearchOption.AllDirectories).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
             {
@@ -1511,15 +1521,15 @@ namespace PSS790Player.Bridge
                     name = rel,
                     fullPath = dir
                 });
-                folderGroups[rel] = new List<object>();
+                folderGroups[rel] = new List<FileItemDto>();
             }
 
             var rootNode = BuildDirectoryNode(rootDir, rootDir, categoryName, format, flatCollector);
 
             // Populate legacy folderGroups with files so legacy/fallback 'folders' has .files and .count
-            foreach (var file in flatCollector.Where(f => ((dynamic)f).category == categoryName))
+            foreach (var file in flatCollector.Where(f => f.category == categoryName))
             {
-                var sub = ((dynamic)file).subFolder as string;
+                var sub = file.subFolder;
                 if (!string.IsNullOrEmpty(sub) && folderGroups.TryGetValue(sub, out var list))
                 {
                     list.Add(file);
@@ -1551,14 +1561,14 @@ namespace PSS790Player.Bridge
             };
         }
 
-        private static FolderNodeDto BuildDirectoryNode(string currentDir, string rootDir, string categoryName, string format, List<object> flatCollector)
+        private static FolderNodeDto BuildDirectoryNode(string currentDir, string rootDir, string categoryName, string format, List<FileItemDto> flatCollector)
         {
             var dirName = Path.GetFileName(currentDir);
             var relPath = string.Equals(currentDir, rootDir, StringComparison.OrdinalIgnoreCase)
                 ? ""
                 : Path.GetRelativePath(rootDir, currentDir);
 
-            var directFiles = new List<object>();
+            var directFiles = new List<FileItemDto>();
             if (Directory.Exists(currentDir))
             {
                 var filePaths = Directory.GetFiles(currentDir, "*.*", SearchOption.TopDirectoryOnly)
@@ -1571,14 +1581,14 @@ namespace PSS790Player.Bridge
                     var fileRel = Path.GetRelativePath(rootDir, file);
                     var fileSub = Path.GetDirectoryName(fileRel) ?? "";
 
-                    var fileItem = new
+                    var fileItem = new FileItemDto
                     {
-                        fileName,
+                        fileName = fileName,
                         fullPath = file,
                         relativePath = fileRel,
                         subFolder = fileSub,
                         category = categoryName,
-                        format
+                        format = format
                     };
 
                     flatCollector.Add(fileItem);
@@ -2239,7 +2249,7 @@ namespace PSS790Player.Bridge
             var app = Application.Current;
             if (app == null) return;
 
-            var action = new Action(() =>
+            var action = new Action(async () =>
             {
                 try
                 {
@@ -2247,6 +2257,15 @@ namespace PSS790Player.Bridge
                     {
                         var payload = JsonSerializer.Serialize(new { type, data });
                         _webView.CoreWebView2.PostWebMessageAsJson(payload);
+
+                        if (type == "initial_data")
+                        {
+                            try
+                            {
+                                await _webView.CoreWebView2.ExecuteScriptAsync($"if (window.handleHostMessage) {{ window.handleHostMessage({payload}); }}");
+                            }
+                            catch { }
+                        }
                     }
                 }
                 catch { }

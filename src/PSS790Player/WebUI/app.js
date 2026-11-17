@@ -245,6 +245,14 @@ setupBridgeListener();
 ensureBridgeConnected();
 
 function handleHostMessage(msg) {
+    if (typeof msg === "string") {
+        try {
+            msg = JSON.parse(msg);
+        } catch (e) {
+            console.error("Failed to parse host message JSON:", e);
+            return;
+        }
+    }
     if (!msg || !msg.type) return;
 
     switch (msg.type) {
@@ -3662,6 +3670,9 @@ document.getElementById("btnOpenRecordingsFolder")?.addEventListener("click", ()
     sendToHost("open_recordings_folder");
 });
 
+// Expose handleHostMessage to global window so C# can invoke it directly via ExecuteScriptAsync
+window.handleHostMessage = handleHostMessage;
+
 // Trigger initial handshake and keyboard shortcuts
 function startApp() {
     initTheme();
@@ -3669,15 +3680,27 @@ function startApp() {
     initSidebarState();
     initVuMeters();
     renderRecordingsLibrary();
+
+    // Immediately render initial mixer strips, device dropdowns, and song tree so the UI is never blank
+    renderMixer();
+    renderDeviceSelect(state.selectedDevice);
+    renderInputDeviceSelect(state.selectedInputDevice);
+    renderLibrarySelect();
+    renderLibraryTree();
+
     sendToHost("get_initial_data");
 
-    // Watchdog fallback: if initial_data has not arrived after 800ms, retry handshake
-    setTimeout(() => {
-        if (!state.initialDataReceived) {
-            console.log("Initial data not received after 800ms, retrying handshake...");
-            sendToHost("get_initial_data");
+    // Watchdog fallback: if initial_data has not arrived after 600ms, retry handshake
+    let watchdogCount = 0;
+    const watchdogInterval = setInterval(() => {
+        if (state.initialDataReceived || watchdogCount >= 5) {
+            clearInterval(watchdogInterval);
+            return;
         }
-    }, 800);
+        watchdogCount++;
+        console.log(`Initial data watchdog trigger #${watchdogCount}, re-requesting get_initial_data...`);
+        sendToHost("get_initial_data");
+    }, 600);
 }
 
 if (document.readyState === "loading") {

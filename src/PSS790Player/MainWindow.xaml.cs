@@ -55,7 +55,8 @@ namespace PSS790Player
                 }
                 else
                 {
-                    var localWebUi = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PSS790Player", "WebUI");
+                    var versionStr = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.18.3";
+                    var localWebUi = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PSS790Player", $"WebUI_{versionStr}");
                     EnsureWebUiExtracted(localWebUi);
                     webUiDir = localWebUi;
                 }

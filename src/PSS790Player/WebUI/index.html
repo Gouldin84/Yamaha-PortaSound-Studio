@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=1.18.3">
     <script>
         tailwind.config = {
             theme: {
@@ -23,10 +23,36 @@
                     }
                 }
             }
-        }
+        };
+
+        // Resilient Global Error Catchers to prevent silent UI stalls
+        window.addEventListener('error', function (e) {
+            console.error("Global JS Error:", e.message, e.filename, e.lineno);
+            var b = document.getElementById('jsErrorBanner');
+            var m = document.getElementById('jsErrorMessage');
+            if (b && m) {
+                m.textContent = 'Script Error: ' + e.message + ' (' + (e.filename ? e.filename.split('/').pop() : '') + ':' + e.lineno + ')';
+                b.classList.remove('hidden');
+            }
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+            console.error("Global Promise Rejection:", e.reason);
+            var b = document.getElementById('jsErrorBanner');
+            var m = document.getElementById('jsErrorMessage');
+            if (b && m) {
+                m.textContent = 'Unhandled Rejection: ' + (e.reason ? (e.reason.message || e.reason) : e);
+                b.classList.remove('hidden');
+            }
+        });
     </script>
 </head>
 <body class="bg-slate-950 text-slate-100 h-screen font-sans selection:bg-cyan-500 selection:text-black flex flex-col overflow-hidden select-none">
+
+    <!-- Global Diagnostic Error Banner -->
+    <div id="jsErrorBanner" class="hidden fixed top-0 left-0 right-0 z-50 bg-rose-700 text-white text-xs px-4 py-2 font-mono shadow-xl flex items-center justify-between">
+        <span id="jsErrorMessage">System Notice</span>
+        <button onclick="document.getElementById('jsErrorBanner').classList.add('hidden')" class="text-white hover:text-slate-200 font-bold ml-4" title="Dismiss error banner">✕</button>
+    </div>
 
     <!-- Top Navigation Header -->
     <header class="glass-panel shrink-0 z-30 px-2.5 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800/80 flex items-center justify-between gap-1.5 sm:gap-2">
@@ -294,7 +320,7 @@
                         <label for="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">
                             Smart Polyphony Guard
                         </label>
-                        <span class="text-[9px] font-semibold text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/60">Protected</span>
+                        <span id="polyphonyGuardBadge" class="polyphony-guard-badge text-[9px] font-semibold px-1.5 py-0.5 rounded">Protected</span>
                     </div>
                 </div>
 
@@ -1229,7 +1255,7 @@
                     <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.18.2</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.18.3</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -1375,6 +1401,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js"></script>
+    <script src="app.js?v=1.18.3"></script>
 </body>
 </html>
