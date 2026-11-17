@@ -4,6 +4,8 @@ let state = {
     activeTab: "player",
     devices: [],
     inputDevices: [],
+    selectedDevice: null,
+    selectedInputDevice: null,
     voices: [],
     library: { gmTree: null, pssTree: null, gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false, baseDir: "" },
     currentFile: null,
@@ -188,14 +190,24 @@ function handleHostMessage(msg) {
                 state.sysexLibrary = msg.data.sysexLibrary;
                 renderSysExLibrary();
             }
-            renderDeviceSelect();
-            renderInputDeviceSelect();
+            renderDeviceSelect(msg.data.defaultDevice);
+            renderInputDeviceSelect(msg.data.defaultInputDevice);
             renderLibrarySelect();
             renderLibraryTree();
             renderMixer();
             renderRecorderChannels();
             initSidebarState();
             renderHealthBadge(null);
+            break;
+
+        case "devices_updated":
+            if (msg.data.devices) state.devices = msg.data.devices;
+            if (msg.data.inputDevices) state.inputDevices = msg.data.inputDevices;
+            renderDeviceSelect(msg.data.currentOutputDevice);
+            renderInputDeviceSelect(msg.data.currentInputDevice);
+            if (msg.data.toastMessage) {
+                showToast(msg.data.toastMessage);
+            }
             break;
 
         case "input_devices_updated":
@@ -394,44 +406,78 @@ function handleHostMessage(msg) {
 
 // --- DOM Rendering & Device Selectors ---
 
-function renderDeviceSelect() {
+function renderDeviceSelect(preferredDevice) {
     const sel = document.getElementById("deviceSelect");
+    const dot = document.getElementById("outputStatusDot");
+    if (!sel) return;
+
+    const currentVal = preferredDevice || sel.value || state.selectedDevice;
     sel.innerHTML = "";
-    if (state.devices.length === 0) {
+
+    if (!state.devices || state.devices.length === 0) {
         sel.innerHTML = `<option value="" disabled selected>No MIDI Ports Detected</option>`;
+        if (dot) dot.className = "w-2 h-2 rounded-full bg-slate-600 shrink-0";
+        state.selectedDevice = null;
         return;
     }
+
+    if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0";
+
+    let matchFound = false;
     state.devices.forEach((dev, idx) => {
         const opt = document.createElement("option");
         opt.value = dev;
         opt.textContent = dev;
         opt.className = "bg-slate-900 text-white";
-        if (idx === 0) opt.selected = true;
+        if (dev === currentVal) {
+            opt.selected = true;
+            matchFound = true;
+            state.selectedDevice = dev;
+        }
         sel.appendChild(opt);
     });
+
+    if (!matchFound && state.devices.length > 0) {
+        sel.options[0].selected = true;
+        state.selectedDevice = state.devices[0];
+    }
 }
 
 function renderInputDeviceSelect(preferredDevice) {
     const sel = document.getElementById("recorderInputDeviceSelect");
     const dot = document.getElementById("inputStatusDot");
+    if (!sel) return;
+
+    const currentVal = preferredDevice || sel.value || state.selectedInputDevice;
     sel.innerHTML = "";
 
-    if (state.inputDevices.length === 0) {
+    if (!state.inputDevices || state.inputDevices.length === 0) {
         sel.innerHTML = `<option value="" disabled selected>No Input Ports Detected</option>`;
         if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-slate-600";
+        state.selectedInputDevice = null;
         return;
     }
 
     if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
 
+    let matchFound = false;
     state.inputDevices.forEach((dev, idx) => {
         const opt = document.createElement("option");
         opt.value = dev;
         opt.textContent = dev;
         opt.className = "bg-slate-900 text-white";
-        if (preferredDevice ? dev === preferredDevice : idx === 0) opt.selected = true;
+        if (dev === currentVal) {
+            opt.selected = true;
+            matchFound = true;
+            state.selectedInputDevice = dev;
+        }
         sel.appendChild(opt);
     });
+
+    if (!matchFound && state.inputDevices.length > 0) {
+        sel.options[0].selected = true;
+        state.selectedInputDevice = state.inputDevices[0];
+    }
 }
 
 function renderLibrarySelect() {
@@ -2043,7 +2089,17 @@ document.getElementById("tabBtnSysex")?.addEventListener("click", () => switchTa
 
 // Primary Hardware Output Select
 document.getElementById("deviceSelect").addEventListener("change", (e) => {
+    state.selectedDevice = e.target.value;
     sendToHost("select_device", { deviceName: e.target.value });
+});
+
+document.getElementById("deviceSelect")?.addEventListener("focus", () => {
+    sendToHost("rescan_devices");
+});
+
+document.getElementById("btnRefreshDevices")?.addEventListener("click", () => {
+    sendToHost("rescan_devices");
+    showToast("Rescanning MIDI ports...");
 });
 
 // Library Selector
@@ -2251,7 +2307,12 @@ window.addEventListener("resize", hideContextMenu);
 // --- MIDI Studio / Recorder Event Listeners ---
 
 document.getElementById("recorderInputDeviceSelect").addEventListener("change", (e) => {
+    state.selectedInputDevice = e.target.value;
     sendToHost("select_input_device", { deviceName: e.target.value });
+});
+
+document.getElementById("recorderInputDeviceSelect")?.addEventListener("focus", () => {
+    sendToHost("rescan_devices");
 });
 
 document.getElementById("btnRefreshInputs").addEventListener("click", () => {

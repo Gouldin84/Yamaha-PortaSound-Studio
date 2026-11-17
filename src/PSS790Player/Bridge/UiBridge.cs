@@ -21,6 +21,7 @@ namespace PSS790Player.Bridge
         private readonly MidiPlayer _player;
         private readonly MidiRecorder _recorder;
         private readonly SysExManager _sysexManager;
+        private readonly MidiDeviceMonitor _deviceMonitor;
         private readonly RemapperOptions _options = new();
         private MidiFile? _loadedOriginalMidi;
         private MidiFile? _loadedRemappedMidi;
@@ -132,6 +133,91 @@ namespace PSS790Player.Bridge
                     isCompleted = e.IsCompleted
                 });
             };
+
+            // Hot-swap MIDI device monitoring
+            _deviceMonitor = new MidiDeviceMonitor();
+            _deviceMonitor.DevicesChanged += OnMidiDevicesChanged;
+
+            _player.OutputDeviceDisconnected += (s, devName) =>
+            {
+                SendDevicesUpdated($"MIDI Output disconnected: {devName}");
+            };
+
+            _recorder.InputDeviceDisconnected += (s, devName) =>
+            {
+                SendDevicesUpdated($"MIDI Input disconnected: {devName}");
+            };
+        }
+
+        public void HandleDeviceChangeNotification()
+        {
+            _deviceMonitor.TriggerRescan(300);
+        }
+
+        private void OnMidiDevicesChanged(object? sender, MidiDevicesChangedEventArgs e)
+        {
+            string? toast = null;
+
+            // Output Device Hot-Swap
+            var currentOut = _player.CurrentOutputDeviceName;
+            if (!string.IsNullOrEmpty(currentOut) && e.RemovedOutputs.Contains(currentOut, StringComparer.OrdinalIgnoreCase))
+            {
+                _player.SetOutputDevice((string?)null);
+                toast = $"MIDI Output disconnected: {currentOut}";
+            }
+            else if (string.IsNullOrEmpty(currentOut) && e.OutputDevices.Count > 0)
+            {
+                var targetOut = e.AddedOutputs.FirstOrDefault() ?? e.OutputDevices.FirstOrDefault();
+                if (!string.IsNullOrEmpty(targetOut))
+                {
+                    _player.SetOutputDevice(targetOut);
+                    toast = $"MIDI Output connected: {targetOut}";
+                }
+            }
+            else if (e.AddedOutputs.Count > 0)
+            {
+                toast = $"New MIDI Output detected: {string.Join(", ", e.AddedOutputs)}";
+            }
+
+            // Input Device Hot-Swap
+            var currentIn = _recorder.CurrentInputDeviceName;
+            if (!string.IsNullOrEmpty(currentIn) && e.RemovedInputs.Contains(currentIn, StringComparer.OrdinalIgnoreCase))
+            {
+                _recorder.SetInputDevice(null);
+                if (toast == null) toast = $"MIDI Input disconnected: {currentIn}";
+            }
+            else if (string.IsNullOrEmpty(currentIn) && e.InputDevices.Count > 0)
+            {
+                var targetIn = e.AddedInputs.FirstOrDefault() ?? e.InputDevices.FirstOrDefault();
+                if (!string.IsNullOrEmpty(targetIn))
+                {
+                    _recorder.SetInputDevice(targetIn);
+                    if (toast == null) toast = $"MIDI Input connected: {targetIn}";
+                }
+            }
+            else if (e.AddedInputs.Count > 0 && toast == null)
+            {
+                toast = $"New MIDI Input detected: {string.Join(", ", e.AddedInputs)}";
+            }
+
+            SendDevicesUpdated(toast);
+        }
+
+        private void SendDevicesUpdated(string? toastMessage = null)
+        {
+            var outputDevices = MidiPlayer.GetOutputDeviceNames();
+            var inputDevices = MidiRecorder.GetInputDeviceNames();
+            var currentOutput = _player.CurrentOutputDeviceName ?? outputDevices.FirstOrDefault();
+            var currentInput = _recorder.CurrentInputDeviceName ?? inputDevices.FirstOrDefault();
+
+            SendToJs("devices_updated", new
+            {
+                devices = outputDevices,
+                inputDevices = inputDevices,
+                currentOutputDevice = currentOutput,
+                currentInputDevice = currentInput,
+                toastMessage = toastMessage
+            });
         }
 
         public void HandleMessage(string json)
@@ -189,9 +275,17 @@ namespace PSS790Player.Bridge
                     case "cancel_library_sync":
                         _syncCts?.Cancel();
                         break;
+                    case "rescan_devices":
+                        _deviceMonitor.TriggerRescan(0);
+                        SendDevicesUpdated();
+                        break;
                     case "select_device":
                         var dev = root.GetProperty("deviceName").GetString();
-                        if (dev != null) _player.SetOutputDevice(dev);
+                        if (dev != null)
+                        {
+                            _player.SetOutputDevice(dev);
+                            SendDevicesUpdated();
+                        }
                         break;
                     case "load_file":
                     case "load_midi_metadata":
@@ -314,10 +408,15 @@ namespace PSS790Player.Bridge
                         break;
                     case "select_input_device":
                         var inDev = root.GetProperty("deviceName").GetString();
-                        _recorder.SetInputDevice(inDev);
+                        if (inDev != null)
+                        {
+                            _recorder.SetInputDevice(inDev);
+                            SendDevicesUpdated();
+                        }
                         break;
                     case "refresh_input_devices":
-                        SendInputDevices();
+                        _deviceMonitor.TriggerRescan(0);
+                        SendDevicesUpdated();
                         break;
                     case "start_recording":
                         var bpm = root.TryGetProperty("bpm", out var bProp) ? bProp.GetInt32() : 120;
@@ -2021,6 +2120,7 @@ namespace PSS790Player.Bridge
         {
             _batchCts?.Cancel();
             _syncCts?.Cancel();
+            _deviceMonitor.Dispose();
             _sysexManager.Dispose();
             _recorder.Dispose();
             _player.Dispose();

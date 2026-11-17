@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using Microsoft.Web.WebView2.Core;
 using PSS790Player.Bridge;
 
@@ -8,6 +9,7 @@ namespace PSS790Player
 {
     public partial class MainWindow : Window
     {
+        private const int WM_DEVICECHANGE = 0x0219;
         private UiBridge? _uiBridge;
 
         public MainWindow()
@@ -122,6 +124,27 @@ namespace PSS790Player
                 }
             }
             catch { }
+        }
+
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            try
+            {
+                var helper = new WindowInteropHelper(this);
+                var source = HwndSource.FromHwnd(helper.Handle);
+                source?.AddHook(HwndMessageHook);
+            }
+            catch { }
+        }
+
+        private IntPtr HwndMessageHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_DEVICECHANGE)
+            {
+                _uiBridge?.HandleDeviceChangeNotification();
+            }
+            return IntPtr.Zero;
         }
 
         private void MainWindow_Closed(object? sender, EventArgs e)

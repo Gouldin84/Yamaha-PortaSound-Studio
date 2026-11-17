@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-11-17
+
+### Added
+- **Live MIDI Input & Output Hot-Swap Functionality**:
+  - Dynamically detects newly connected or disconnected physical USB-MIDI hardware (Yamaha PSS-790, Roland UM-ONE, USB interfaces) and virtual ports (loopMIDI) in real time without closing or reopening the application.
+  - **OS-Level Plug & Play Integration**: Hooked Windows `WM_DEVICECHANGE` (`0x0219`) via `HwndSource` in `MainWindow.xaml.cs` to trigger an instant debounced rescan (300ms) upon hardware insertion or removal.
+  - **Fallback Background Device Monitor (`MidiDeviceMonitor.cs`)**: Periodically monitors Windows Multimedia device snapshots every 1500ms to detect software/virtual MIDI ports that do not broadcast OS PnP messages.
+  - **Auto-Reconnection & Graceful Disconnection**:
+    - Automatically connects to newly plugged devices if no port is currently active or if a preferred device re-appears.
+    - Gracefully halts playback/recording and releases handles if an active cable is yanked mid-session, completely preventing application crashes and deadlocked UI threads.
+  - **UI Indicators & Controls**:
+    - Added `#outputStatusDot` in the header toolbar showing active connection status (pulsing emerald green when ready, muted slate when disconnected).
+    - Added `#btnRefreshDevices` one-click sync button next to the device port selector for instantaneous on-demand rescans.
+    - Added dropdown focus triggers to rescan device availability the moment a selector is opened.
+    - Integrated real-time studio toast alerts ("MIDI Output connected: [Device]", "MIDI Output disconnected: [Device]").
+  - **Test Suite Expansion (`MidiHotSwapTests.cs`)**:
+    - Added 5 unit tests verifying snapshot diffing, PnP debounce, hot-plugging, and graceful disconnection handling (101/101 tests passing).
+
 ## [1.12.0] - 2026-11-17
 
 ### Added

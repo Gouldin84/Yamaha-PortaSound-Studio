@@ -63,6 +63,7 @@ namespace PSS790Player.Core
         public event EventHandler<RecorderStateEventArgs>? StateChanged;
         public event EventHandler<RecorderTickEventArgs>? Tick;
         public event EventHandler<NormalSysExEvent>? SysExReceived;
+        public event EventHandler<string>? InputDeviceDisconnected;
 
         public MidiRecorder()
         {
@@ -119,6 +120,21 @@ namespace PSS790Player.Core
                         _inputDevice = null;
                     }
                 }
+            }
+        }
+
+        public void HandleDeviceDisconnected()
+        {
+            string? disconnectedName;
+            lock (_lock)
+            {
+                disconnectedName = CurrentInputDeviceName;
+                SetInputDevice(null);
+            }
+
+            if (!string.IsNullOrEmpty(disconnectedName))
+            {
+                InputDeviceDisconnected?.Invoke(this, disconnectedName);
             }
         }
 

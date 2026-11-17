@@ -40,11 +40,13 @@ namespace PSS790Player.Core
 
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
         public event EventHandler<PlaybackStateEventArgs>? PlaybackStateChanged;
+        public event EventHandler<string>? OutputDeviceDisconnected;
 
         public bool IsPlaying => _playback?.IsRunning ?? false;
         public bool IsPaused => (!IsPlaying) && (_playback?.GetCurrentTime<MetricTimeSpan>().TotalMilliseconds > 0);
         public TimeSpan TotalDuration => _currentFile?.GetDuration<MetricTimeSpan>() ?? TimeSpan.Zero;
         public TimeSpan CurrentPosition => _playback?.GetCurrentTime<MetricTimeSpan>() ?? TimeSpan.Zero;
+        public string? CurrentOutputDeviceName { get; private set; }
 
         public MidiPlayer()
         {
@@ -76,11 +78,25 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SetOutputDevice(string deviceName)
+        public void SetOutputDevice(string? deviceName)
         {
+            if (string.IsNullOrWhiteSpace(deviceName))
+            {
+                lock (_lock)
+                {
+                    Stop();
+                    _outputDevice?.Dispose();
+                    _outputDevice = null;
+                    CurrentOutputDeviceName = null;
+                }
+                return;
+            }
+
             try
             {
-                SetOutputDevice(OutputDevice.GetByName(deviceName));
+                var dev = OutputDevice.GetByName(deviceName);
+                CurrentOutputDeviceName = deviceName;
+                SetOutputDevice(dev);
             }
             catch
             {
@@ -89,6 +105,7 @@ namespace PSS790Player.Core
                     Stop();
                     _outputDevice?.Dispose();
                     _outputDevice = null;
+                    CurrentOutputDeviceName = null;
                 }
             }
         }
@@ -103,6 +120,10 @@ namespace PSS790Player.Core
                 Stop();
                 _outputDevice?.Dispose();
                 _outputDevice = outputDevice;
+                if (outputDevice == null)
+                {
+                    CurrentOutputDeviceName = null;
+                }
 
                 if (_currentFile != null && _outputDevice != null)
                 {
@@ -113,6 +134,28 @@ namespace PSS790Player.Core
                         Play();
                     }
                 }
+            }
+        }
+
+        public void HandleDeviceDisconnected()
+        {
+            string? disconnectedName;
+            lock (_lock)
+            {
+                disconnectedName = CurrentOutputDeviceName;
+                Stop();
+                try
+                {
+                    _outputDevice?.Dispose();
+                }
+                catch { }
+                _outputDevice = null;
+                CurrentOutputDeviceName = null;
+            }
+
+            if (!string.IsNullOrEmpty(disconnectedName))
+            {
+                OutputDeviceDisconnected?.Invoke(this, disconnectedName);
             }
         }
 
@@ -347,7 +390,14 @@ namespace PSS790Player.Core
         {
             lock (_lock)
             {
-                _outputDevice?.SendEvent(midiEvent);
+                try
+                {
+                    _outputDevice?.SendEvent(midiEvent);
+                }
+                catch
+                {
+                    HandleDeviceDisconnected();
+                }
             }
         }
 
@@ -363,7 +413,14 @@ namespace PSS790Player.Core
                     {
                         Channel = (FourBitNumber)channel
                     };
-                    _outputDevice.SendEvent(pc);
+                    try
+                    {
+                        _outputDevice.SendEvent(pc);
+                    }
+                    catch
+                    {
+                        HandleDeviceDisconnected();
+                    }
                 }
             }
         }
@@ -575,14 +632,28 @@ namespace PSS790Player.Core
                         {
                             Channel = cc.Channel
                         };
-                        target.SendEvent(scaledCc);
-                        EventSent?.Invoke(this, new MidiEventSentEventArgs(scaledCc));
+                        try
+                        {
+                            target.SendEvent(scaledCc);
+                            EventSent?.Invoke(this, new MidiEventSentEventArgs(scaledCc));
+                        }
+                        catch
+                        {
+                            _player.HandleDeviceDisconnected();
+                        }
                         return;
                     }
                 }
 
-                target.SendEvent(midiEvent);
-                EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
+                try
+                {
+                    target.SendEvent(midiEvent);
+                    EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
+                }
+                catch
+                {
+                    _player.HandleDeviceDisconnected();
+                }
             }
 
             public void PrepareForEventsSending()
