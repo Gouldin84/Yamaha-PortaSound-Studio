@@ -36,6 +36,20 @@ namespace PSS790Player.Core
         public int CurrentBeat { get; set; }
     }
 
+    public class RecordingTakeInfo
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string FilePath { get; set; } = string.Empty;
+        public long FileSizeBytes { get; set; }
+        public string FileSizeFormatted { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public string CreatedAtFormatted { get; set; } = string.Empty;
+        public double DurationSeconds { get; set; }
+        public string DurationFormatted { get; set; } = string.Empty;
+        public int NoteCount { get; set; }
+        public int TrackCount { get; set; }
+    }
+
     public class MidiRecorder : IDisposable
     {
         private InputDevice? _inputDevice;
@@ -157,7 +171,8 @@ namespace PSS790Player.Core
                     {
                         Channel = ch,
                         IsActive = isActive,
-                        Velocity = (byte)noteOn.Velocity
+                        Velocity = (byte)noteOn.Velocity,
+                        NoteNumber = (byte)noteOn.NoteNumber
                     });
 
                     if (_state == RecorderState.Recording && isActive)
@@ -165,13 +180,14 @@ namespace PSS790Player.Core
                         Interlocked.Increment(ref _totalNotesRecorded);
                     }
                 }
-                else if (channelEvent is NoteOffEvent)
+                else if (channelEvent is NoteOffEvent noteOff)
                 {
                     InputActivity?.Invoke(this, new ChannelActivityEventArgs
                     {
                         Channel = ch,
                         IsActive = false,
-                        Velocity = 0
+                        Velocity = 0,
+                        NoteNumber = (byte)noteOff.NoteNumber
                     });
                 }
 
@@ -396,6 +412,192 @@ namespace PSS790Player.Core
         public string SaveTake(string fileName, bool remapForPss790, RemapperOptions? options = null)
         {
             return remapForPss790 ? SaveNativeTake(fileName) : ExportTakeToGeneralMidi(fileName);
+        }
+
+        public string? AutoSaveTake()
+        {
+            if (_lastRecordedFile == null) return null;
+
+            var (notes, _, _) = GetLastTakeStats();
+            if (notes == 0) return null;
+
+            AppPaths.EnsureDirectoriesExist();
+            var fileName = $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
+            var fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
+
+            var fileToSave = _lastRecordedFile.Clone();
+            fileToSave.Write(fullPath, overwriteFile: true);
+            return fullPath;
+        }
+
+        public string SaveTakeToRecordings(string fileName)
+        {
+            if (_lastRecordedFile == null)
+            {
+                throw new InvalidOperationException("No recorded take available to save.");
+            }
+
+            if (!fileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
+            {
+                fileName += ".mid";
+            }
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                fileName = fileName.Replace(c, '_');
+            }
+
+            AppPaths.EnsureDirectoriesExist();
+            string fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
+
+            var fileToSave = _lastRecordedFile.Clone();
+            fileToSave.Write(fullPath, overwriteFile: true);
+            return fullPath;
+        }
+
+        public List<RecordingTakeInfo> GetRecordingsLibrary()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            var list = new List<RecordingTakeInfo>();
+
+            if (!Directory.Exists(AppPaths.RecordingsDir))
+                return list;
+
+            var dir = new DirectoryInfo(AppPaths.RecordingsDir);
+            var files = dir.GetFiles("*.*", SearchOption.TopDirectoryOnly)
+                .Where(f => f.Extension.Equals(".mid", StringComparison.OrdinalIgnoreCase) ||
+                            f.Extension.Equals(".midi", StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(f => f.LastWriteTimeUtc);
+
+            foreach (var fi in files)
+            {
+                try
+                {
+                    double durSeconds = 0;
+                    int noteCount = 0;
+                    int trackCount = 0;
+
+                    try
+                    {
+                        var mf = MidiFile.Read(fi.FullName);
+                        durSeconds = mf.GetDuration<MetricTimeSpan>().TotalSeconds;
+                        noteCount = mf.GetNotes().Count;
+                        trackCount = mf.GetTrackChunks().Count();
+                    }
+                    catch
+                    {
+                        // Fallback if file is being written or corrupt
+                    }
+
+                    list.Add(new RecordingTakeInfo
+                    {
+                        FileName = fi.Name,
+                        FilePath = fi.FullName,
+                        FileSizeBytes = fi.Length,
+                        FileSizeFormatted = $"{Math.Round(fi.Length / 1024.0, 1)} KB",
+                        CreatedAt = fi.LastWriteTime,
+                        CreatedAtFormatted = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm"),
+                        DurationSeconds = durSeconds,
+                        DurationFormatted = TimeSpan.FromSeconds(durSeconds).ToString(@"mm\:ss"),
+                        NoteCount = noteCount,
+                        TrackCount = trackCount
+                    });
+                }
+                catch
+                {
+                    // Skip unreadable files
+                }
+            }
+
+            return list;
+        }
+
+        public string ExportRecordingToGeneralMidi(string sourcePath, string? targetFileName = null)
+        {
+            if (!File.Exists(sourcePath))
+                throw new FileNotFoundException("Recording file not found.", sourcePath);
+
+            AppPaths.EnsureDirectoriesExist();
+            var outFileName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
+            if (!outFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
+                outFileName += ".mid";
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                outFileName = outFileName.Replace(c, '_');
+            }
+
+            var destPath = Path.Combine(AppPaths.GmMidiDir, outFileName);
+            var sourceMidi = MidiFile.Read(sourcePath);
+            var gmFile = ReverseRemapper.ReverseRemapToGeneralMidi(sourceMidi);
+            gmFile.Write(destPath, overwriteFile: true);
+            return destPath;
+        }
+
+        public string ExportRecordingToPss790(string sourcePath, string? targetFileName = null)
+        {
+            if (!File.Exists(sourcePath))
+                throw new FileNotFoundException("Recording file not found.", sourcePath);
+
+            AppPaths.EnsureDirectoriesExist();
+            var outFileName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
+            if (!outFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
+                outFileName += ".mid";
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                outFileName = outFileName.Replace(c, '_');
+            }
+
+            var destPath = Path.Combine(AppPaths.Pss790MidiDir, outFileName);
+            var sourceMidi = MidiFile.Read(sourcePath);
+            var pssFile = sourceMidi.Clone();
+            var firstTrack = pssFile.GetTrackChunks().FirstOrDefault();
+            if (firstTrack == null)
+            {
+                firstTrack = new TrackChunk();
+                pssFile.Chunks.Add(firstTrack);
+            }
+            firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790MarkerText) { DeltaTime = 0 });
+            pssFile.Write(destPath, overwriteFile: true);
+            return destPath;
+        }
+
+        public bool DeleteRecording(string filePath)
+        {
+            if (!File.Exists(filePath)) return false;
+            try
+            {
+                File.Delete(filePath);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public string RenameRecording(string filePath, string newFileName)
+        {
+            if (!File.Exists(filePath))
+                throw new FileNotFoundException("Recording file not found.", filePath);
+
+            if (!newFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
+                newFileName += ".mid";
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                newFileName = newFileName.Replace(c, '_');
+            }
+
+            var dir = Path.GetDirectoryName(filePath) ?? AppPaths.RecordingsDir;
+            var newPath = Path.Combine(dir, newFileName);
+
+            if (string.Equals(filePath, newPath, StringComparison.OrdinalIgnoreCase))
+                return filePath;
+
+            File.Move(filePath, newPath, overwrite: true);
+            return newPath;
         }
 
         public void Dispose()

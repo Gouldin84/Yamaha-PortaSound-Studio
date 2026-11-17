@@ -172,5 +172,79 @@ namespace PSS790Player.Tests
             Assert.Equal((byte)35, (byte)drumNotes[0].NoteNumber); // GM Acoustic Bass Drum
             Assert.Equal((byte)40, (byte)drumNotes[1].NoteNumber); // GM Electric Snare
         }
+
+        [Fact]
+        public void AppPaths_RecordingsDir_IsProperlyConfigured()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            Assert.NotNull(AppPaths.RecordingsDir);
+            Assert.True(Directory.Exists(AppPaths.RecordingsDir));
+        }
+
+        [Fact]
+        public void RecordingsLibrary_Save_Get_Export_Rename_Delete_Lifecycle()
+        {
+            using var recorder = new MidiRecorder();
+
+            var syntheticFile = new MidiFile();
+            var track = new TrackChunk();
+            track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { DeltaTime = 0, Channel = (FourBitNumber)0 });
+            track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 240, Channel = (FourBitNumber)0 });
+            syntheticFile.Chunks.Add(track);
+
+            var field = typeof(MidiRecorder).GetField("_lastRecordedFile", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            Assert.NotNull(field);
+            field.SetValue(recorder, syntheticFile);
+
+            var testTakeName = $"Test_Take_{Guid.NewGuid():N}.mid";
+            string savedTakePath = recorder.SaveTakeToRecordings(testTakeName);
+            string? exportedGmPath = null;
+            string? exportedPssPath = null;
+            string? renamedPath = null;
+
+            try
+            {
+                Assert.True(File.Exists(savedTakePath));
+
+                // 1. GetRecordingsLibrary should contain our saved take
+                var library = recorder.GetRecordingsLibrary();
+                Assert.NotNull(library);
+                var entry = library.FirstOrDefault(t => t.FileName.Equals(testTakeName, StringComparison.OrdinalIgnoreCase));
+                Assert.NotNull(entry);
+                Assert.True(entry.DurationSeconds > 0 || entry.NoteCount >= 1);
+
+                // 2. ExportRecordingToGeneralMidi from Vault
+                var gmExportName = $"Exported_GM_{Guid.NewGuid():N}.mid";
+                exportedGmPath = recorder.ExportRecordingToGeneralMidi(savedTakePath, gmExportName);
+                Assert.True(File.Exists(exportedGmPath));
+                Assert.Contains("GM Midi", exportedGmPath);
+
+                // 3. ExportRecordingToPss790 from Vault
+                var pssExportName = $"Exported_PSS_{Guid.NewGuid():N}.mid";
+                exportedPssPath = recorder.ExportRecordingToPss790(savedTakePath, pssExportName);
+                Assert.True(File.Exists(exportedPssPath));
+                Assert.Contains("PSS-790 Midi", exportedPssPath);
+                var pssReloaded = MidiFile.Read(exportedPssPath);
+                Assert.Equal(MidiFormat.Pss790Native, Remapper.DetectMidiFormat(pssReloaded));
+
+                // 4. Rename Recording
+                var renamedName = $"Renamed_Take_{Guid.NewGuid():N}.mid";
+                renamedPath = recorder.RenameRecording(savedTakePath, renamedName);
+                Assert.True(File.Exists(renamedPath));
+                Assert.False(File.Exists(savedTakePath));
+
+                // 5. Delete Recording
+                var deleted = recorder.DeleteRecording(renamedPath);
+                Assert.True(deleted);
+                Assert.False(File.Exists(renamedPath));
+            }
+            finally
+            {
+                if (File.Exists(savedTakePath)) File.Delete(savedTakePath);
+                if (renamedPath != null && File.Exists(renamedPath)) File.Delete(renamedPath);
+                if (exportedGmPath != null && File.Exists(exportedGmPath)) File.Delete(exportedGmPath);
+                if (exportedPssPath != null && File.Exists(exportedPssPath)) File.Delete(exportedPssPath);
+            }
+        }
     }
 }

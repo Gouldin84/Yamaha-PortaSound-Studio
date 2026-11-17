@@ -13,6 +13,7 @@ namespace PSS790Player.Core
         public int Channel { get; set; }
         public bool IsActive { get; set; }
         public byte Velocity { get; set; }
+        public byte NoteNumber { get; set; }
     }
 
     public class PlaybackStateEventArgs : EventArgs
@@ -265,7 +266,8 @@ namespace PSS790Player.Core
                         {
                             Channel = ch,
                             IsActive = true,
-                            Velocity = (byte)noteOn.Velocity
+                            Velocity = (byte)noteOn.Velocity,
+                            NoteNumber = (byte)noteOn.NoteNumber
                         });
                     }
                     else

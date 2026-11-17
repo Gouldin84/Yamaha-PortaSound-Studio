@@ -589,3 +589,153 @@ body.theme-light .btn-console-s:not(.soloed):hover {
     color: #d97706 !important;
     border-color: #fde68a !important;
 }
+
+/* ==========================================================================
+   Studio Hardware Console: VU Meters, LCD Chord Screen & Recordings Vault
+   ========================================================================== */
+
+/* Studio LCD Screen Bezel */
+.studio-lcd-bezel {
+    background: radial-gradient(circle at 50% 30%, #064e3b 0%, #022c22 65%, #011812 100%);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.7), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#liveChordDisplay {
+    text-shadow: 0 0 12px rgba(52, 211, 153, 0.7), 0 0 4px rgba(52, 211, 153, 0.4);
+}
+
+/* Studio VU Meters */
+.studio-vu-panel {
+    background: #090d16;
+    border: 1px solid rgba(51, 65, 85, 0.6);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+}
+
+.vu-ladder {
+    background: #0b1120;
+    border: 1px solid rgba(30, 41, 59, 0.8);
+    display: flex;
+    gap: 2px;
+}
+
+.vu-segment {
+    flex: 1;
+    height: 100%;
+    border-radius: 1px;
+    opacity: 0.15;
+    transition: opacity 0.04s ease-out;
+}
+
+.vu-segment.green {
+    background-color: #22c55e;
+    color: #22c55e;
+}
+
+.vu-segment.amber {
+    background-color: #f59e0b;
+    color: #f59e0b;
+}
+
+.vu-segment.red {
+    background-color: #ef4444;
+    color: #ef4444;
+}
+
+.vu-segment.lit {
+    opacity: 1;
+    filter: drop-shadow(0 0 3px currentColor);
+}
+
+.vu-segment.peak {
+    opacity: 1;
+    filter: drop-shadow(0 0 5px currentColor);
+}
+
+/* Studio Recording Take Cards */
+.take-vault-card {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(51, 65, 85, 0.7);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.take-vault-card:hover {
+    background: rgba(30, 41, 59, 0.8);
+    border-color: rgba(244, 63, 94, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.4);
+}
+
+.take-vault-card.is-previewing {
+    border-color: rgba(6, 182, 212, 0.8);
+    background: rgba(8, 51, 68, 0.35);
+    box-shadow: 0 0 16px rgba(6, 182, 212, 0.2);
+}
+
+/* Light Studio Theme Parity for New Studio Console Elements */
+body.theme-light .studio-lcd-bezel {
+    background: #ecfdf5 !important;
+    border-color: #a7f3d0 !important;
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light #liveChordDisplay {
+    color: #047857 !important;
+    text-shadow: none !important;
+}
+
+body.theme-light #liveChordNotesDisplay {
+    color: #059669 !important;
+}
+
+body.theme-light #liveChordNotesLabel {
+    color: #065f46 !important;
+}
+
+body.theme-light .studio-vu-panel {
+    background: #f8fafc !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+body.theme-light .vu-ladder {
+    background: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
+}
+
+body.theme-light .vu-segment {
+    opacity: 0.18;
+}
+
+body.theme-light .vu-segment.lit {
+    opacity: 1;
+    filter: drop-shadow(0 0 2px currentColor);
+}
+
+body.theme-light .take-vault-card {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.theme-light .take-vault-card:hover {
+    background: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .take-vault-card.is-previewing {
+    border-color: #0284c7 !important;
+    background: #f0f9ff !important;
+    box-shadow: 0 0 12px rgba(2, 132, 199, 0.15) !important;
+}
+
+body.theme-light #recordingsSearchInput {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+}
+
+body.theme-light #recordingsSearchInput::placeholder {
+    color: #94a3b8 !important;
+}

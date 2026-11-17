@@ -434,6 +434,55 @@
                         </button>
                     </div>
                 </div>
+
+                <!-- Studio Hardware Metering Console Strip -->
+                <div class="mt-6 pt-5 border-t border-slate-800/80 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                    <!-- Real-Time Live Chord & Pitch Analyzer LCD Screen (Col 7) -->
+                    <div class="lg:col-span-7 studio-lcd-bezel p-3.5 rounded-xl border border-emerald-950/80 flex items-center justify-between space-x-4 shadow-inner" title="Real-Time Musical Chord Analyzer: Automatically detects musical chords, intervals, and inversions as you play">
+                        <div class="flex items-center space-x-3 min-w-0">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-900/40 border border-emerald-700/50 flex items-center justify-center shrink-0">
+                                <span class="text-xs font-black text-emerald-400">♫</span>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-[10px] font-bold uppercase tracking-widest text-emerald-500/80">Real-Time Chord & Pitch Analyzer</div>
+                                <div id="liveChordDisplay" class="text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-400 truncate">STANDBY</div>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0 border-l border-emerald-900/50 pl-4">
+                            <div class="text-[10px] font-mono text-emerald-500/70" id="liveChordNotesLabel">Active Notes</div>
+                            <div id="liveChordNotesDisplay" class="text-xs font-mono font-bold text-emerald-300">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Stereo Master Peak Level VU Meters (Col 5) -->
+                    <div class="lg:col-span-5 studio-vu-panel p-3.5 rounded-xl border border-slate-800/80 bg-slate-950/70 shadow-inner flex flex-col justify-center space-y-2" title="Stereo Master Peak Level VU Meters: Dual 12-segment graduated LED meters displaying note velocity amplitude and peak dynamics">
+                        <div class="flex items-center justify-between text-[10px] font-mono font-bold text-slate-400 px-1">
+                            <span class="tracking-wider">MASTER PEAK VU</span>
+                            <span class="text-slate-500 space-x-2 text-[9px]">
+                                <span>-24</span>
+                                <span>-12</span>
+                                <span>-6</span>
+                                <span>-3</span>
+                                <span>0</span>
+                                <span class="text-rose-400">+3 dB</span>
+                            </span>
+                        </div>
+                        <!-- Left Channel Ladder -->
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] font-mono font-bold text-slate-400 w-3">L</span>
+                            <div id="recVuLeft" class="vu-ladder flex-1 h-3 rounded flex space-x-0.5 p-0.5 bg-slate-900 border border-slate-800">
+                                <!-- 12 LED segments populated by JS -->
+                            </div>
+                        </div>
+                        <!-- Right Channel Ladder -->
+                        <div class="flex items-center space-x-2">
+                            <span class="text-[10px] font-mono font-bold text-slate-400 w-3">R</span>
+                            <div id="recVuRight" class="vu-ladder flex-1 h-3 rounded flex space-x-0.5 p-0.5 bg-slate-900 border border-slate-800">
+                                <!-- 12 LED segments populated by JS -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- Post-Recording Take Summary Card -->
@@ -504,6 +553,60 @@
                 <!-- 16 Channel Inbound LED Strips -->
                 <div id="recorderChannelGrid" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                     <!-- Dynamically rendered 16 inbound channel cards -->
+                </div>
+            </section>
+
+            <!-- Studio Recordings & Project Vault (Tab 2 Exclusive) -->
+            <section id="studioRecordingsSection" class="glass-panel p-5 rounded-2xl border border-slate-800/80 shadow-xl space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-sm shadow-inner">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h3 class="text-sm font-bold text-white tracking-tight">Studio Recordings Vault</h3>
+                                <span id="recordingsCountBadge" class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-rose-400 border border-slate-700">0 Takes</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Dedicated workspace take library: audition takes and one-click export completed tracks to your main GM library</p>
+                        </div>
+                    </div>
+
+                    <!-- Search & Actions -->
+                    <div class="flex items-center space-x-2 flex-wrap">
+                        <div class="relative">
+                            <input type="text" id="recordingsSearchInput" placeholder="Filter takes..." title="Search Studio Takes: Filter recorded project takes by name or date" class="px-3 py-1 pl-8 text-xs rounded-xl bg-slate-900 border border-slate-700/80 text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 w-44">
+                            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                            </svg>
+                        </div>
+                        <button id="btnOpenRecordingsFolder" title="Open Recordings Folder: Reveal Music\Midi\Recordings in Windows Explorer" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                            </svg>
+                        </button>
+                        <button id="btnRefreshRecordings" title="Refresh Recordings: Rescan Music\Midi\Recordings folder" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95">
+                            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Empty State -->
+                <div id="recordingsEmptyState" class="hidden py-8 text-center text-slate-500 space-y-2">
+                    <svg class="w-10 h-10 mx-auto text-slate-600 opacity-60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                    </svg>
+                    <p class="text-xs font-semibold text-slate-400">No Studio Recordings in Vault</p>
+                    <p class="text-[11px] text-slate-500">Record a performance using 'Start Recording' above. Every take is automatically preserved here.</p>
+                </div>
+
+                <!-- Takes List Container -->
+                <div id="recordingsListContainer" class="space-y-2 max-h-[380px] overflow-y-auto pr-1 custom-scrollbar">
+                    <!-- Dynamically rendered take cards -->
                 </div>
             </section>
 
@@ -1126,7 +1229,7 @@
                     <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.17.1</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PSS-790 Studio v1.18.0</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">

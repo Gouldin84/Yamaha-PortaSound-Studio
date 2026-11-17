@@ -58,7 +58,18 @@ let state = {
     isSysexTransmitting: false,
     sysexSearchQuery: "",
     lastInspectedHex: "",
-    theme: "dark"
+    theme: "dark",
+    // Studio Recordings Vault & Live Hardware Metering
+    activeInboundNotes: new Map(),
+    vuLeftLevel: 0,
+    vuRightLevel: 0,
+    vuLeftPeak: 0,
+    vuRightPeak: 0,
+    vuLeftPeakTimer: null,
+    vuRightPeakTimer: null,
+    recordingsLibrary: [],
+    recordingsSearchQuery: "",
+    activePreviewRecordingPath: null
 };
 
 // --- Theme Management ---
@@ -150,6 +161,10 @@ function switchTab(tab) {
     if (isSysex) {
         renderSysExLibrary();
     }
+    if (isRecorder) {
+        renderRecordingsLibrary();
+        sendToHost("get_recordings_library");
+    }
 }
 
 // --- Interop with C# Host ---
@@ -189,6 +204,9 @@ function handleHostMessage(msg) {
             if (msg.data.sysexLibrary) {
                 state.sysexLibrary = msg.data.sysexLibrary;
                 renderSysExLibrary();
+            }
+            if (msg.data.recordingsLibrary) {
+                handleRecordingsLibraryUpdated(msg.data.recordingsLibrary);
             }
             renderDeviceSelect(msg.data.defaultDevice);
             renderInputDeviceSelect(msg.data.defaultInputDevice);
@@ -294,6 +312,9 @@ function handleHostMessage(msg) {
 
         case "channel_activity":
             updateChannelLed(msg.data.channel, msg.data.isActive, msg.data.velocity);
+            if (state.activeTab === "recorder" && msg.data.isActive) {
+                feedVuMeter(msg.data.velocity, msg.data.channel);
+            }
             break;
 
         case "playback_state":
@@ -309,6 +330,9 @@ function handleHostMessage(msg) {
                 highlightActiveSongInTree();
                 if (!state.isPlaying) {
                     clearAllChannelLeds();
+                    if (state.activePreviewRecordingPath) {
+                        handleRecordingPreviewStopped();
+                    }
                 }
             }
             break;
@@ -323,7 +347,7 @@ function handleHostMessage(msg) {
             break;
 
         case "recorder_input_activity":
-            updateRecorderChannelActivity(msg.data.channel, msg.data.isActive, msg.data.velocity);
+            updateRecorderChannelActivity(msg.data.channel, msg.data.isActive, msg.data.velocity, msg.data.noteNumber);
             break;
 
         case "recorder_take_ready":
@@ -332,6 +356,18 @@ function handleHostMessage(msg) {
 
         case "take_saved":
             showToast(`Saved to ${msg.data.isPss790 ? 'PSS-790 Midi' : 'GM Midi'}: ${msg.data.fileName}`);
+            break;
+
+        case "recordings_library_updated":
+            handleRecordingsLibraryUpdated(msg.data.recordings);
+            break;
+
+        case "recording_preview_started":
+            handleRecordingPreviewStarted(msg.data.filePath);
+            break;
+
+        case "recording_preview_stopped":
+            handleRecordingPreviewStopped();
             break;
 
         case "linked_file_checked":
@@ -1938,7 +1974,232 @@ function renderRecorderChannels() {
     });
 }
 
-function updateRecorderChannelActivity(channel, isActive, velocity) {
+// --- Musical Pitch & Real-Time Live Chord Analyzer ---
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+function noteToPitch(noteNumber) {
+    if (noteNumber === undefined || noteNumber === null || noteNumber < 0 || noteNumber > 127) return "-";
+    const octave = Math.floor(noteNumber / 12) - 1;
+    const note = NOTE_NAMES[noteNumber % 12];
+    return `${note}${octave}`;
+}
+
+const CHORD_DEFINITIONS = [
+    { name: "Maj", intervals: [0, 4, 7] },
+    { name: "Min", intervals: [0, 3, 7] },
+    { name: "7", intervals: [0, 4, 7, 10] },
+    { name: "Maj7", intervals: [0, 4, 7, 11] },
+    { name: "Min7", intervals: [0, 3, 7, 10] },
+    { name: "Dim", intervals: [0, 3, 6] },
+    { name: "Dim7", intervals: [0, 3, 6, 9] },
+    { name: "m7b5", intervals: [0, 3, 6, 10] },
+    { name: "Aug", intervals: [0, 4, 8] },
+    { name: "Sus4", intervals: [0, 5, 7] },
+    { name: "Sus2", intervals: [0, 2, 7] },
+    { name: "6", intervals: [0, 4, 7, 9] },
+    { name: "Min6", intervals: [0, 3, 7, 9] },
+    { name: "Add9", intervals: [0, 2, 4, 7] },
+    { name: "9", intervals: [0, 2, 4, 7, 10] },
+    { name: "Maj9", intervals: [0, 2, 4, 7, 11] },
+    { name: "Min9", intervals: [0, 2, 3, 7, 10] }
+];
+
+const INTERVAL_NAMES = {
+    0: "Unison / Octave",
+    1: "Minor 2nd",
+    2: "Major 2nd",
+    3: "Minor 3rd",
+    4: "Major 3rd",
+    5: "Perfect 4th",
+    6: "Tritone",
+    7: "Perfect 5th",
+    8: "Minor 6th",
+    9: "Major 6th",
+    10: "Minor 7th",
+    11: "Major 7th"
+};
+
+function analyzeInboundChords() {
+    const chordDisplay = document.getElementById("liveChordDisplay");
+    const notesDisplay = document.getElementById("liveChordNotesDisplay");
+    const notesLabel = document.getElementById("liveChordNotesLabel");
+    if (!chordDisplay || !notesDisplay) return;
+
+    const notes = Array.from(state.activeInboundNotes.keys()).sort((a, b) => a - b);
+    if (notes.length === 0) {
+        chordDisplay.textContent = "STANDBY";
+        chordDisplay.className = "text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-400 truncate opacity-60";
+        notesDisplay.textContent = "--";
+        if (notesLabel) notesLabel.textContent = "Active Notes";
+        return;
+    }
+
+    chordDisplay.className = "text-xl sm:text-2xl font-black font-mono tracking-tight text-emerald-400 truncate";
+    const notePitches = notes.map(noteToPitch);
+    notesDisplay.textContent = notePitches.join(" ");
+
+    if (notes.length === 1) {
+        chordDisplay.textContent = notePitches[0];
+        if (notesLabel) notesLabel.textContent = `MIDI Note #${notes[0]}`;
+        return;
+    }
+
+    if (notes.length === 2) {
+        const semitones = (notes[1] - notes[0]) % 12;
+        const intervalName = INTERVAL_NAMES[semitones] || "Interval";
+        chordDisplay.textContent = `${notePitches[0]} - ${notePitches[1]}`;
+        if (notesLabel) notesLabel.textContent = intervalName;
+        return;
+    }
+
+    // 3 or more notes: detect chord root, quality, and inversion
+    const pitchClasses = Array.from(new Set(notes.map(n => n % 12)));
+    const bassPitchClass = notes[0] % 12;
+
+    let bestMatch = null;
+
+    for (const root of pitchClasses) {
+        const rootName = NOTE_NAMES[root];
+        const intervals = pitchClasses.map(p => (p - root + 12) % 12).sort((a, b) => a - b);
+
+        for (const def of CHORD_DEFINITIONS) {
+            if (def.intervals.length === intervals.length &&
+                def.intervals.every((v, i) => v === intervals[i])) {
+                let chordName = `${rootName} ${def.name}`;
+                if (bassPitchClass !== root) {
+                    chordName += ` / ${NOTE_NAMES[bassPitchClass]}`;
+                }
+                bestMatch = { name: chordName, root: rootName, formula: def.name };
+                break;
+            }
+        }
+        if (bestMatch) break;
+    }
+
+    if (bestMatch) {
+        chordDisplay.textContent = bestMatch.name;
+        if (notesLabel) notesLabel.textContent = `Formula: ${bestMatch.formula}`;
+    } else {
+        chordDisplay.textContent = notePitches.slice(0, 4).join(" ");
+        if (notesLabel) notesLabel.textContent = "Compound Chord";
+    }
+}
+
+// --- Stereo Master Peak Level VU Meters ---
+let targetVuLeft = 0;
+let targetVuRight = 0;
+let lastVuTime = performance.now();
+
+function initVuMeters() {
+    const leftLadder = document.getElementById("recVuLeft");
+    const rightLadder = document.getElementById("recVuRight");
+    if (!leftLadder || !rightLadder) return;
+
+    leftLadder.innerHTML = "";
+    rightLadder.innerHTML = "";
+
+    for (let i = 0; i < 12; i++) {
+        let colorClass = "green";
+        if (i >= 10) colorClass = "red";
+        else if (i >= 7) colorClass = "amber";
+
+        const segL = document.createElement("div");
+        segL.className = `vu-segment ${colorClass}`;
+        segL.id = `vu-l-${i}`;
+        leftLadder.appendChild(segL);
+
+        const segR = document.createElement("div");
+        segR.className = `vu-segment ${colorClass}`;
+        segR.id = `vu-r-${i}`;
+        rightLadder.appendChild(segR);
+    }
+
+    requestAnimationFrame(updateVuMeterPhysics);
+}
+
+function updateVuMeterPhysics(currentTime) {
+    const dt = Math.min((currentTime - lastVuTime) / 1000, 0.1);
+    lastVuTime = currentTime;
+
+    // Instant attack, exponential decay (~350ms decay half-life)
+    if (targetVuLeft > state.vuLeftLevel) {
+        state.vuLeftLevel = targetVuLeft;
+    } else {
+        state.vuLeftLevel = Math.max(0, state.vuLeftLevel - (dt * 18));
+    }
+
+    if (targetVuRight > state.vuRightLevel) {
+        state.vuRightLevel = targetVuRight;
+    } else {
+        state.vuRightLevel = Math.max(0, state.vuRightLevel - (dt * 18));
+    }
+
+    targetVuLeft = Math.max(0, targetVuLeft - (dt * 12));
+    targetVuRight = Math.max(0, targetVuRight - (dt * 12));
+
+    // Peak hold logic
+    if (state.vuLeftLevel > state.vuLeftPeak) {
+        state.vuLeftPeak = state.vuLeftLevel;
+        if (state.vuLeftPeakTimer) clearTimeout(state.vuLeftPeakTimer);
+        state.vuLeftPeakTimer = setTimeout(() => { state.vuLeftPeak = 0; }, 800);
+    }
+
+    if (state.vuRightLevel > state.vuRightPeak) {
+        state.vuRightPeak = state.vuRightLevel;
+        if (state.vuRightPeakTimer) clearTimeout(state.vuRightPeakTimer);
+        state.vuRightPeakTimer = setTimeout(() => { state.vuRightPeak = 0; }, 800);
+    }
+
+    const litCountL = Math.round(state.vuLeftLevel);
+    const peakIndexL = Math.round(state.vuLeftPeak);
+    const litCountR = Math.round(state.vuRightLevel);
+    const peakIndexR = Math.round(state.vuRightPeak);
+
+    for (let i = 0; i < 12; i++) {
+        const segL = document.getElementById(`vu-l-${i}`);
+        if (segL) {
+            const isLit = i < litCountL;
+            const isPeak = i === (peakIndexL - 1) && peakIndexL > 0;
+            segL.classList.toggle("lit", isLit);
+            segL.classList.toggle("peak", isPeak);
+        }
+
+        const segR = document.getElementById(`vu-r-${i}`);
+        if (segR) {
+            const isLit = i < litCountR;
+            const isPeak = i === (peakIndexR - 1) && peakIndexR > 0;
+            segR.classList.toggle("lit", isLit);
+            segR.classList.toggle("peak", isPeak);
+        }
+    }
+
+    requestAnimationFrame(updateVuMeterPhysics);
+}
+
+function feedVuMeter(velocity, channel) {
+    if (velocity <= 0) return;
+    const normalized = Math.min(velocity / 127.0, 1.0);
+    const totalSegments = normalized * 12.0;
+
+    let pan = 0.5; // center
+    if (channel !== undefined) {
+        if (channel === 15 || channel === 9) {
+            pan = 0.5; // Drums center
+        } else if (channel % 2 === 0) {
+            pan = 0.35; // Panned slightly left
+        } else {
+            pan = 0.65; // Panned slightly right
+        }
+    }
+
+    const leftAmp = totalSegments * (1 - pan) * 2;
+    const rightAmp = totalSegments * pan * 2;
+
+    targetVuLeft = Math.max(targetVuLeft, Math.min(12, leftAmp));
+    targetVuRight = Math.max(targetVuRight, Math.min(12, rightAmp));
+}
+
+function updateRecorderChannelActivity(channel, isActive, velocity, noteNumber) {
     const led = document.getElementById(`rec-led-${channel}`);
     const noteLabel = document.getElementById(`rec-note-${channel}`);
     const velLabel = document.getElementById(`rec-vel-${channel}`);
@@ -1957,11 +2218,179 @@ function updateRecorderChannelActivity(channel, isActive, velocity) {
 
     if (velLabel) velLabel.textContent = velocity;
 
+    if (noteNumber !== undefined && noteNumber !== null) {
+        const pitchName = noteToPitch(noteNumber);
+        if (isActive && velocity > 0) {
+            state.activeInboundNotes.set(noteNumber, { channel, velocity, time: Date.now() });
+            if (noteLabel) {
+                noteLabel.textContent = pitchName;
+                noteLabel.className = "text-[10px] font-mono font-bold text-rose-400";
+            }
+            feedVuMeter(velocity, channel);
+        } else {
+            state.activeInboundNotes.delete(noteNumber);
+            if (noteLabel) {
+                noteLabel.className = "text-[10px] font-mono text-slate-500";
+            }
+        }
+        analyzeInboundChords();
+    }
+
     if (isActive && velocity > 0) {
         if (ticker) {
-            ticker.textContent = `Inbound: Ch ${channel + 1} • Velocity ${velocity}`;
+            const pitchStr = (noteNumber !== undefined && noteNumber !== null) ? ` • Pitch ${noteToPitch(noteNumber)}` : "";
+            ticker.textContent = `Inbound: Ch ${channel + 1}${pitchStr} • Velocity ${velocity}`;
             ticker.className = "text-xs font-mono text-rose-400 truncate max-w-md";
         }
+    }
+}
+
+// --- Studio Recordings Vault (Tab 2 Exclusive) ---
+
+function handleRecordingsLibraryUpdated(recordings) {
+    state.recordingsLibrary = recordings || [];
+    const countBadge = document.getElementById("recordingsCountBadge");
+    if (countBadge) {
+        const count = state.recordingsLibrary.length;
+        countBadge.textContent = `${count} ${count === 1 ? 'Take' : 'Takes'}`;
+    }
+    renderRecordingsLibrary();
+}
+
+function handleRecordingPreviewStarted(filePath) {
+    state.activePreviewRecordingPath = filePath;
+    renderRecordingsLibrary();
+}
+
+function handleRecordingPreviewStopped() {
+    state.activePreviewRecordingPath = null;
+    renderRecordingsLibrary();
+}
+
+function renderRecordingsLibrary() {
+    const container = document.getElementById("recordingsListContainer");
+    const emptyState = document.getElementById("recordingsEmptyState");
+    if (!container || !emptyState) return;
+
+    container.innerHTML = "";
+
+    const query = (state.recordingsSearchQuery || "").trim().toLowerCase();
+    const filtered = state.recordingsLibrary.filter(rec => {
+        if (!query) return true;
+        return (rec.fileName && rec.fileName.toLowerCase().includes(query)) ||
+               (rec.createdAtFormatted && rec.createdAtFormatted.toLowerCase().includes(query));
+    });
+
+    if (filtered.length === 0) {
+        emptyState.classList.remove("hidden");
+        container.classList.add("hidden");
+        return;
+    }
+
+    emptyState.classList.add("hidden");
+    container.classList.remove("hidden");
+
+    filtered.forEach(rec => {
+        const isPreviewing = state.activePreviewRecordingPath &&
+            state.activePreviewRecordingPath.toLowerCase() === rec.filePath.toLowerCase();
+
+        const card = document.createElement("div");
+        card.className = `take-vault-card p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 ${isPreviewing ? 'is-previewing' : ''}`;
+
+        card.innerHTML = `
+            <div class="flex items-center space-x-3 min-w-0">
+                <div class="w-8 h-8 rounded-lg ${isPreviewing ? 'bg-cyan-500/20 text-cyan-400' : 'bg-slate-800 text-rose-400'} flex items-center justify-center shrink-0 font-mono text-xs">
+                    ${isPreviewing ? '▶' : '⏺'}
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs font-bold text-white truncate max-w-xs sm:max-w-md">${escapeHtml(rec.fileName)}</span>
+                        ${isPreviewing ? '<span class="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-cyan-950 text-cyan-400 border border-cyan-800/60 animate-pulse">Auditioning</span>' : ''}
+                    </div>
+                    <div class="flex items-center space-x-3 text-[11px] text-slate-400 mt-0.5">
+                        <span>${rec.createdAtFormatted || ''}</span>
+                        <span>&bull;</span>
+                        <span class="font-mono text-cyan-400 font-semibold">${rec.durationFormatted || '00:00'}</span>
+                        <span>&bull;</span>
+                        <span class="font-mono text-emerald-400">${rec.noteCount || 0} notes</span>
+                        <span>&bull;</span>
+                        <span class="text-slate-500">${rec.fileSizeFormatted || ''}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex items-center space-x-1.5 shrink-0">
+                <!-- Preview / Stop Toggle -->
+                <button onclick="togglePreviewRecording('${encodeURIComponent(rec.filePath)}')" title="${isPreviewing ? 'Stop Preview' : 'Audition Take'}" class="px-2.5 py-1 rounded-lg ${isPreviewing ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-slate-800 hover:bg-cyan-600 text-slate-200 hover:text-white'} text-[11px] font-semibold border border-slate-700 transition active:scale-95 flex items-center space-x-1">
+                    <span>${isPreviewing ? '⏹ Stop' : '▶ Preview'}</span>
+                </button>
+
+                <!-- Export to GM Library (Reverse-remapped) -->
+                <button onclick="exportRecordingToGm('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Export to General MIDI Library: Reverse-remaps to standard GM and publishes to GM Midi folder" class="px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-[11px] font-semibold text-indigo-300 hover:text-white border border-indigo-800/60 transition active:scale-95 flex items-center space-x-1">
+                    <span>🎵 GM Export</span>
+                </button>
+
+                <!-- Export to PSS-790 Library (Native) -->
+                <button onclick="exportRecordingToPss('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Export to PSS-790 Library: Stores in PSS-790 Midi folder for immediate hardware playback" class="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-[11px] font-semibold text-emerald-300 hover:text-white border border-emerald-800/60 transition active:scale-95 flex items-center space-x-1">
+                    <span>⚡ PSS Export</span>
+                </button>
+
+                <!-- Rename Take -->
+                <button onclick="promptRenameRecording('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Rename Take" class="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700/60 transition active:scale-95">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                </button>
+
+                <!-- Delete Take -->
+                <button onclick="confirmDeleteRecording('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Delete Take" class="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 border border-slate-700/60 transition active:scale-95">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+            </div>
+        `;
+
+        container.appendChild(card);
+    });
+}
+
+function togglePreviewRecording(encodedPath) {
+    const filePath = decodeURIComponent(encodedPath);
+    if (state.activePreviewRecordingPath && state.activePreviewRecordingPath.toLowerCase() === filePath.toLowerCase()) {
+        sendToHost("stop_recording_preview");
+        handleRecordingPreviewStopped();
+    } else {
+        sendToHost("preview_recording", { filePath: filePath });
+    }
+}
+
+function exportRecordingToGm(encodedPath, fileName) {
+    const filePath = decodeURIComponent(encodedPath);
+    sendToHost("export_recording_to_gm", { filePath: filePath });
+    showToast(`Exporting ${fileName} to General MIDI Library...`);
+}
+
+function exportRecordingToPss(encodedPath, fileName) {
+    const filePath = decodeURIComponent(encodedPath);
+    sendToHost("export_recording_to_pss", { filePath: filePath });
+    showToast(`Exporting ${fileName} to PSS-790 Library...`);
+}
+
+function promptRenameRecording(encodedPath, oldName) {
+    const filePath = decodeURIComponent(encodedPath);
+    const baseName = oldName.replace(/\.midi?$/i, '');
+    const newName = prompt("Enter new filename for recording take:", baseName);
+    if (newName && newName.trim() && newName.trim() !== baseName) {
+        sendToHost("rename_recording", { filePath: filePath, newName: newName.trim() });
+    }
+}
+
+function confirmDeleteRecording(encodedPath, fileName) {
+    const filePath = decodeURIComponent(encodedPath);
+    if (confirm(`Are you sure you want to delete recording take "${fileName}"? This cannot be undone.`)) {
+        sendToHost("delete_recording", { filePath: filePath });
     }
 }
 
@@ -3129,10 +3558,27 @@ document.getElementById("btnCopySysexHex")?.addEventListener("click", () => {
 // Light / Dark Theme Toggle
 document.getElementById("btnThemeToggle")?.addEventListener("click", toggleTheme);
 
+// Studio Recordings Vault Controls
+document.getElementById("recordingsSearchInput")?.addEventListener("input", (e) => {
+    state.recordingsSearchQuery = e.target.value;
+    renderRecordingsLibrary();
+});
+
+document.getElementById("btnRefreshRecordings")?.addEventListener("click", () => {
+    sendToHost("get_recordings_library");
+    showToast("Refreshing recordings library...");
+});
+
+document.getElementById("btnOpenRecordingsFolder")?.addEventListener("click", () => {
+    sendToHost("open_recordings_folder");
+});
+
 // Trigger initial handshake and keyboard shortcuts
 window.addEventListener("DOMContentLoaded", () => {
     initTheme();
     setupKeyboardShortcuts();
     initSidebarState();
+    initVuMeters();
+    renderRecordingsLibrary();
     sendToHost("get_initial_data");
 });

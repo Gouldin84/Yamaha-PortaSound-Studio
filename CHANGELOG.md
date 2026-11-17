@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-11-17
+
+### Added
+- **Dedicated Standalone Recordings Library (Exclusive to Tab 2)**:
+  - Added dedicated workspace take vault stored in `Music/Midi/Recordings/` (`AppPaths.RecordingsDir`).
+  - Automatic background preservation of recorded takes upon recording stop with note content.
+  - Browse all recorded takes with duration, note count, formatted timestamp, and file size.
+  - Instant take auditioning and playback right from within the recorder (`▶ Preview` / `⏹ Stop`).
+  - One-click **Export to General MIDI Library**: Reverse-remaps Channel 16 drums and PSS-790 voices back to standard GM and saves into `GM Midi/` with instant reflection in the Tab 1 Jukebox library.
+  - One-click **Export to PSS-790 Library**: Injects native hardware marker and saves to `PSS-790 Midi/` for immediate playback on physical hardware.
+  - Inline rename and safe deletion of takes from disk.
+  - Quick search filter to quickly locate takes by title or date.
+  - "Open Folder" button revealing `Music/Midi/Recordings/` directly in Windows Explorer.
+- **Stereo Master Peak Level VU Meters**:
+  - Dual 12-segment graduated LED ladder meters (Left & Right) in the Studio Transport Deck with calibrated dB scale (-24dB to +3dB clip).
+  - Smooth 60 FPS ballistic physics with instantaneous velocity peak attack, smooth exponential decay, and peak-hold indicators.
+  - Stereo pan spread responsive to inbound MIDI channels.
+- **Real-Time Live Chord & Musical Pitch Analyzer**:
+  - Studio LCD display badge detecting chord names, roots, qualities, and inversions (Major, Minor, 7ths, Maj7, Min7, Sus4, Sus2, Dim, Aug, 6th, Add9, compound chords, and slash inversions like `C Maj / E`).
+  - Displays single note pitches and 2-note musical intervals (e.g. `C4 - G4 (Perfect 5th)`).
+- **Real Musical Pitch Displays Across all 16 Inbound Channel Cards**:
+  - Replaced static `-` placeholder with live real musical note names (`C4`, `G#3`, `Bb5`, etc.) and strike velocities on all 16 channel cards in Tab 2.
+- **Full Dark Studio & Light Studio Theme Calibration**:
+  - Hand-calibrated high-contrast styling for the LCD chord display, VU LED segments, and take vault cards in both Dark and Light themes.
+
 ## [1.17.1] - 2026-11-17
 
 ### Fixed

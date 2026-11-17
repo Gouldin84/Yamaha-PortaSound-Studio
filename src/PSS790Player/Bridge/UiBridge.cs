@@ -46,7 +46,8 @@ namespace PSS790Player.Bridge
                 {
                     channel = e.Channel,
                     isActive = e.IsActive,
-                    velocity = e.Velocity
+                    velocity = e.Velocity,
+                    noteNumber = e.NoteNumber
                 });
             };
 
@@ -67,7 +68,8 @@ namespace PSS790Player.Bridge
                 {
                     channel = e.Channel,
                     isActive = e.IsActive,
-                    velocity = e.Velocity
+                    velocity = e.Velocity,
+                    noteNumber = e.NoteNumber
                 });
             };
 
@@ -429,12 +431,18 @@ namespace PSS790Player.Bridge
                     case "stop_recording":
                         _recorder.StopRecording();
                         var stats = _recorder.GetLastTakeStats();
+                        var autoSavedPath = _recorder.AutoSaveTake();
+                        if (!string.IsNullOrEmpty(autoSavedPath))
+                        {
+                            SendRecordingsLibraryUpdate();
+                        }
                         SendToJs("recorder_take_ready", new
                         {
                             noteCount = stats.noteCount,
                             eventCount = stats.eventCount,
                             durationSeconds = stats.durationSeconds,
-                            durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss")
+                            durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss"),
+                            autoSavedPath = autoSavedPath
                         });
                         break;
                     case "preview_take":
@@ -446,6 +454,94 @@ namespace PSS790Player.Bridge
                         break;
                     case "stop_preview":
                         _player.Stop();
+                        break;
+                    case "get_recordings_library":
+                        SendRecordingsLibraryUpdate();
+                        break;
+                    case "preview_recording":
+                        var prevPath = root.TryGetProperty("filePath", out var ppProp) ? ppProp.GetString() : null;
+                        if (!string.IsNullOrEmpty(prevPath) && File.Exists(prevPath))
+                        {
+                            try
+                            {
+                                var prevMidi = Melanchall.DryWetMidi.Core.MidiFile.Read(prevPath);
+                                _player.LoadMidi(prevMidi);
+                                _player.Play();
+                                SendToJs("recording_preview_started", new { filePath = prevPath, fileName = Path.GetFileName(prevPath) });
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = $"Failed to preview recording: {ex.Message}" });
+                            }
+                        }
+                        break;
+                    case "stop_recording_preview":
+                        _player.Stop();
+                        SendToJs("recording_preview_stopped", new { });
+                        break;
+                    case "export_recording_to_gm":
+                        var expGmPath = root.TryGetProperty("filePath", out var egProp) ? egProp.GetString() : null;
+                        var customGmName = root.TryGetProperty("fileName", out var cgnProp) ? cgnProp.GetString() : null;
+                        if (!string.IsNullOrEmpty(expGmPath))
+                        {
+                            try
+                            {
+                                var exportedGm = _recorder.ExportRecordingToGeneralMidi(expGmPath, customGmName);
+                                SendLibraryUpdate();
+                                SendToJs("notification", new { message = $"Exported to General MIDI library: {Path.GetFileName(exportedGm)}" });
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = $"Failed to export to GM: {ex.Message}" });
+                            }
+                        }
+                        break;
+                    case "export_recording_to_pss":
+                        var expPssPath = root.TryGetProperty("filePath", out var epProp) ? epProp.GetString() : null;
+                        var customPssName = root.TryGetProperty("fileName", out var cpnProp) ? cpnProp.GetString() : null;
+                        if (!string.IsNullOrEmpty(expPssPath))
+                        {
+                            try
+                            {
+                                var exportedPss = _recorder.ExportRecordingToPss790(expPssPath, customPssName);
+                                SendLibraryUpdate();
+                                SendToJs("notification", new { message = $"Exported to PSS-790 library: {Path.GetFileName(exportedPss)}" });
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = $"Failed to export to PSS-790: {ex.Message}" });
+                            }
+                        }
+                        break;
+                    case "delete_recording":
+                        var delRecPath = root.TryGetProperty("filePath", out var drProp) ? drProp.GetString() : null;
+                        if (!string.IsNullOrEmpty(delRecPath))
+                        {
+                            _recorder.DeleteRecording(delRecPath);
+                            SendRecordingsLibraryUpdate();
+                            SendToJs("notification", new { message = $"Deleted recording take: {Path.GetFileName(delRecPath)}" });
+                        }
+                        break;
+                    case "rename_recording":
+                        var renRecPath = root.TryGetProperty("filePath", out var rrProp) ? rrProp.GetString() : null;
+                        var newRecName = root.TryGetProperty("newName", out var nrProp) ? nrProp.GetString() : null;
+                        if (!string.IsNullOrEmpty(renRecPath) && !string.IsNullOrWhiteSpace(newRecName))
+                        {
+                            try
+                            {
+                                var renamedPath = _recorder.RenameRecording(renRecPath, newRecName);
+                                SendRecordingsLibraryUpdate();
+                                SendToJs("notification", new { message = $"Renamed recording to: {Path.GetFileName(renamedPath)}" });
+                            }
+                            catch (Exception ex)
+                            {
+                                SendToJs("error", new { message = $"Failed to rename recording: {ex.Message}" });
+                            }
+                        }
+                        break;
+                    case "open_recordings_folder":
+                        AppPaths.EnsureDirectoriesExist();
+                        AppPaths.OpenFolderInExplorer(AppPaths.RecordingsDir);
                         break;
                     case "save_take":
                         var takeFileName = root.TryGetProperty("fileName", out var fnProp) ? fnProp.GetString() ?? $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid" : $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
@@ -615,7 +711,8 @@ namespace PSS790Player.Bridge
                 defaultBatchTarget = AppPaths.Pss790MidiDir,
                 midiThru = _recorder.MidiThruEnabled,
                 recorderBpm = _recorder.Bpm,
-                sysexLibrary = _sysexManager.GetSysExLibrary()
+                sysexLibrary = _sysexManager.GetSysExLibrary(),
+                recordingsLibrary = _recorder.GetRecordingsLibrary()
             });
 
             if (devices.Count > 0)
@@ -2160,6 +2257,12 @@ namespace PSS790Player.Bridge
         {
             var list = _sysexManager.GetSysExLibrary();
             SendToJs("sysex_library_updated", new { dumps = list });
+        }
+
+        private void SendRecordingsLibraryUpdate()
+        {
+            var list = _recorder.GetRecordingsLibrary();
+            SendToJs("recordings_library_updated", new { recordings = list });
         }
 
         public void Dispose()
