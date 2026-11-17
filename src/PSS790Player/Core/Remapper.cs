@@ -95,10 +95,23 @@ namespace PSS790Player.Core
             // 0. Intelligent Tempo Normalization & Adjustment
             ApplyTempoAdjustments(remapped, options);
 
-            // 0. Virtual Sustain Pedal (CC 64) Emulation: Extend staccato note durations before controllers are filtered
+            // Pre-scan for GM Programs per channel to identify acoustic vs synth/solo channels
+            var channelGmPrograms = new Dictionary<int, byte>();
+            foreach (var trackChunk in remapped.GetTrackChunks())
+            {
+                foreach (var evt in trackChunk.Events)
+                {
+                    if (evt is ProgramChangeEvent pc && !channelGmPrograms.ContainsKey(pc.Channel))
+                    {
+                        channelGmPrograms[pc.Channel] = (byte)pc.ProgramNumber;
+                    }
+                }
+            }
+
+            // 0. Virtual Sustain Pedal (CC 64) Emulation: Extend staccato note durations for keyboards (GM 0-23)
             if (options.EmulateSustainPedal)
             {
-                ApplySustainPedalEmulation(remapped);
+                ApplySustainPedalEmulation(remapped, channelGmPrograms);
             }
 
             // Full GM to PSS-790 Remapping Pipeline
@@ -124,19 +137,6 @@ namespace PSS790Player.Core
                                 channelBendRange[ch] = (int)cc.ControlValue;
                             }
                         }
-                    }
-                }
-            }
-
-            // Pre-scan for GM Programs per channel to identify acoustic vs synth/solo channels
-            var channelGmPrograms = new Dictionary<int, byte>();
-            foreach (var trackChunk in remapped.GetTrackChunks())
-            {
-                foreach (var evt in trackChunk.Events)
-                {
-                    if (evt is ProgramChangeEvent pc && !channelGmPrograms.ContainsKey(pc.Channel))
-                    {
-                        channelGmPrograms[pc.Channel] = (byte)pc.ProgramNumber;
                     }
                 }
             }
@@ -179,12 +179,16 @@ namespace PSS790Player.Core
                 var bentChannels = new HashSet<int>();
 
                 // Filter unsupported events, foreign GS/XG SysEx, and any Program Change on drum channels
-                trackChunk.Events.RemoveAll(e =>
-                    e is ChannelAftertouchEvent or NoteAftertouchEvent ||
-                    e is NormalSysExEvent or EscapeSysExEvent ||
-                    (e is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
-                    (e is ProgramChangeEvent pc && drumChannels.Contains(pc.Channel))
-                );
+                // CRITICAL: Must use ManageTimedEvents to preserve absolute event timing and prevent track desync!
+                using (var timedEventsMgr = trackChunk.ManageTimedEvents())
+                {
+                    timedEventsMgr.Objects.RemoveAll(te =>
+                        te.Event is ChannelAftertouchEvent or NoteAftertouchEvent ||
+                        te.Event is NormalSysExEvent or EscapeSysExEvent ||
+                        (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
+                        (te.Event is ProgramChangeEvent pc && drumChannels.Contains(pc.Channel))
+                    );
+                }
 
                 // Process channel events in-place
                 foreach (var evt in trackChunk.Events)
@@ -405,6 +409,14 @@ namespace PSS790Player.Core
             return 49;                  // Snare hi
         }
 
+        public static bool IsPianoOrKeyboardInstrument(byte gmProgram)
+        {
+            // GM 0-7: Pianos (Acoustic Grand, Bright, Electric Grand, Honky-tonk, Rhodes, Clavinet)
+            // GM 8-15: Chromatic Percussion / Bells (Celesta, Glockenspiel, Music Box, Vibraphone, Marimba)
+            // GM 16-23: Organs & Accordions
+            return gmProgram <= 23;
+        }
+
         public static bool IsAcousticOrKeyboardInstrument(byte gmProgram)
         {
             // GM 0-7: Piano
@@ -431,7 +443,7 @@ namespace PSS790Player.Core
 
         public static byte ClampMelodicNote(byte note) => ClampMelodicNote(note, -1);
 
-        public static void ApplySustainPedalEmulation(MidiFile midi)
+        public static void ApplySustainPedalEmulation(MidiFile midi, Dictionary<int, byte>? channelGmPrograms = null)
         {
             var timeDivision = midi.TimeDivision as TicksPerQuarterNoteTimeDivision;
             short tpqn = timeDivision?.TicksPerQuarterNote ?? 480;
@@ -481,6 +493,13 @@ namespace PSS790Player.Core
                     int ch = group.Key;
                     if (ch == 9) continue; // Skip GM drum channel
                     if (!pedalIntervals.TryGetValue(ch, out var intervals) || intervals.Count == 0) continue;
+
+                    // Restrict sustain pedal emulation strictly to Piano, Organ, and Chromatic Percussion (GM 0-23)!
+                    // Guitars, basses, brass, woodwinds, strings, and vocals must never have artificial sustain pedal extension.
+                    if (channelGmPrograms != null && channelGmPrograms.TryGetValue(ch, out var gmProg) && !IsPianoOrKeyboardInstrument(gmProg))
+                    {
+                        continue;
+                    }
 
                     var notes = group.OrderBy(n => n.Time).ToList();
                     for (int i = 0; i < notes.Count; i++)

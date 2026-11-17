@@ -107,7 +107,7 @@ namespace PSS790Player.Core
 
                 while (activeNotes.Count >= _threshold)
                 {
-                    // Step A: Cull incidental low-priority percussion on Channel 15 first
+                    // Cull incidental low-priority percussion on Channel 15 first (triangles, cowbells, maracas, etc.)
                     var incidentalDrum = activeNotes
                         .Where(n => n.Channel == (FourBitNumber)15 && Constants.IncidentalDrums.Contains((byte)n.NoteNumber))
                         .OrderBy(n => n.Velocity)
@@ -124,36 +124,8 @@ namespace PSS790Player.Core
                         }
                     }
 
-                    // Step B: Protect lead melody and bass notes, while gently releasing sustained background chord/pad notes
-                    var melodicActive = activeNotes.Where(n => n.Channel != (FourBitNumber)15).ToList();
-                    if (melodicActive.Count <= 2)
-                    {
-                        break; // Keep at least 2 voices (lead and bass) untouched
-                    }
-
-                    byte maxPitch = melodicActive.Max(n => (byte)n.NoteNumber);
-                    var bassNote = melodicActive.Where(n => (byte)n.NoteNumber < 48).OrderBy(n => (byte)n.NoteNumber).FirstOrDefault();
-
-                    // Candidate: an active background accompaniment note that started before currentTime
-                    var cullCandidate = melodicActive
-                        .Where(n => (byte)n.NoteNumber != maxPitch && n != bassNote && n.Time < currentTime)
-                        .OrderBy(n => n.Velocity)
-                        .FirstOrDefault();
-
-                    if (cullCandidate != null)
-                    {
-                        var key = (cullCandidate.Channel, cullCandidate.NoteNumber, cullCandidate.Time);
-                        var clampedLen = Math.Max(1, currentTime - cullCandidate.Time);
-                        if (!clampedLengths.ContainsKey(key) || clampedLen < clampedLengths[key])
-                        {
-                            clampedLengths[key] = clampedLen;
-                        }
-                        activeNotes.Remove(cullCandidate);
-                    }
-                    else
-                    {
-                        break; // No further safe candidates to trim
-                    }
+                    // Melodic, vocal, and harmony notes are strictly preserved and never truncated
+                    break;
                 }
             }
 

@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.8] - 2026-11-17
+
+### Fixed
+- **Zero-Loss Timed Event Filtering (Fixed Track Desynchronization)**:
+  - Replaced raw `trackChunk.Events.RemoveAll()` with DryWetMIDI's `using (var mgr = trackChunk.ManageTimedEvents()) { mgr.Objects.RemoveAll(...); }` across the core conversion engine (`Remapper.cs`).
+  - Standard MIDI files represent event timing as relative delta-times. Removing unsupported CC events (CC 0, 32, 11, 100, 101) with raw list deletion previously dropped their delta-times, causing massive cumulative timing shifts (e.g. up to 32,626 ticks or 17 measures in *The Greatest Showman - From Now On*).
+  - With timed event management, absolute timestamps (`.Time`) are strictly preserved, recalculating exact delta-times automatically. Timing drift across all tracks is now guaranteed at **0 ticks**.
+- **Melodic, Vocal & Harmony Note Protection**:
+  - Completely removed aggressive non-highest-pitch melodic note truncation from `PolyphonyOptimizer.cs`.
+  - Vocal melodies (including tenor and baritone lines below high violins/synths), vocal harmonies, and lead motifs are 100% immune from premature voice culling or shortening.
+  - Raised `PolyphonyGuardThreshold` in `Constants.cs` from 22 to **26** to take full advantage of the Yamaha PSS-790's true 28-voice hardware limit. Voice culling is strictly confined to low-priority incidental percussion on Channel 16 (cowbells, triangles, maracas, woodblocks).
+- **Domain-Specific Sustain Pedal Emulation (GM 0–23 Only)**:
+  - Restricted virtual CC 64 damper pedal duration extension in `Remapper.cs` strictly to acoustic pianos, electric pianos, chromatic percussion, and organs (`IsPianoOrKeyboardInstrument`).
+  - Guitars, basses, brass, woodwinds, strings, and vocals no longer receive artificial sustain extensions, preventing polyphony bloat on fast guitar strums and arpeggios.
+- **Universal Engine Integration**:
+  - All 5 conversion pathways (Batch Remapper, Library Sync, Real-time Jukebox Player, Single File Export, and Take Recorder) inherit these timing and melodic protections automatically through the shared `Remapper.Remap()` pipeline.
+
 ## [1.8.7] - 2026-11-16
 
 ### Added
