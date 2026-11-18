@@ -5233,7 +5233,7 @@ const FM_PRESETS = {
             "amplitudeModulationEnable": false
         }
     }
-}};
+};
 
 function collectFmVoiceFromUI() {
     return {
@@ -6024,7 +6024,7 @@ const VECTOR_PRESETS = {
         "orbitMode": "wander",
         "orbitSpeed": 1.4
     }
-}};
+};
 
 function calculateVectorWeights(x, y) {
     const rawA = Math.max(0, y);

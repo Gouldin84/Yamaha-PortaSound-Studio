@@ -341,5 +341,119 @@ namespace PSS790Player.Tests
 
             return (wA, wB, wC, wD);
         }
+
+        [Fact]
+        public void WebUI_AppJs_HasBalancedTokensAndNoSyntaxErrors()
+        {
+            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
+            if (!File.Exists(appJsPath))
+            {
+                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
+            }
+
+            Assert.True(File.Exists(appJsPath), $"app.js should exist at {appJsPath}");
+            var code = File.ReadAllText(appJsPath);
+
+            var stack = new System.Collections.Generic.Stack<(char Char, int Line, int Col)>();
+            bool inStr = false;
+            char strChar = '\0';
+            bool inLineComment = false;
+            bool inBlockComment = false;
+            bool inRegex = false;
+            char prevChar = ' ';
+            int line = 1, col = 0;
+            var errors = new System.Collections.Generic.List<string>();
+
+            for (int i = 0; i < code.Length; i++)
+            {
+                char c = code[i];
+                col++;
+                if (c == '\n')
+                {
+                    line++;
+                    col = 0;
+                    inLineComment = false;
+                    continue;
+                }
+
+                if (inLineComment) continue;
+                if (inBlockComment)
+                {
+                    if (c == '*' && i + 1 < code.Length && code[i + 1] == '/')
+                    {
+                        inBlockComment = false;
+                        i++;
+                        col++;
+                    }
+                    continue;
+                }
+
+                if (inStr)
+                {
+                    if (c == '\\') { i++; col++; continue; }
+                    if (c == strChar) inStr = false;
+                    continue;
+                }
+
+                if (inRegex)
+                {
+                    if (c == '\\') { i++; col++; continue; }
+                    if (c == '/') inRegex = false;
+                    continue;
+                }
+
+                if (c == '/' && i + 1 < code.Length)
+                {
+                    if (code[i + 1] == '/') { inLineComment = true; i++; col++; continue; }
+                    if (code[i + 1] == '*') { inBlockComment = true; i++; col++; continue; }
+                    if ("([{=,:!&|?; \n\r".IndexOf(prevChar) >= 0)
+                    {
+                        inRegex = true;
+                        continue;
+                    }
+                }
+
+                if (c == '"' || c == '\'' || c == '`')
+                {
+                    inStr = true;
+                    strChar = c;
+                    continue;
+                }
+
+                if (!char.IsWhiteSpace(c))
+                {
+                    prevChar = c;
+                }
+
+                if (c == '{' || c == '(' || c == '[')
+                {
+                    stack.Push((c, line, col));
+                }
+                else if (c == '}' || c == ')' || c == ']')
+                {
+                    if (stack.Count == 0)
+                    {
+                        errors.Add($"Unexpected '{c}' at line {line}, col {col}");
+                    }
+                    else
+                    {
+                        var top = stack.Pop();
+                        bool match = (top.Char == '{' && c == '}') || (top.Char == '(' && c == ')') || (top.Char == '[' && c == ']');
+                        if (!match)
+                        {
+                            errors.Add($"Mismatched closing '{c}' at line {line}, col {col} (opened with '{top.Char}' at line {top.Line}, col {top.Col})");
+                        }
+                    }
+                }
+            }
+
+            while (stack.Count > 0)
+            {
+                var top = stack.Pop();
+                errors.Add($"Unclosed '{top.Char}' from line {top.Line}, col {top.Col}");
+            }
+
+            Assert.Empty(errors);
+        }
     }
 }
