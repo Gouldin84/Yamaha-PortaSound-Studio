@@ -76,7 +76,7 @@ namespace PSS790Player.Core
             {
                 activeChannels.Add(note.Channel);
                 byte noteNum = (byte)note.NoteNumber;
-                if (noteNum < 24 || noteNum > 96) // C1 to C7
+                if (noteNum < 24 || noteNum > 108) // C1 to C8 (7-octave MIDI recognition range)
                 {
                     outOfBoundsCount++;
                 }

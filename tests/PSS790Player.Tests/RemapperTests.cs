@@ -475,7 +475,7 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Remap_CelestaGm8_MapsToGlockenspielAcousticVoice()
+        public void Remap_CelestaGm8_MapsToCelestaVoice()
         {
             var midi = new MidiFile();
             var tr = new TrackChunk();
@@ -486,8 +486,55 @@ namespace PSS790Player.Tests
             var remapped = Remapper.Remap(midi);
             var pc = remapped.GetTimedEvents().Select(te => te.Event).OfType<ProgramChangeEvent>().First();
 
-            // Must map to PSS-790 Voice 43: GLOCKENSPIEL (MidiProgram 32)
-            Assert.Equal((SevenBitNumber)32, pc.ProgramNumber);
+            // Must map to PSS-790 Voice 7: CELESTA (MidiProgram 6)
+            Assert.Equal((SevenBitNumber)6, pc.ProgramNumber);
+        }
+
+        [Fact]
+        public void Remap_RelocatedChannel15Melody_PreservesMidSongProgramChanges()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+
+            // Occupy channels 0-8 and 10-14 with background notes so that all 16 channels are active
+            for (int ch = 0; ch < 15; ch++)
+            {
+                if (ch == 9) continue;
+                tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80) { Channel = (FourBitNumber)ch, DeltaTime = 0 });
+                tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)ch, DeltaTime = 240 });
+            }
+
+            // Channel 9: GM Drums (Kick note)
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 240 });
+
+            // Channel 15: Melodic instrument starting on GM 0 (Piano), then switching mid-song to GM 40 (Violin 1)
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 240 });
+
+            // Mid-song program change on melodic channel 15
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)40) { Channel = (FourBitNumber)15, DeltaTime = 240 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)90) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 240 });
+
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi);
+            var timedEvents = remapped.GetTimedEvents().ToList();
+
+            // Channel 9 (vacated by drums) is now the relocated melodic channel
+            var ch9ProgramChanges = timedEvents
+                .Where(te => te.Event is ProgramChangeEvent pc && pc.Channel == (FourBitNumber)9)
+                .Select(te => (ProgramChangeEvent)te.Event)
+                .ToList();
+
+            // Both program changes must be preserved and translated to PSS-790 voices
+            Assert.Equal(2, ch9ProgramChanges.Count);
+            // GM 0 (Piano) -> PSS-790 Voice 0 (MidiProgram 3)
+            Assert.Equal((SevenBitNumber)3, ch9ProgramChanges[0].ProgramNumber);
+            // GM 40 (Violin 1) -> PSS-790 Voice 30 (MidiProgram 10)
+            Assert.Equal((SevenBitNumber)10, ch9ProgramChanges[1].ProgramNumber);
         }
 
         [Fact]

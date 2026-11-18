@@ -359,7 +359,7 @@ namespace PSS790Player.Core
                         te.Event is NormalSysExEvent or EscapeSysExEvent ||
                         (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && 
                             (is680 ? (cc.ControlNumber != 1 && cc.ControlNumber != 7) : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
-                        (te.Event is ProgramChangeEvent pc && (drumChannels.Contains(pc.Channel) || pc.Channel == 15))
+                        (te.Event is ProgramChangeEvent pc && (drumChannels.Contains(pc.Channel) || (pc.Channel == 15 && !relocatedMelodicChannel.HasValue)))
                     );
                 }
 

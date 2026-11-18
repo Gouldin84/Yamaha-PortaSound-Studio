@@ -399,12 +399,21 @@ namespace PSS790Player.Core
             {
                 return pss680Note;
             }
+
+            // Musical fallbacks for extended GM/GS drum notes
+            if (gmNote is 27 or 28) return 51; // High Q / Slap -> Rim Shot (Pad A1)
+            if (gmNote is 31 or 33) return 55; // Sticks / Click -> Cowbell (Pad D5)
+            if (gmNote is 82 or 83) return 56; // Shaker / Jingle Bell -> Cabasa (Pad D6)
+            if (gmNote is 84 or 85) return 71; // Bell Tree / Castanets -> Tambourine (Pad C7)
+            if (gmNote is 86 or 87) return 45; // Surdo -> Bass Drum (Pad B1)
+
             if (DrumMap.ContainsKey(gmNote))
             {
                 return gmNote;
             }
-            // Clamp fallback into valid PSS-680 drum note range (45 to 79)
-            return (byte)Math.Clamp(gmNote, (byte)45, (byte)79);
+            if (gmNote < 35) return 45; // Bass drum
+            if (gmNote > 81) return 56; // Default high percussion -> Cabasa
+            return 52;                  // Snare Low
         }
     }
 }

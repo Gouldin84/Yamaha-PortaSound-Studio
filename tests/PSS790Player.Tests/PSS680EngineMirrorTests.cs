@@ -616,5 +616,49 @@ namespace PSS790Player.Tests
             player.ActiveModel = "pss680";
             Assert.Equal("pss680", player.ActiveModel);
         }
+
+        [Fact]
+        public void TranslateDrumNote_Pss680_ExtendedNotes_MapToMusicalPercussion()
+        {
+            // Extended low percussion
+            Assert.Equal(51, Pss680Constants.TranslateDrumNote(27)); // High Q -> Rim Shot
+            Assert.Equal(51, Pss680Constants.TranslateDrumNote(28)); // Slap -> Rim Shot
+            Assert.Equal(55, Pss680Constants.TranslateDrumNote(31)); // Sticks -> Cowbell
+            Assert.Equal(55, Pss680Constants.TranslateDrumNote(33)); // Metronome Click -> Cowbell
+
+            // Extended high percussion
+            Assert.Equal(56, Pss680Constants.TranslateDrumNote(82)); // Shaker -> Cabasa
+            Assert.Equal(56, Pss680Constants.TranslateDrumNote(83)); // Jingle Bell -> Cabasa
+            Assert.Equal(71, Pss680Constants.TranslateDrumNote(84)); // Bell Tree -> Tambourine
+            Assert.Equal(71, Pss680Constants.TranslateDrumNote(85)); // Castanets -> Tambourine
+            Assert.Equal(45, Pss680Constants.TranslateDrumNote(86)); // Mute Surdo -> Bass Drum
+            Assert.Equal(45, Pss680Constants.TranslateDrumNote(87)); // Open Surdo -> Bass Drum
+        }
+
+        [Fact]
+        public void MidiHealthInspector_HighOctaveNotes_RecognizedUpTo108()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            // Valid range: Note 24 (C1) through Note 108 (C8)
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)24, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)24, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)108, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)108, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 });
+
+            // Out-of-bounds notes
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)23, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)23, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)109, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)109, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 });
+
+            midi.Chunks.Add(tr);
+
+            var report680 = MidiHealthInspector.Analyze(midi, fileName: "Test680.mid", model: "pss680");
+            Assert.Equal(2, report680.OutOfBoundsNotesCount);
+
+            var report790 = MidiHealthInspector.Analyze(midi, fileName: "Test790.mid", model: "pss790");
+            Assert.Equal(2, report790.OutOfBoundsNotesCount);
+        }
     }
 }
