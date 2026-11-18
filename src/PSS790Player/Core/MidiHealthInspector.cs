@@ -35,7 +35,7 @@ namespace PSS790Player.Core
 
     public static class MidiHealthInspector
     {
-        public static MidiHealthReport Analyze(MidiFile originalMidi, MidiFile? remappedMidi = null, string? fileName = null)
+        public static MidiHealthReport Analyze(MidiFile originalMidi, MidiFile? remappedMidi = null, string? fileName = null, string model = "pss790")
         {
             var report = new MidiHealthReport
             {
@@ -43,6 +43,10 @@ namespace PSS790Player.Core
             };
 
             if (originalMidi == null) return report;
+
+            bool is680 = string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase);
+            int hardwareLimit = is680 ? 12 : 28;
+            string modelName = is680 ? "Yamaha PSS-680" : "Yamaha PSS-790";
 
             var ticksPerQuarter = (originalMidi.TimeDivision as TicksPerQuarterNoteTimeDivision)?.TicksPerQuarterNote ?? (short)480;
             long fourMeasuresTicks = ticksPerQuarter * 16;
@@ -52,9 +56,18 @@ namespace PSS790Player.Core
 
             // 1. Exact Peak Polyphony via Sweep-Line
             report.PeakPolyphony = CalculatePeakPolyphony(allNotes);
-            if (report.PeakPolyphony <= 24) report.VoiceStressRating = "Optimal";
-            else if (report.PeakPolyphony <= 28) report.VoiceStressRating = "Moderate";
-            else report.VoiceStressRating = "HighPolyphony";
+            if (is680)
+            {
+                if (report.PeakPolyphony <= 9) report.VoiceStressRating = "Optimal";
+                else if (report.PeakPolyphony <= 12) report.VoiceStressRating = "Moderate";
+                else report.VoiceStressRating = "HighPolyphony";
+            }
+            else
+            {
+                if (report.PeakPolyphony <= 24) report.VoiceStressRating = "Optimal";
+                else if (report.PeakPolyphony <= 28) report.VoiceStressRating = "Moderate";
+                else report.VoiceStressRating = "HighPolyphony";
+            }
 
             // 2. Active Channels and Out-of-Bounds Notes
             var activeChannels = new HashSet<int>();
@@ -270,15 +283,15 @@ namespace PSS790Player.Core
             }
             if (report.OutOfBoundsNotesCount > 0)
             {
-                report.AppliedAutoFixes.Add($"Clamped {report.OutOfBoundsNotesCount} out-of-range notes to Yamaha PSS-790 keyboard bounds");
+                report.AppliedAutoFixes.Add($"Clamped {report.OutOfBoundsNotesCount} out-of-range notes to {modelName} keyboard bounds");
             }
 
             // 7. Compose Badge
-            if (report.PeakPolyphony > 28)
+            if (report.PeakPolyphony > hardwareLimit)
             {
                 report.BadgeType = "warning";
                 report.BadgeLabel = $"{report.PeakPolyphony} Voices (Guarded)";
-                report.BadgeTooltip = $"Peak polyphony of {report.PeakPolyphony} voices exceeds the PSS-790 28-voice hardware limit. Polyphony Guard & dynamic voice-stealing active.";
+                report.BadgeTooltip = $"Peak polyphony of {report.PeakPolyphony} voices exceeds the {modelName} {hardwareLimit}-voice hardware limit. Polyphony Guard active.";
             }
             else if (report.AppliedAutoFixes.Count > 0)
             {
@@ -290,7 +303,7 @@ namespace PSS790Player.Core
             {
                 report.BadgeType = "optimal";
                 report.BadgeLabel = $"Optimal ({report.PeakPolyphony} Voices)";
-                report.BadgeTooltip = $"Fully compliant General MIDI. Peak polyphony {report.PeakPolyphony}/28 voices within safe Yamaha PSS-790 limits.";
+                report.BadgeTooltip = $"Fully compliant General MIDI. Peak polyphony {report.PeakPolyphony}/{hardwareLimit} voices within safe {modelName} limits.";
             }
 
             return report;

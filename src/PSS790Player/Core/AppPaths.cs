@@ -13,10 +13,14 @@ namespace PSS790Player.Core
 
         public static string GmMidiDir => Path.Combine(BaseMidiDir, "GM Midi");
         public static string Pss790MidiDir => Path.Combine(BaseMidiDir, "PSS-790 Midi");
+        public static string Pss680MidiDir => Path.Combine(BaseMidiDir, "PSS-680 Midi");
         public static string SysExDir => Path.Combine(BaseMidiDir, "SysEx Library");
         public static string RecordingsDir => Path.Combine(BaseMidiDir, "Recordings");
         public static string MetadataDir => Path.Combine(BaseMidiDir, ".pss790");
         public static string OverridesFilePath => Path.Combine(MetadataDir, "overrides.json");
+
+        public static string GetModelMidiDir(string model) =>
+            string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? Pss680MidiDir : Pss790MidiDir;
 
         public static void EnsureDirectoriesExist()
         {
@@ -28,6 +32,9 @@ namespace PSS790Player.Core
 
             if (!Directory.Exists(Pss790MidiDir))
                 Directory.CreateDirectory(Pss790MidiDir);
+
+            if (!Directory.Exists(Pss680MidiDir))
+                Directory.CreateDirectory(Pss680MidiDir);
 
             if (!Directory.Exists(SysExDir))
                 Directory.CreateDirectory(SysExDir);
@@ -52,28 +59,22 @@ namespace PSS790Player.Core
             EnsureDirectoriesExist();
             try
             {
-                if (Directory.Exists(GmMidiDir))
-                {
-                    foreach (var dir in Directory.GetDirectories(GmMidiDir, "*", SearchOption.AllDirectories))
-                    {
-                        var rel = Path.GetRelativePath(GmMidiDir, dir);
-                        var target = Path.Combine(Pss790MidiDir, rel);
-                        if (!Directory.Exists(target))
-                        {
-                            Directory.CreateDirectory(target);
-                        }
-                    }
-                }
+                var libraryDirs = new[] { GmMidiDir, Pss790MidiDir, Pss680MidiDir };
 
-                if (Directory.Exists(Pss790MidiDir))
+                foreach (var source in libraryDirs)
                 {
-                    foreach (var dir in Directory.GetDirectories(Pss790MidiDir, "*", SearchOption.AllDirectories))
+                    if (!Directory.Exists(source)) continue;
+                    foreach (var dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
                     {
-                        var rel = Path.GetRelativePath(Pss790MidiDir, dir);
-                        var target = Path.Combine(GmMidiDir, rel);
-                        if (!Directory.Exists(target))
+                        var rel = Path.GetRelativePath(source, dir);
+                        foreach (var targetBase in libraryDirs)
                         {
-                            Directory.CreateDirectory(target);
+                            if (string.Equals(source, targetBase, StringComparison.OrdinalIgnoreCase)) continue;
+                            var target = Path.Combine(targetBase, rel);
+                            if (!Directory.Exists(target))
+                            {
+                                Directory.CreateDirectory(target);
+                            }
                         }
                     }
                 }
@@ -107,13 +108,15 @@ namespace PSS790Player.Core
             {
                 var full = Path.GetFullPath(path);
                 var gm = Path.GetFullPath(GmMidiDir);
-                var pss = Path.GetFullPath(Pss790MidiDir);
+                var pss790 = Path.GetFullPath(Pss790MidiDir);
+                var pss680 = Path.GetFullPath(Pss680MidiDir);
 
-                // Must be inside GM Midi or PSS-790 Midi, and not equal to the root folder itself
+                // Must be inside GM Midi, PSS-790 Midi, or PSS-680 Midi, and not equal to the root folder itself
                 var insideGm = full.StartsWith(gm, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, gm, StringComparison.OrdinalIgnoreCase);
-                var insidePss = full.StartsWith(pss, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, pss, StringComparison.OrdinalIgnoreCase);
+                var inside790 = full.StartsWith(pss790, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, pss790, StringComparison.OrdinalIgnoreCase);
+                var inside680 = full.StartsWith(pss680, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, pss680, StringComparison.OrdinalIgnoreCase);
 
-                return insideGm || insidePss;
+                return insideGm || inside790 || inside680;
             }
             catch
             {
@@ -121,12 +124,12 @@ namespace PSS790Player.Core
             }
         }
 
-        public static string? FindMatchingOptimizedFile(string gmFilePath)
+        public static string? FindMatchingOptimizedFile(string gmFilePath, string targetModel = "pss790")
         {
-            return FindMatchingLinkedFile(gmFilePath);
+            return FindMatchingLinkedFile(gmFilePath, targetModel);
         }
 
-        public static string? FindMatchingLinkedFile(string filePath)
+        public static string? FindMatchingLinkedFile(string filePath, string targetModel = "pss790")
         {
             if (string.IsNullOrWhiteSpace(filePath)) return null;
 
@@ -134,7 +137,9 @@ namespace PSS790Player.Core
             {
                 var fullNorm = Path.GetFullPath(filePath);
                 var gmNorm = Path.GetFullPath(GmMidiDir);
-                var pssNorm = Path.GetFullPath(Pss790MidiDir);
+                var targetPssNorm = Path.GetFullPath(GetModelMidiDir(targetModel));
+                var is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                var suffix = is680 ? "_PSS680" : "_PSS790";
 
                 if (fullNorm.StartsWith(gmNorm, StringComparison.OrdinalIgnoreCase))
                 {
@@ -143,17 +148,17 @@ namespace PSS790Player.Core
                     var fileNameNoExt = Path.GetFileNameWithoutExtension(rel);
                     var ext = Path.GetExtension(rel);
 
-                    // Candidate 1: Exact relative path in PSS-790 Midi
-                    var cand1 = Path.Combine(Pss790MidiDir, rel);
+                    // Candidate 1: Exact relative path in target PSS folder
+                    var cand1 = Path.Combine(targetPssNorm, rel);
                     if (File.Exists(cand1)) return cand1;
 
-                    // Candidate 2: Appended _PSS790 in corresponding subfolder
-                    var cand2 = Path.Combine(Pss790MidiDir, subDir, $"{fileNameNoExt}_PSS790{ext}");
+                    // Candidate 2: Appended _PSS... in corresponding subfolder
+                    var cand2 = Path.Combine(targetPssNorm, subDir, $"{fileNameNoExt}{suffix}{ext}");
                     if (File.Exists(cand2)) return cand2;
                 }
-                else if (fullNorm.StartsWith(pssNorm, StringComparison.OrdinalIgnoreCase))
+                else if (fullNorm.StartsWith(targetPssNorm, StringComparison.OrdinalIgnoreCase))
                 {
-                    var rel = Path.GetRelativePath(pssNorm, fullNorm);
+                    var rel = Path.GetRelativePath(targetPssNorm, fullNorm);
                     var subDir = Path.GetDirectoryName(rel) ?? "";
                     var fileNameNoExt = Path.GetFileNameWithoutExtension(rel);
                     var ext = Path.GetExtension(rel);
@@ -162,10 +167,10 @@ namespace PSS790Player.Core
                     var cand1 = Path.Combine(GmMidiDir, rel);
                     if (File.Exists(cand1)) return cand1;
 
-                    // Candidate 2: Strip _PSS790 suffix in corresponding GM subfolder
-                    if (fileNameNoExt.EndsWith("_PSS790", StringComparison.OrdinalIgnoreCase))
+                    // Candidate 2: Strip _PSS... suffix in corresponding GM subfolder
+                    if (fileNameNoExt.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                     {
-                        var origName = fileNameNoExt.Substring(0, fileNameNoExt.Length - "_PSS790".Length);
+                        var origName = fileNameNoExt.Substring(0, fileNameNoExt.Length - suffix.Length);
                         var cand2 = Path.Combine(GmMidiDir, subDir, $"{origName}{ext}");
                         if (File.Exists(cand2)) return cand2;
                     }

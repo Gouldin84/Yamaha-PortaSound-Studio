@@ -11,11 +11,13 @@ namespace PSS790Player.Core
     public enum MidiFormat
     {
         GeneralMidi,
-        Pss790Native
+        Pss790Native,
+        Pss680Native
     }
 
     public class RemapperOptions
     {
+        public string TargetModel { get; set; } = "pss790"; // "pss790" or "pss680"
         public bool EnablePolyphonyGuard { get; set; } = true;
         public bool ScalePitchBend { get; set; } = true;
         public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments (Pianos, Organs, Strings, Bells, Choirs, Brass sections) so they don't detune on PSS-790 hardware
@@ -36,6 +38,8 @@ namespace PSS790Player.Core
     {
         public const string Pss790MarkerText = "PSS790_REMAPPED:v1";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v1";
+        public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         public static bool HasPss790Marker(MidiFile midiFile)
         {
@@ -54,15 +58,34 @@ namespace PSS790Player.Core
             return false;
         }
 
+        public static bool HasPss680Marker(MidiFile midiFile)
+        {
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is TextEvent textEvent && (textEvent.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                        textEvent.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase)))
+                        return true;
+                    if (evt is MarkerEvent markerEvent && (markerEvent.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                          markerEvent.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase)))
+                        return true;
+                }
+            }
+            return false;
+        }
+
         public static bool IsRecording(MidiFile midiFile)
         {
             foreach (var track in midiFile.GetTrackChunks())
             {
                 foreach (var evt in track.Events)
                 {
-                    if (evt is TextEvent textEvent && textEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))
+                    if (evt is TextEvent textEvent && (textEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase) ||
+                                                       textEvent.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase)))
                         return true;
-                    if (evt is MarkerEvent markerEvent && markerEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))
+                    if (evt is MarkerEvent markerEvent && (markerEvent.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase) ||
+                                                          markerEvent.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase)))
                         return true;
                 }
             }
@@ -72,6 +95,11 @@ namespace PSS790Player.Core
         public static MidiFormat DetectMidiFormat(MidiFile midiFile)
         {
             // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events (Remapped or Recording)
+            if (HasPss680Marker(midiFile))
+            {
+                return MidiFormat.Pss680Native;
+            }
+
             if (HasPss790Marker(midiFile))
             {
                 return MidiFormat.Pss790Native;
@@ -79,7 +107,8 @@ namespace PSS790Player.Core
 
             // 2. Heuristic Check: Channel 15 has percussion notes and Channel 9 has no events
             var usedChannels = new HashSet<int>();
-            bool hasChannel15DrumNotes = false;
+            bool hasChannel15DrumNotes790 = false;
+            bool hasChannel15DrumNotes680 = false;
 
             foreach (var track in midiFile.GetTrackChunks())
             {
@@ -93,16 +122,23 @@ namespace PSS790Player.Core
                             byte note = (byte)noteOn.NoteNumber;
                             if (Constants.Pss790Drums.ContainsKey(note))
                             {
-                                hasChannel15DrumNotes = true;
+                                hasChannel15DrumNotes790 = true;
+                            }
+                            if (Pss680Constants.DrumMap.ContainsKey(note))
+                            {
+                                hasChannel15DrumNotes680 = true;
                             }
                         }
                     }
                 }
             }
 
-            if (!usedChannels.Contains(9) && usedChannels.Contains(15) && hasChannel15DrumNotes)
+            if (!usedChannels.Contains(9) && usedChannels.Contains(15))
             {
-                return MidiFormat.Pss790Native;
+                if (hasChannel15DrumNotes680 && !hasChannel15DrumNotes790)
+                    return MidiFormat.Pss680Native;
+                if (hasChannel15DrumNotes790)
+                    return MidiFormat.Pss790Native;
             }
 
             return MidiFormat.GeneralMidi;
@@ -113,12 +149,13 @@ namespace PSS790Player.Core
             options ??= new RemapperOptions();
             var remapped = sourceMidi.Clone();
             var format = DetectMidiFormat(remapped);
+            bool is680 = string.Equals(options.TargetModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
-            // If already PSS-790 converted and not forced, run in Passthrough Mode
-            if (format == MidiFormat.Pss790Native && !options.ForceRemap)
+            // If already converted for target model and not forced, run in Passthrough Mode
+            if (((format == MidiFormat.Pss680Native && is680) || (format == MidiFormat.Pss790Native && !is680)) && !options.ForceRemap)
             {
-                ApplyVoiceOverridesOnly(remapped, options.ChannelVoiceOverrides);
-                EnsureMarkerEmbedded(remapped);
+                ApplyVoiceOverridesOnly(remapped, options.ChannelVoiceOverrides, options.TargetModel);
+                EnsureMarkerEmbedded(remapped, options.TargetModel);
                 return remapped;
             }
 
@@ -343,22 +380,26 @@ namespace PSS790Player.Core
                         {
                             if (chEvt is NoteOnEvent noteOn)
                             {
-                                noteOn.NoteNumber = (SevenBitNumber)TranslateDrumNote((byte)noteOn.NoteNumber);
+                                noteOn.NoteNumber = (SevenBitNumber)(is680
+                                    ? Pss680Constants.TranslateDrumNote((byte)noteOn.NoteNumber)
+                                    : TranslateDrumNote((byte)noteOn.NoteNumber));
                             }
                             else if (chEvt is NoteOffEvent noteOff)
                             {
-                                noteOff.NoteNumber = (SevenBitNumber)TranslateDrumNote((byte)noteOff.NoteNumber);
+                                noteOff.NoteNumber = (SevenBitNumber)(is680
+                                    ? Pss680Constants.TranslateDrumNote((byte)noteOff.NoteNumber)
+                                    : TranslateDrumNote((byte)noteOff.NoteNumber));
                             }
                         }
                         else
                         {
                             int gmProg = channelGmPrograms.TryGetValue(originalChannel, out var gp) ? gp : -1;
 
-                            // Melodic octave folding for PSS-790 hardware multisample range (36 to 96, 88 for acoustic)
+                            // Melodic octave folding for hardware multisample range
                             if (chEvt is NoteOnEvent melodicNoteOn)
                             {
                                 melodicNoteOn.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOn.NoteNumber, gmProg);
-                                if (options.NormalizeAwmVelocities && melodicNoteOn.Velocity > 0)
+                                if (!is680 && options.NormalizeAwmVelocities && melodicNoteOn.Velocity > 0)
                                 {
                                     byte v = (byte)melodicNoteOn.Velocity;
                                     int norm = Constants.AwmVelocityMin + (int)Math.Round((v - 1) * (double)(Constants.AwmVelocityMax - Constants.AwmVelocityMin) / 126.0);
@@ -374,7 +415,11 @@ namespace PSS790Player.Core
                             {
                                 if (options.ChannelVoiceOverrides.TryGetValue(currentChannel, out var overrideVoice) && overrideVoice.HasValue)
                                 {
-                                    if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
+                                    if (is680)
+                                    {
+                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 99);
+                                    }
+                                    else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
                                     {
                                         pc.ProgramNumber = (SevenBitNumber)voiceInfo.MidiProgram;
                                     }
@@ -382,9 +427,17 @@ namespace PSS790Player.Core
                                 else
                                 {
                                     byte progNum = (byte)pc.ProgramNumber;
-                                    int pssVoiceNum = Constants.GmToPss790VoiceMap.GetValueOrDefault(progNum, 0);
-                                    byte pssProg = Constants.Pss790Voices[pssVoiceNum].MidiProgram;
-                                    pc.ProgramNumber = (SevenBitNumber)pssProg;
+                                    if (is680)
+                                    {
+                                        int pssVoiceNum = Pss680Constants.GmToPss680VoiceMap.GetValueOrDefault(progNum, 3);
+                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(pssVoiceNum, 0, 99);
+                                    }
+                                    else
+                                    {
+                                        int pssVoiceNum = Constants.GmToPss790VoiceMap.GetValueOrDefault(progNum, 0);
+                                        byte pssProg = Constants.Pss790Voices[pssVoiceNum].MidiProgram;
+                                        pc.ProgramNumber = (SevenBitNumber)pssProg;
+                                    }
                                 }
                             }
                             else if (chEvt is PitchBendEvent pb)
@@ -477,13 +530,20 @@ namespace PSS790Player.Core
                 {
                     if (ch != 15 && !allPcChannels.Contains(ch))
                     {
-                        byte pssProg = 3; // Default PSS-790 Voice 00: PIANO (MidiProgram 3)
+                        byte pssProg = 3; // Default Voice 03: Piano
                         if (channelGmPrograms.TryGetValue(ch, out var gmProg))
                         {
-                            int pssVoiceNum = Constants.GmToPss790VoiceMap.GetValueOrDefault(gmProg, 0);
-                            if (Constants.Pss790Voices.TryGetValue(pssVoiceNum, out var vInfo))
+                            if (is680)
                             {
-                                pssProg = vInfo.MidiProgram;
+                                pssProg = (byte)Pss680Constants.GmToPss680VoiceMap.GetValueOrDefault(gmProg, 3);
+                            }
+                            else
+                            {
+                                int pssVoiceNum = Constants.GmToPss790VoiceMap.GetValueOrDefault(gmProg, 0);
+                                if (Constants.Pss790Voices.TryGetValue(pssVoiceNum, out var vInfo))
+                                {
+                                    pssProg = vInfo.MidiProgram;
+                                }
                             }
                         }
 
@@ -502,10 +562,11 @@ namespace PSS790Player.Core
                 ApplyReverbBoost(remapped);
             }
 
-            // Run Smart Polyphony Optimizer
+            // Run Smart Polyphony Optimizer with model-specific hardware voice ceiling
             if (options.EnablePolyphonyGuard)
             {
-                var optimizer = new PolyphonyOptimizer(enabled: true);
+                int threshold = is680 ? 12 : Constants.PolyphonyGuardThreshold;
+                var optimizer = new PolyphonyOptimizer(enabled: true, threshold: threshold);
                 remapped = optimizer.Optimize(remapped);
             }
 
@@ -516,14 +577,15 @@ namespace PSS790Player.Core
             }
 
             // Embed metadata marker
-            EnsureMarkerEmbedded(remapped);
+            EnsureMarkerEmbedded(remapped, options.TargetModel);
 
             return remapped;
         }
 
-        private static void ApplyVoiceOverridesOnly(MidiFile midi, Dictionary<int, int?> overrides)
+        private static void ApplyVoiceOverridesOnly(MidiFile midi, Dictionary<int, int?> overrides, string targetModel = "pss790")
         {
             if (overrides == null || overrides.Count == 0) return;
+            bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
             foreach (var track in midi.GetTrackChunks())
             {
@@ -534,7 +596,11 @@ namespace PSS790Player.Core
                         int ch = pc.Channel;
                         if (overrides.TryGetValue(ch, out var overrideVoice) && overrideVoice.HasValue)
                         {
-                            if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
+                            if (is680)
+                            {
+                                pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 99);
+                            }
+                            else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
                             {
                                 pc.ProgramNumber = (SevenBitNumber)voiceInfo.MidiProgram;
                             }
@@ -544,7 +610,7 @@ namespace PSS790Player.Core
             }
         }
 
-        private static void EnsureMarkerEmbedded(MidiFile midi)
+        private static void EnsureMarkerEmbedded(MidiFile midi, string targetModel = "pss790")
         {
             var firstTrack = midi.GetTrackChunks().FirstOrDefault();
             if (firstTrack == null)
@@ -553,9 +619,20 @@ namespace PSS790Player.Core
                 midi.Chunks.Add(firstTrack);
             }
 
-            if (!HasPss790Marker(midi))
+            bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+            if (is680)
             {
-                firstTrack.Events.Insert(0, new TextEvent(Pss790MarkerText) { DeltaTime = 0 });
+                if (!HasPss680Marker(midi))
+                {
+                    firstTrack.Events.Insert(0, new TextEvent(Pss680MarkerText) { DeltaTime = 0 });
+                }
+            }
+            else
+            {
+                if (!HasPss790Marker(midi))
+                {
+                    firstTrack.Events.Insert(0, new TextEvent(Pss790MarkerText) { DeltaTime = 0 });
+                }
             }
         }
 
@@ -966,7 +1043,7 @@ namespace PSS790Player.Core
             }
         }
 
-        public static void SaveRemapped(MidiFile remapped, string destinationPath)
+        public static void SaveRemapped(MidiFile remapped, string destinationPath, string? targetModel = null)
         {
             var dir = Path.GetDirectoryName(destinationPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
@@ -974,7 +1051,8 @@ namespace PSS790Player.Core
                 Directory.CreateDirectory(dir);
             }
 
-            EnsureMarkerEmbedded(remapped);
+            var resolvedModel = targetModel ?? (destinationPath.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) || destinationPath.Contains("PSS680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
+            EnsureMarkerEmbedded(remapped, resolvedModel);
             remapped.Write(destinationPath, overwriteFile: true);
         }
     }

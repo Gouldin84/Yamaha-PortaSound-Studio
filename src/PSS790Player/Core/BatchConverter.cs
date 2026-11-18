@@ -37,6 +37,20 @@ namespace PSS790Player.Core
         public string? ErrorMessage { get; set; }
     }
 
+    public class DualLibrarySyncAnalysis
+    {
+        public LibrarySyncAnalysis Analysis790 { get; set; } = new();
+        public LibrarySyncAnalysis Analysis680 { get; set; } = new();
+
+        public int TotalGmFiles => Analysis790.TotalGmFiles;
+        public int TotalPss790Files => Analysis790.TotalPssFiles;
+        public int TotalPss680Files => Analysis680.TotalPssFiles;
+        public int TotalMissing => Analysis790.MissingInTarget.Count + Analysis680.MissingInTarget.Count;
+        public int TotalOutdated => Analysis790.OutdatedInTarget.Count + Analysis680.OutdatedInTarget.Count;
+        public int TotalOrphans => Analysis790.OrphanInTarget.Count + Analysis680.OrphanInTarget.Count;
+        public bool IsInSync => Analysis790.IsInSync && Analysis680.IsInSync;
+    }
+
     public class BatchConverter
     {
         public static async Task<int> ConvertDirectoryAsync(
@@ -51,6 +65,14 @@ namespace PSS790Player.Core
 
             if (!Directory.Exists(targetDirectory))
                 Directory.CreateDirectory(targetDirectory);
+
+            options ??= new RemapperOptions();
+            if (string.IsNullOrEmpty(options.TargetModel))
+            {
+                options.TargetModel = targetDirectory.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) || targetDirectory.Contains("PSS680", StringComparison.OrdinalIgnoreCase)
+                    ? "pss680"
+                    : "pss790";
+            }
 
             var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
@@ -79,7 +101,7 @@ namespace PSS790Player.Core
                     {
                         var sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
                         var remapped = Remapper.Remap(sourceMidi, options);
-                        Remapper.SaveRemapped(remapped, destFile);
+                        Remapper.SaveRemapped(remapped, destFile, options.TargetModel);
                     }
                     catch (Exception)
                     {
@@ -92,6 +114,91 @@ namespace PSS790Player.Core
             }, cancellationToken);
 
             return completed;
+        }
+
+        public static async Task<int> ConvertDirectoryDualAsync(
+            string sourceDirectory,
+            string target790Dir,
+            string target680Dir,
+            RemapperOptions? baseOptions = null,
+            IProgress<(int Current, int Total, string FileName)>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Directory.Exists(sourceDirectory))
+                throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
+
+            if (!Directory.Exists(target790Dir))
+                Directory.CreateDirectory(target790Dir);
+
+            if (!Directory.Exists(target680Dir))
+                Directory.CreateDirectory(target680Dir);
+
+            var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories)
+                .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            int total = files.Count * 2;
+            int completed = 0;
+
+            var opt790 = new RemapperOptions
+            {
+                TargetModel = "pss790",
+                EnablePolyphonyGuard = baseOptions?.EnablePolyphonyGuard ?? true,
+                DefaultReverbBoost = baseOptions?.DefaultReverbBoost ?? true,
+                EmulateSustainPedal = baseOptions?.EmulateSustainPedal ?? true
+            };
+
+            var opt680 = new RemapperOptions
+            {
+                TargetModel = "pss680",
+                EnablePolyphonyGuard = baseOptions?.EnablePolyphonyGuard ?? true,
+                DefaultReverbBoost = baseOptions?.DefaultReverbBoost ?? true,
+                EmulateSustainPedal = baseOptions?.EmulateSustainPedal ?? true
+            };
+
+            await Task.Run(() =>
+            {
+                foreach (var file in files)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
+
+                    var relPath = Path.GetRelativePath(sourceDirectory, file);
+
+                    // 1. Convert for PSS-790
+                    var dest790 = Path.Combine(target790Dir, relPath);
+                    var dir790 = Path.GetDirectoryName(dest790);
+                    if (!string.IsNullOrEmpty(dir790) && !Directory.Exists(dir790)) Directory.CreateDirectory(dir790);
+
+                    // 2. Convert for PSS-680
+                    var dest680 = Path.Combine(target680Dir, relPath);
+                    var dir680 = Path.GetDirectoryName(dest680);
+                    if (!string.IsNullOrEmpty(dir680) && !Directory.Exists(dir680)) Directory.CreateDirectory(dir680);
+
+                    try
+                    {
+                        var sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
+
+                        var remap790 = Remapper.Remap(sourceMidi, opt790);
+                        Remapper.SaveRemapped(remap790, dest790, "pss790");
+                        completed++;
+                        progress?.Report((completed, total, $"{relPath} (PSS-790)"));
+
+                        var remap680 = Remapper.Remap(sourceMidi, opt680);
+                        Remapper.SaveRemapped(remap680, dest680, "pss680");
+                        completed++;
+                        progress?.Report((completed, total, $"{relPath} (PSS-680)"));
+                    }
+                    catch (Exception)
+                    {
+                        completed += 2;
+                        progress?.Report((completed, total, relPath));
+                    }
+                }
+            }, cancellationToken);
+
+            return completed / 2;
         }
 
         public static LibrarySyncAnalysis AnalyzeSync(string sourceDir, string targetDir)
@@ -227,9 +334,18 @@ namespace PSS790Player.Core
 
                     try
                     {
+                        var targetModel = options.RemapperOptions?.TargetModel ?? (targetDir.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
+                        var modelOpts = new RemapperOptions
+                        {
+                            TargetModel = targetModel,
+                            EnablePolyphonyGuard = options.RemapperOptions?.EnablePolyphonyGuard ?? true,
+                            DefaultReverbBoost = options.RemapperOptions?.DefaultReverbBoost ?? true,
+                            EmulateSustainPedal = options.RemapperOptions?.EmulateSustainPedal ?? true
+                        };
+
                         var sourceMidi = MidiFile.Read(srcPath, Constants.DefaultReadingSettings);
-                        var remapped = Remapper.Remap(sourceMidi, options.RemapperOptions);
-                        Remapper.SaveRemapped(remapped, destPath);
+                        var remapped = Remapper.Remap(sourceMidi, modelOpts);
+                        Remapper.SaveRemapped(remapped, destPath, targetModel);
 
                         if (item.Action == "convert_missing")
                             result.ConvertedCount++;
@@ -296,6 +412,61 @@ namespace PSS790Player.Core
             }, cancellationToken);
 
             return result;
+        }
+
+        public static DualLibrarySyncAnalysis AnalyzeDualSync(string sourceDir, string target790Dir, string target680Dir)
+        {
+            return new DualLibrarySyncAnalysis
+            {
+                Analysis790 = AnalyzeSync(sourceDir, target790Dir),
+                Analysis680 = AnalyzeSync(sourceDir, target680Dir)
+            };
+        }
+
+        public static async Task<LibrarySyncResult> ExecuteDualSyncAsync(
+            string sourceDir,
+            string target790Dir,
+            string target680Dir,
+            LibrarySyncOptions? options = null,
+            VoiceOverrideStore? overrideStore = null,
+            IProgress<(int Current, int Total, string FileName, string Action)>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            var combinedResult = new LibrarySyncResult();
+
+            // 1. Sync PSS-790 library
+            var opt790 = new LibrarySyncOptions
+            {
+                ConvertMissing = options?.ConvertMissing ?? true,
+                UpdateOutdated = options?.UpdateOutdated ?? true,
+                RemoveOrphans = options?.RemoveOrphans ?? true,
+                ForceReconvertAll = options?.ForceReconvertAll ?? false,
+                RemapperOptions = new RemapperOptions { TargetModel = "pss790" }
+            };
+
+            var res790 = await ExecuteSyncAsync(sourceDir, target790Dir, opt790, overrideStore, progress, cancellationToken);
+            combinedResult.ConvertedCount += res790.ConvertedCount;
+            combinedResult.UpdatedCount += res790.UpdatedCount;
+            combinedResult.RemovedOrphansCount += res790.RemovedOrphansCount;
+
+            if (cancellationToken.IsCancellationRequested) return combinedResult;
+
+            // 2. Sync PSS-680 library
+            var opt680 = new LibrarySyncOptions
+            {
+                ConvertMissing = options?.ConvertMissing ?? true,
+                UpdateOutdated = options?.UpdateOutdated ?? true,
+                RemoveOrphans = options?.RemoveOrphans ?? true,
+                ForceReconvertAll = options?.ForceReconvertAll ?? false,
+                RemapperOptions = new RemapperOptions { TargetModel = "pss680" }
+            };
+
+            var res680 = await ExecuteSyncAsync(sourceDir, target680Dir, opt680, overrideStore, progress, cancellationToken);
+            combinedResult.ConvertedCount += res680.ConvertedCount;
+            combinedResult.UpdatedCount += res680.UpdatedCount;
+            combinedResult.RemovedOrphansCount += res680.RemovedOrphansCount;
+
+            return combinedResult;
         }
     }
 }

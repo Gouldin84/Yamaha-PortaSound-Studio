@@ -352,7 +352,7 @@ namespace PSS790Player.Core
             return (notes, timedEvents, duration);
         }
 
-        public static void EmbedRecordingMarker(MidiFile midi)
+        public static void EmbedRecordingMarker(MidiFile midi, string model = "pss790")
         {
             var firstTrack = midi.GetTrackChunks().FirstOrDefault();
             if (firstTrack == null)
@@ -361,13 +361,24 @@ namespace PSS790Player.Core
                 midi.Chunks.Add(firstTrack);
             }
 
-            if (!Remapper.HasPss790Marker(midi))
+            bool is680 = string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase);
+            if (is680)
             {
-                firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790RecordingMarkerText) { DeltaTime = 0 });
+                if (!Remapper.HasPss680Marker(midi))
+                {
+                    firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss680RecordingMarkerText) { DeltaTime = 0 });
+                }
+            }
+            else
+            {
+                if (!Remapper.HasPss790Marker(midi))
+                {
+                    firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790RecordingMarkerText) { DeltaTime = 0 });
+                }
             }
         }
 
-        public string SaveNativeTake(string fileName)
+        public string SaveNativeTake(string fileName, string model = "pss790")
         {
             if (_lastRecordedFile == null)
             {
@@ -385,17 +396,18 @@ namespace PSS790Player.Core
             }
 
             AppPaths.EnsureDirectoriesExist();
-            string fullPath = Path.Combine(AppPaths.Pss790MidiDir, fileName);
+            string targetDir = AppPaths.GetModelMidiDir(model);
+            string fullPath = Path.Combine(targetDir, fileName);
 
-            // Direct 1:1 clone of the PSS-790 take + ensure recording marker in Track 0
+            // Direct 1:1 clone of the take + ensure recording marker in Track 0
             var fileToSave = _lastRecordedFile.Clone();
-            EmbedRecordingMarker(fileToSave);
+            EmbedRecordingMarker(fileToSave, model);
 
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
 
-        public string ExportTakeToGeneralMidi(string fileName)
+        public string ExportTakeToGeneralMidi(string fileName, string model = "pss790")
         {
             if (_lastRecordedFile == null)
             {
@@ -415,15 +427,14 @@ namespace PSS790Player.Core
             AppPaths.EnsureDirectoriesExist();
             string fullPath = Path.Combine(AppPaths.GmMidiDir, fileName);
 
-            // Reverse-remap: PSS-790 Ch 16 drums -> GM Ch 10, Chart 1 -> GM drum notes, Chart 2 -> GM instruments
-            var fileToSave = ReverseRemapper.ReverseRemapToGeneralMidi(_lastRecordedFile);
+            var fileToSave = ReverseRemapper.ReverseRemapToGeneralMidi(_lastRecordedFile, model);
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
 
-        public string SaveTake(string fileName, bool remapForPss790, RemapperOptions? options = null)
+        public string SaveTake(string fileName, bool remapForPss, string model = "pss790", RemapperOptions? options = null)
         {
-            return remapForPss790 ? SaveNativeTake(fileName) : ExportTakeToGeneralMidi(fileName);
+            return remapForPss ? SaveNativeTake(fileName, model) : ExportTakeToGeneralMidi(fileName, model);
         }
 
         public string? AutoSaveTake()
@@ -548,7 +559,7 @@ namespace PSS790Player.Core
             return destPath;
         }
 
-        public string ExportRecordingToPss790(string sourcePath, string? targetFileName = null)
+        public string ExportRecordingToPss(string sourcePath, string? targetFileName = null, string model = "pss790")
         {
             if (!File.Exists(sourcePath))
                 throw new FileNotFoundException("Recording file not found.", sourcePath);
@@ -563,13 +574,16 @@ namespace PSS790Player.Core
                 outFileName = outFileName.Replace(c, '_');
             }
 
-            var destPath = Path.Combine(AppPaths.Pss790MidiDir, outFileName);
+            var destPath = Path.Combine(AppPaths.GetModelMidiDir(model), outFileName);
             var sourceMidi = MidiFile.Read(sourcePath);
             var pssFile = sourceMidi.Clone();
-            EmbedRecordingMarker(pssFile);
+            EmbedRecordingMarker(pssFile, model);
             pssFile.Write(destPath, overwriteFile: true);
             return destPath;
         }
+
+        public string ExportRecordingToPss790(string sourcePath, string? targetFileName = null) =>
+            ExportRecordingToPss(sourcePath, targetFileName, "pss790");
 
         public bool DeleteRecording(string filePath)
         {

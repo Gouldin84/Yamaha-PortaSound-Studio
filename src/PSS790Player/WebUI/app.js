@@ -269,8 +269,8 @@ function handleHostMessage(msg) {
             state.pss790Voices = msg.data.pss790Voices || msg.data.voices || [];
             state.pss680Voices = msg.data.pss680Voices || [];
             state.pss680Drums = msg.data.pss680Drums || [];
-            applyActiveModel(state.activeModel);
             state.library = msg.data.library || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
+            applyActiveModel(state.activeModel, false);
             if (msg.data.recorderBpm) {
                 state.recorderBpm = msg.data.recorderBpm;
                 const bpmIn = document.getElementById("recorderBpmInput");
@@ -444,7 +444,8 @@ function handleHostMessage(msg) {
             break;
 
         case "take_saved":
-            showToast(`Saved to ${msg.data.isPss790 ? 'PSS-790 Midi' : 'GM Midi'}: ${msg.data.fileName}`);
+            const targetFolder = msg.data.targetFolder || (msg.data.isPss790 ? (state.activeModel === 'pss680' ? 'PSS-680 Midi' : 'PSS-790 Midi') : 'GM Midi');
+            showToast(`Saved to ${targetFolder}: ${msg.data.fileName}`);
             break;
 
         case "recordings_library_updated":
@@ -530,6 +531,12 @@ function handleHostMessage(msg) {
             showSysexInspectModal(msg.data);
             break;
 
+        case "model_changed":
+            if (msg.data && msg.data.model) {
+                applyActiveModel(msg.data.model, false);
+            }
+            break;
+
         case "notification":
             showToast(msg.data.message);
             break;
@@ -546,14 +553,18 @@ function renderFormatBadge(format, isGmPassthrough) {
     const badgeContainer = document.getElementById("formatBadgeContainer");
     if (!badgeContainer) return;
 
+    const is680 = format === "pss680" || (format === "pss" && state.activeModel === "pss680") || (format !== "gm" && state.activeModel === "pss680" && format !== "rec");
+    const pssName = is680 ? "PSS-680" : "PSS-790";
+
     if (format === "rec") {
-        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-rose-950 text-rose-400 border border-rose-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-rose-500/20" title="Yamaha PSS-790 Studio Recording. Direct native hardware passthrough active."><span>⏺</span><span>PSS-790 Recording</span></span>`;
-    } else if (format === "pss790") {
-        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha PSS-790. Direct passthrough active."><span>⚡</span><span>PSS-790 Ready</span></span>`;
+        const recModel = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-rose-950 text-rose-400 border border-rose-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-rose-500/20" title="Yamaha ${recModel} Studio Recording. Direct native hardware passthrough active."><span>⏺</span><span>${recModel} Recording</span></span>`;
+    } else if (format === "pss790" || format === "pss680" || format === "pss") {
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-emerald-500/20" title="Converted for Yamaha ${pssName}. Direct passthrough active."><span>⚡</span><span>${pssName} Ready</span></span>`;
     } else if (isGmPassthrough) {
         badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-blue-950 text-blue-400 border border-blue-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-blue-500/20" title="Playing original unmodified General MIDI file directly through Microsoft GS Wavetable Synth for Windows reference."><span>🎹</span><span>Windows GS Synth (Original GM Passthrough)</span></span>`;
     } else {
-        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
+        badgeContainer.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-400 border border-indigo-800/80 font-semibold text-[11px] flex items-center space-x-1 shadow-sm shadow-indigo-500/20" title="General MIDI file. Real-time auto-remapping to ${pssName} active."><span>🎵</span><span>GM (Auto-Remapped)</span></span>`;
     }
 }
 
@@ -638,6 +649,8 @@ function renderLibrarySelect() {
     const lib = state.library;
     const hasGm = lib.gmFiles && lib.gmFiles.length > 0;
     const hasPss = lib.pssFiles && lib.pssFiles.length > 0;
+    const is680 = state.activeModel === "pss680";
+    const pssGroupLabel = is680 ? "⚡ PSS-680 Midi (Converted - Ready)" : "⚡ PSS-790 Midi (Converted - Ready)";
 
     if (!hasGm && !hasPss) {
         sel.innerHTML = `<option value="" selected disabled>Library Empty (Click 'Open Folder')</option>`;
@@ -662,7 +675,7 @@ function renderLibrarySelect() {
 
     if (hasPss) {
         const pssGroup = document.createElement("optgroup");
-        pssGroup.label = "⚡ PSS-790 Midi (Converted - Ready)";
+        pssGroup.label = pssGroupLabel;
         pssGroup.className = "bg-slate-900 text-emerald-400 font-bold";
         lib.pssFiles.forEach(f => {
             const opt = document.createElement("option");
@@ -1000,7 +1013,8 @@ function openActionModal(actionType, target) {
     if (actionType === "new_folder") {
         icon.textContent = "📁";
         title.textContent = "Create New Folder";
-        const catLabel = target.category === "pss790" ? "PSS-790 Midi" : "GM Midi";
+        const isPss = target.category === "pss790" || target.category === "pss680";
+        const catLabel = isPss ? (state.activeModel === "pss680" ? "PSS-680 Midi" : "PSS-790 Midi") : "GM Midi";
         desc.textContent = target.type === "folder"
             ? `Create a new subfolder inside "${target.name}":`
             : `Create a new folder in ${catLabel}:`;
@@ -1069,7 +1083,7 @@ function openActionModal(actionType, target) {
 
         const deleteLabel = document.querySelector("#actionModalLinkedDeleteContainer span");
         if (deleteLabel) {
-            deleteLabel.textContent = isFolder ? "Also delete mirrored folder in counterpart library" : "Also delete matching PSS-790 version";
+            deleteLabel.textContent = isFolder ? "Also delete mirrored folder in counterpart library" : `Also delete matching ${state.activeModel === "pss680" ? "PSS-680" : "PSS-790"} version`;
         }
 
         btnConfirm.className = "px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition";
@@ -1089,7 +1103,7 @@ function openActionModal(actionType, target) {
 
         const deleteLabel = document.querySelector("#actionModalLinkedDeleteContainer span");
         if (deleteLabel) {
-            deleteLabel.textContent = "Also delete matching PSS-790 versions in mirrored library";
+            deleteLabel.textContent = `Also delete matching ${state.activeModel === "pss680" ? "PSS-680" : "PSS-790"} versions in mirrored library`;
         }
 
         btnConfirm.className = "px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 active:bg-rose-700 text-xs font-bold text-white shadow-lg shadow-rose-600/30 transition";
@@ -1109,8 +1123,9 @@ function populateMoveFolderSelect(category, currentSubFolder) {
     if (!sel) return;
     sel.innerHTML = "";
 
-    const tree = category === "pss790" ? state.library.pssTree : state.library.gmTree;
-    const catLabel = category === "pss790" ? "PSS-790 Midi" : "GM Midi";
+    const isPss = category === "pss790" || category === "pss680";
+    const tree = isPss ? (state.activeModel === "pss680" ? (state.library.pss680Tree || state.library.pssTree) : (state.library.pss790Tree || state.library.pssTree)) : state.library.gmTree;
+    const catLabel = isPss ? (state.activeModel === "pss680" ? "PSS-680 Midi" : "PSS-790 Midi") : "GM Midi";
 
     const rootOpt = document.createElement("option");
     rootOpt.value = "";
@@ -1133,6 +1148,7 @@ function populateMoveFolderSelect(category, currentSubFolder) {
 function handleLinkedFileChecked(data) {
     if (!activeModalAction || !activeModalAction.target) return;
     const target = activeModalAction.target;
+    const modelTag = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
 
     if (data.isBatch) {
         if (activeModalAction.actionType === "batch_delete" && data.hasLinked) {
@@ -1141,7 +1157,7 @@ function handleLinkedFileChecked(data) {
             const chk = document.getElementById("chkAlsoDeleteLinked");
 
             if (container && label && chk) {
-                label.textContent = `${data.linkedCount} matching PSS-790 version(s) found in mirrored library`;
+                label.textContent = `${data.linkedCount} matching ${modelTag} version(s) found in mirrored library`;
                 chk.checked = true;
                 container.classList.remove("hidden");
             }
@@ -1151,7 +1167,7 @@ function handleLinkedFileChecked(data) {
             const chk = document.getElementById("chkAlsoMoveLinked");
 
             if (container && label && chk) {
-                label.textContent = `${data.linkedCount} matching PSS-790 version(s) found in mirrored library`;
+                label.textContent = `${data.linkedCount} matching ${modelTag} version(s) found in mirrored library`;
                 chk.checked = true;
                 container.classList.remove("hidden");
             }
@@ -1415,7 +1431,7 @@ function renderLibraryTree() {
             <div class="text-center py-8 px-3 text-slate-500 space-y-2">
                 <div class="text-2xl">📂</div>
                 <div class="text-xs font-semibold text-slate-400">Library Empty</div>
-                <p class="text-[10px] text-slate-500">Put .mid files in Music\\Midi\\GM Midi or PSS-790 Midi</p>
+                <p class="text-[10px] text-slate-500">Put .mid files in Music\\Midi\\GM Midi, PSS-790 Midi, or PSS-680 Midi</p>
                 <button id="btnTreeOpenFolder" class="mt-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-cyan-400 font-medium transition border border-slate-700">Open Music Folder</button>
             </div>
         `;
@@ -1427,9 +1443,14 @@ function renderLibraryTree() {
     const query = (state.searchQuery || "").toLowerCase();
     container.innerHTML = "";
 
-    // Categories to render: PSS-790 Ready first, then GM Midi
+    // Categories to render: Native PSS Ready first, then GM Midi
+    const is680 = state.activeModel === "pss680";
+    const nativeTree = is680 ? (lib.pss680Tree || lib.pssTree) : (lib.pss790Tree || lib.pssTree);
+    const nativeTitle = is680 ? "PSS-680 Ready" : "PSS-790 Ready";
+    const nativeKey = is680 ? "pss680" : "pss790";
+
     const categories = [
-        { tree: lib.pssTree, title: "PSS-790 Ready", badge: "⚡", key: "pss790", colorClass: "text-emerald-400" },
+        { tree: nativeTree, title: nativeTitle, badge: "⚡", key: nativeKey, colorClass: "text-emerald-400" },
         { tree: lib.gmTree, title: "GM (Auto-Remap)", badge: "🎵", key: "gm", colorClass: "text-indigo-400" }
     ];
 
@@ -1582,7 +1603,8 @@ function createSongItemElement(file) {
     const isSelected = file.fullPath === state.selectedSongPath;
     const isPlaying = file.fullPath === state.currentFilePath && state.isPlaying;
     const isRec = file.format === "rec";
-    const isPss = file.format === "pss790";
+    const is680 = file.format === "pss680" || (file.format !== "gm" && file.format !== "rec" && state.activeModel === "pss680");
+    const isPss = file.format === "pss790" || is680;
     const isChecked = state.selectedSongs.has(file.fullPath);
     const isTouch = window.matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window);
     const chkVisibility = (isTouch || state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
@@ -1594,11 +1616,11 @@ function createSongItemElement(file) {
     if (isRec) {
         badgeClass = 'bg-rose-950 text-rose-400 border border-rose-800/60';
         badgeLabel = 'REC';
-        badgeTitle = 'Native Yamaha PSS-790 Studio Recording (direct hardware passthrough)';
+        badgeTitle = `Native ${state.activeModel === 'pss680' ? 'Yamaha PSS-680' : 'Yamaha PSS-790'} Studio Recording (direct hardware passthrough)`;
     } else if (isPss) {
         badgeClass = 'bg-emerald-950 text-emerald-400 border border-emerald-800/60';
-        badgeLabel = 'PSS';
-        badgeTitle = 'Native Yamaha PSS-790 converted file (plays via direct hardware passthrough)';
+        badgeLabel = is680 ? '680' : 'PSS';
+        badgeTitle = `Native ${is680 ? 'Yamaha PSS-680' : 'Yamaha PSS-790'} converted file (plays via direct hardware passthrough)`;
     }
 
     const div = document.createElement("div");
@@ -1914,9 +1936,18 @@ function renderMixer() {
             ? 'btn-console-s soloed bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50 ring-1 ring-amber-300'
             : 'btn-console-s bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50';
 
+        const is680 = state.activeModel === "pss680";
+        const drumSubtitle = is680 ? "32 Drum Fixed" : "Chart 1 Fixed";
+        const drumTooltip = is680 ? "Channel 16 percussion fixed to 32 PSS-680 hand percussion instruments" : "Channel 16 rhythm fixed to Chart 1 drums";
+        const chHeaderTitle = isDrum ? (is680 ? "Drums / Percussion (32 Hand Percussion)" : "Drums / Percussion (Chart 1)") : "Melody / Accompaniment";
+        const overrideTitle = is680
+            ? `Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-680 2-op FM preset voices`
+            : `Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-790 AWM preset voices`;
+        const selectTitle = isDrum ? drumTooltip : `Override Channel ${ch.channelDisplay} preset voice (00-99)`;
+
         card.innerHTML = `
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}" title="Channel ${ch.channelDisplay} (${isDrum ? 'Drums / Percussion (Chart 1)' : 'Melody / Accompaniment'})">CH ${ch.channelDisplay}</span>
+                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
                 <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
@@ -1924,15 +1955,15 @@ function renderMixer() {
                 <div class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
                     ${ch.detectedInstrument}
                 </div>
-                <div class="text-[9px] text-slate-400 truncate" title="${isDrum ? 'Channel 10 rhythm fixed to Chart 1 drums' : (ch.defaultPssVoiceName ? `Mapped to AWM Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset')}">
-                    ${isDrum ? 'Chart 1 Fixed' : (ch.defaultPssVoiceName ? `Auto: ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
+                <div class="text-[9px] text-slate-400 truncate" title="${isDrum ? drumTooltip : (ch.defaultPssVoiceName ? `Mapped to Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset')}">
+                    ${isDrum ? drumSubtitle : (ch.defaultPssVoiceName ? `Auto: ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
                 </div>
             </div>
 
             <!-- Voice Override Combobox -->
             <div class="space-y-0.5">
-                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight" title="Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-790 AWM preset voices">Voice Override</label>
-                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="${isDrum ? 'Channel 10 Drums use fixed Yamaha Chart 1 rhythm mappings' : `Override Channel ${ch.channelDisplay} preset voice (00-99)`}">
+                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight" title="${overrideTitle}">Voice Override</label>
+                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="${selectTitle}">
                     <option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>
                     ${state.voices.map(v => `
                         <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
@@ -2435,8 +2466,8 @@ function renderRecordingsLibrary() {
                     <span>🎵 GM Export</span>
                 </button>
 
-                <!-- Export to PSS-790 Library (Native) -->
-                <button onclick="exportRecordingToPss('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Export to PSS-790 Library: Stores in PSS-790 Midi folder for immediate hardware playback" class="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-[11px] font-semibold text-emerald-300 hover:text-white border border-emerald-800/60 transition active:scale-95 flex items-center space-x-1">
+                <!-- Export to PSS Library (Native) -->
+                <button onclick="exportRecordingToPss('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Export to ${state.activeModel === 'pss680' ? 'PSS-680' : 'PSS-790'} Library: Stores in native PSS Midi folder for immediate hardware playback" class="px-2.5 py-1 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-[11px] font-semibold text-emerald-300 hover:text-white border border-emerald-800/60 transition active:scale-95 flex items-center space-x-1">
                     <span>⚡ PSS Export</span>
                 </button>
 
@@ -2479,7 +2510,8 @@ function exportRecordingToGm(encodedPath, fileName) {
 function exportRecordingToPss(encodedPath, fileName) {
     const filePath = decodeURIComponent(encodedPath);
     sendToHost("export_recording_to_pss", { filePath: filePath });
-    showToast(`Exporting ${fileName} to PSS-790 Library...`);
+    const pssName = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
+    showToast(`Exporting ${fileName} to ${pssName} Library...`);
 }
 
 function promptRenameRecording(encodedPath, oldName) {
@@ -3015,7 +3047,7 @@ function openSyncModal() {
     if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-slate-900/80 border-slate-800 text-xs text-slate-300";
     document.getElementById("syncStatusIcon").textContent = "🔍";
     document.getElementById("syncStatusHeadline").textContent = "Analyzing library folders...";
-    document.getElementById("syncStatusSubtext").textContent = "Comparing files in GM Midi and PSS-790 Midi...";
+    document.getElementById("syncStatusSubtext").textContent = "Comparing files across GM Midi, PSS-790 Midi, and PSS-680 Midi...";
     document.getElementById("syncProgressContainer")?.classList.add("hidden");
     const btnStart = document.getElementById("btnStartSync");
     if (btnStart) {
@@ -3048,13 +3080,13 @@ function handleLibrarySyncAnalysis(data) {
     if (data.isInSync) {
         if (icon) icon.textContent = "✅";
         if (headline) headline.textContent = "Library folders are in 100% parity!";
-        if (subtext) subtext.textContent = `All ${data.totalGm} GM songs are matched and optimized in PSS-790 format with 0 orphans.`;
+        if (subtext) subtext.textContent = `All ${data.totalGm} GM songs are matched and synchronized across both PSS-790 and PSS-680 libraries with 0 orphans.`;
         if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-emerald-950/40 border-emerald-500/40 text-xs text-emerald-200";
         if (btnStart) btnStart.textContent = "Re-Verify / Force Sync";
     } else {
         if (icon) icon.textContent = "⚡";
         if (headline) headline.textContent = `${data.missingCount} missing, ${data.outdatedCount} outdated, ${data.orphanCount} orphan files`;
-        if (subtext) subtext.textContent = "Review options below and click Align & Sync to resolve differences.";
+        if (subtext) subtext.textContent = "Review options below and click Align & Sync to synchronize both PSS-790 and PSS-680 libraries.";
         if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-cyan-950/40 border-cyan-500/40 text-xs text-cyan-200";
         if (btnStart) btnStart.textContent = "Align & Sync Now";
     }
@@ -3079,7 +3111,7 @@ function handleSyncCompleted(data) {
     if (btnStart) btnStart.disabled = false;
     if (syncModal) syncModal.classList.add("hidden");
 
-    showToast(`Sync complete! ${data.convertedCount} converted, ${data.updatedCount} updated, ${data.removedOrphansCount} orphans cleaned.`);
+    showToast(`Dual Sync complete! ${data.convertedCount} converted, ${data.updatedCount} updated, ${data.removedOrphansCount} orphans cleaned across both PSS-790 and PSS-680 libraries.`);
 }
 
 btnSidebarSync?.addEventListener("click", openSyncModal);
@@ -3437,7 +3469,8 @@ function startSysexCapture() {
         badge.className = "px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800 animate-pulse";
     }
     if (pulse) pulse.className = "w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping";
-    showToast("SysEx Capture active: waiting for PSS-790 Memory Bulk Dump...");
+    const captureModel = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
+    showToast(`SysEx Capture active: waiting for ${captureModel} Memory Bulk Dump...`);
 }
 
 function stopSysexCapture() {
@@ -3497,11 +3530,12 @@ function startSysexTransmit() {
     const delayEl = document.getElementById("sysexPacketDelaySelect");
     const delay = delayEl ? (parseInt(delayEl.value) || 30) : 30;
 
+    const restoreModel = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
     const confirmed = confirm(
-        `Restore "${state.selectedSysexDump.fileName}" to Yamaha PSS-790?\n\n` +
-        `WARNING: This will overwrite keyboard Song Memory and Vector Voice registers.\n` +
+        `Restore "${state.selectedSysexDump.fileName}" to Yamaha ${restoreModel}?\n\n` +
+        `WARNING: This will overwrite keyboard memory registers.\n` +
         `Pacing delay: ${delay}ms per packet.\n\n` +
-        `Ensure your PSS-790 is powered on and connected to MIDI OUT.`
+        `Ensure your ${restoreModel} is powered on and connected to MIDI OUT.`
     );
     if (!confirmed) return;
 
@@ -3542,7 +3576,8 @@ function updateSysexTransmitProgress(data) {
         state.isSysexTransmitting = false;
         if (btnTransmit) btnTransmit.classList.remove("hidden");
         if (btnCancel) btnCancel.classList.add("hidden");
-        showToast("SysEx bulk dump successfully restored to Yamaha PSS-790!");
+        const completedModel = state.activeModel === "pss680" ? "PSS-680" : "PSS-790";
+        showToast(`SysEx bulk dump successfully restored to Yamaha ${completedModel}!`);
         setTimeout(() => {
             if (!state.isSysexTransmitting && progressContainer) progressContainer.classList.add("hidden");
         }, 2000);
@@ -3640,6 +3675,46 @@ document.getElementById("btnOpenSysExFolder")?.addEventListener("click", () => {
     sendToHost("open_sysex_folder");
 });
 
+// PSS-680 SysEx Hardware Controls
+document.getElementById("btnQuickMode99")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "mode_99" });
+    showToast("Sent Yamaha PSS-680 Mode 99 (F0 43 76 00 05 99 F7)");
+});
+
+document.getElementById("btnQuickReqVoice")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "req_voice_dump" });
+    showToast("Sent Request FM Voice Bank Dump (Format 00H)");
+});
+
+document.getElementById("btnQuickReqMelody")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "req_melody_dump" });
+    showToast("Sent Request Melody Memory Dump (Format 01H)");
+});
+
+document.getElementById("btnQuickReqChord")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "req_chord_dump" });
+    showToast("Sent Request Chord Memory Dump (Format 02H)");
+});
+
+document.getElementById("btnQuickReqRhythm")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "req_rhythm_dump" });
+    showToast("Sent Request Custom Drummer Dump (Format 03H)");
+});
+
+document.getElementById("btnQuickMasterVol680")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "master_volume_max" });
+    showToast("Sent Master Volume Full (127)");
+});
+
+document.getElementById("btnQuickAllReset680")?.addEventListener("click", () => {
+    sendToHost("send_quick_sysex", { command: "all_reset" });
+    showToast("Sent All Notes Off & Reset Controllers");
+});
+
+document.getElementById("btnOpenSysExFolder680")?.addEventListener("click", () => {
+    sendToHost("open_sysex_folder");
+});
+
 // Hex Inspect Modal Dismiss & Copy
 document.getElementById("btnCloseSysexInspectModal")?.addEventListener("click", () => {
     document.getElementById("sysexInspectModal")?.classList.add("hidden");
@@ -3681,7 +3756,7 @@ document.getElementById("btnOpenRecordingsFolder")?.addEventListener("click", ()
 window.handleHostMessage = handleHostMessage;
 
 // Model Selector & State Management
-function applyActiveModel(modelKey) {
+function applyActiveModel(modelKey, syncHost = true) {
     state.activeModel = modelKey;
     localStorage.setItem("yamaha_studio_model", modelKey);
 
@@ -3710,10 +3785,45 @@ function applyActiveModel(modelKey) {
     if (check790) check790.classList.toggle("hidden", is680);
     if (check680) check680.classList.toggle("hidden", !is680);
 
-    // Re-render mixer so voice override dropdowns update to the active model's presets
+    // Toggle SysEx toolbars
+    const sysex790 = document.getElementById("sysexControlsPss790");
+    const sysex680 = document.getElementById("sysexControlsPss680");
+    if (sysex790) sysex790.classList.toggle("hidden", is680);
+    if (sysex680) sysex680.classList.toggle("hidden", !is680);
+
+    // Update SysEx Vault Title
+    const sysexTitle = document.getElementById("sysexVaultHeaderTitle");
+    if (sysexTitle) sysexTitle.textContent = is680 ? "Yamaha PSS-680 SysEx Vault" : "Yamaha PSS-790 SysEx Vault";
+
+    // Update Recorder Save button label & description
+    const lblSave = document.getElementById("lblSaveTakePss");
+    if (lblSave) lblSave.textContent = is680 ? "Save Native (PSS-680 Ready)" : "Save Native (PSS-790 Ready)";
+    const descSave = document.getElementById("descSaveTakePss");
+    if (descSave) descSave.textContent = is680 ? "Direct 1:1 capture with native marker to PSS-680 Midi folder. Zero translation needed." : "Direct 1:1 capture with native marker to PSS-790 Midi folder. Zero translation needed.";
+
+    // Update Mixer Subtitle
+    const mixerSubtitle = document.getElementById("mixerSubtitle");
+    if (mixerSubtitle) mixerSubtitle.innerHTML = is680 ? "Live Voice Overrides (00-99 FM Presets) &bull; Channel 16 Percussion (32 Hand Percussion Instruments)" : "Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)";
+
+    // Update Polyphony Guard tooltip
+    const polyToggle = document.getElementById("polyphonyGuardToggle");
+    const polyLabel = polyToggle?.closest("div");
+    if (polyLabel) {
+        polyLabel.title = is680
+            ? "Smart Polyphony Guard: Restricts concurrent voices to 12 (Sound Source Mode 99), dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing"
+            : "Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing";
+    }
+
+    // Re-render library so category title and tree immediately switch to PSS-680 Ready vs PSS-790 Ready
+    renderLibrarySelect();
+    renderLibraryTree();
+
+    // Re-render mixer so voice override dropdowns update to active model's presets
     renderMixer();
 
-    sendToHost("set_active_model", { model: modelKey });
+    if (syncHost) {
+        sendToHost("set_active_model", { model: modelKey });
+    }
 }
 
 function initModelSelector() {

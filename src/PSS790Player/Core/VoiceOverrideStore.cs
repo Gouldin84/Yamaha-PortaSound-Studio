@@ -62,20 +62,23 @@ namespace PSS790Player.Core
             catch { }
         }
 
-        private static string NormalizeKey(string filePath)
+        private static string NormalizeKey(string filePath, string model = "pss790")
         {
-            return AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+            var rel = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+            return string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? $"pss680:{rel}" : $"pss790:{rel}";
         }
 
-        public Dictionary<int, int?> GetOverrides(string filePath)
+        public Dictionary<int, int?> GetOverrides(string filePath, string model = "pss790")
         {
             EnsureLoaded();
             var result = new Dictionary<int, int?>();
-            var key = NormalizeKey(filePath);
+            var key = NormalizeKey(filePath, model);
+            var legacyKey = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
 
             lock (_lock)
             {
-                if (_overrides.TryGetValue(key, out var songOverrides))
+                if (_overrides.TryGetValue(key, out var songOverrides) ||
+                    (!string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) && _overrides.TryGetValue(legacyKey, out songOverrides)))
                 {
                     foreach (var (ch, voice) in songOverrides)
                     {
@@ -87,10 +90,10 @@ namespace PSS790Player.Core
             return result;
         }
 
-        public void SetOverride(string filePath, int channel, int? voiceNumber)
+        public void SetOverride(string filePath, int channel, int? voiceNumber, string model = "pss790")
         {
             EnsureLoaded();
-            var key = NormalizeKey(filePath);
+            var key = NormalizeKey(filePath, model);
 
             lock (_lock)
             {
@@ -117,21 +120,28 @@ namespace PSS790Player.Core
             }
         }
 
-        public void ResetOverrides(string filePath)
+        public void ResetOverrides(string filePath, string model = "pss790")
         {
             EnsureLoaded();
-            var key = NormalizeKey(filePath);
+            var key = NormalizeKey(filePath, model);
+            var legacyKey = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
 
             lock (_lock)
             {
-                if (_overrides.Remove(key))
+                bool removed = _overrides.Remove(key);
+                if (!string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase))
+                {
+                    removed |= _overrides.Remove(legacyKey);
+                }
+
+                if (removed)
                 {
                     SaveInternal();
                 }
             }
         }
 
-        public void RemoveOverrides(string filePath) => ResetOverrides(filePath);
+        public void RemoveOverrides(string filePath) => ResetOverrides(filePath, "pss790");
 
         public void RemoveFolderOverrides(string folderPath)
         {

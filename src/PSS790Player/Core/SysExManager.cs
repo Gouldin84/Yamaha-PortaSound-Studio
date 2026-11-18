@@ -352,6 +352,11 @@ namespace PSS790Player.Core
                 "gm_on" => new byte[] { 0x7E, 0x7F, 0x09, 0x01 }, // GM System On
                 "xg_on" => new byte[] { 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00 }, // Yamaha XG System On
                 "master_vol_100" or "master_volume_max" => new byte[] { 0x7F, 0x7F, 0x04, 0x01, 0x00, 0x7F }, // Master Volume Full
+                "mode_99" or "pss680_mode_99" => new byte[] { 0x43, 0x76, 0x00, 0x05, 0x99 }, // Yamaha PSS-680 Sound Source Mode 99
+                "req_voice_dump" or "pss680_req_voice" => new byte[] { 0x43, 0x20, 0x23, 0x00, 0x00 }, // Format 00H FM Voice Dump Request
+                "req_melody_dump" or "pss680_req_melody" => new byte[] { 0x43, 0x20, 0x23, 0x01, 0x00 }, // Format 01H Melody Memory Dump Request
+                "req_chord_dump" or "pss680_req_chord" => new byte[] { 0x43, 0x20, 0x23, 0x02, 0x00 }, // Format 02H Chord Memory Dump Request
+                "req_rhythm_dump" or "pss680_req_rhythm" => new byte[] { 0x43, 0x20, 0x23, 0x03, 0x00 }, // Format 03H Custom Drummer Dump Request
                 "all_reset" => new byte[] { 0x7E, 0x7F, 0x09, 0x01 },
                 _ => null
             };

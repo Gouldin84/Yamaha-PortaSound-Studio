@@ -68,9 +68,15 @@ jobs:
 A high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio designed for the **Yamaha PortaSound PSS-790** (AWM) and **PSS-680 / PSS-480 / PSS-780** (2-Operator FM) keyboard synthesizers.
 
 ## Key Features & New Functionality in v${tag}
-* **Yamaha PSS-680 / PSS-480 / PSS-780 FM Synthesis Support**:
-  - Full support for the vintage 2-operator FM sound engine (YM3420 / OPLL derivative) alongside the PSS-790 AWM engine.
-  - Multi-timbral Sound Source Mode 99 support with dynamic 12-voice polyphony allocation and full velocity sensitivity (1-127).
+* **Yamaha PSS-680 Full Engine Mirror & Complete Separation**:
+  - **Dynamic Jukebox Library**: Selecting "PSS-680 Studio" immediately re-renders the library sidebar to display `⚡ PSS-680 Ready (N)` reading from `Music\Midi\PSS-680 Midi` alongside `GM Midi`.
+  - **16-Channel Mixer Tailoring**: Channels 1–15 support live voice overrides across all 100 2-Operator FM presets (#00–#99) for PSS-680. Channel 16 is fixed to 32 Hand Percussion Instruments with full Note-On velocity sensitivity.
+  - **Smart Polyphony Guard Calibration**: Enforces the 12-voice hardware polyphony limit for PSS-680 (Sound Source Mode 99) while maintaining the 28-voice limit for PSS-790, dynamically culling incidental percussion during note bursts while strictly shielding lead melody and basslines.
+  - **Studio Recorder Native Separation**: Records live takes directly into model-specific native formats (`PSS680_RECORDING:v1` to `Music\Midi\PSS-680 Midi` or `PSS790_RECORDING:v1` to `Music\Midi\PSS-790 Midi`) with 100% passthrough playback.
+  - **Dedicated SysEx Workstations**: Tailored hardware command bars for each model—PSS-680 features 1-click Mode 99 initiation (`F0 43 76 00 05 99 F7`), FM Voice Bank Dump (`00H`), Melody Memory Dump (`01H`), Chord Memory Dump (`02H`), and Custom Drummer Dump (`03H`), alongside master volume and panic resets.
+* **Simultaneous Dual-Keyboard Library Alignment & Synchronization**:
+  - The **Sync Folders** button and **Batch Remapper** analyze, convert, and synchronize **both** `PSS-790 Midi` and `PSS-680 Midi` libraries simultaneously against `GM Midi`.
+  - Adding or modifying General MIDI files keeps both hardware formats in 100% parity, ensuring immediate physical playback regardless of which keyboard synthesizer is currently connected.
 * **Interactive Synthesizer Model Selector**:
   - Header dropdown with custom photorealistic 3D isometric icons allowing on-the-fly switching between PSS-790 (AWM) and PSS-680 (FM).
   - Mixer strips dynamically adapt voice overrides to the active model's 100 preset voices.
@@ -84,6 +90,7 @@ A high-performance standalone MIDI workstation, real-time voice remapper, and mu
 * **Renamed Standalone Executable to PSS-Studio.exe**:
   - Fully self-contained standalone executable ready for Windows 10/11 x64 with zero runtime dependencies.
   - Added 1-click `build.bat` and `Launch-Studio.bat`.
+  - Packaged releases directly in `dist/` directory.
 
 ## Downloads
 | Asset | Description |

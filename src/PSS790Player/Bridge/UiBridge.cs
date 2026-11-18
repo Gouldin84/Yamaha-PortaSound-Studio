@@ -23,6 +23,7 @@ namespace PSS790Player.Bridge
         private readonly SysExManager _sysexManager;
         private readonly MidiDeviceMonitor _deviceMonitor;
         private readonly RemapperOptions _options = new();
+        private string _activeModel = "pss790";
         private MidiFile? _loadedOriginalMidi;
         private MidiFile? _loadedRemappedMidi;
         private string? _currentFilePath;
@@ -340,7 +341,32 @@ namespace PSS790Player.Bridge
                         break;
                     case "set_active_model":
                         var selectedModel = root.GetProperty("model").GetString() ?? "pss790";
-                        SendToJs("model_changed", new { model = selectedModel });
+                        _activeModel = selectedModel;
+                        _options.TargetModel = selectedModel;
+                        if (_currentFilePath != null && _loadedOriginalMidi != null)
+                        {
+                            _options.ChannelVoiceOverrides.Clear();
+                            var savedModelOverrides = VoiceOverrideStore.Instance.GetOverrides(_currentFilePath, _activeModel);
+                            foreach (var (oCh, oVoice) in savedModelOverrides)
+                            {
+                                _options.ChannelVoiceOverrides[oCh] = oVoice;
+                            }
+                            ReapplyRemapping(preservePosition: true);
+                            var activeFormat = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                            var activeChannels = AnalyzeChannels(_loadedOriginalMidi, activeFormat);
+                            var activeHealth = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(_currentFilePath), _activeModel);
+                            SendToJs("channels_updated", new { channels = activeChannels });
+                            SendToJs("health_updated", BuildHealthPayload(activeHealth));
+                        }
+                        SendLibraryUpdate();
+                        SendToJs("model_changed", new
+                        {
+                            model = selectedModel,
+                            title = selectedModel == "pss680" ? "PSS-680 Studio" : "PSS-790 Studio",
+                            readyLabel = selectedModel == "pss680" ? "PSS-680 Ready" : "PSS-790 Ready",
+                            drumLabel = selectedModel == "pss680" ? "PSS-680 Percussion (32 Hand Percussion Instruments)" : "PSS-790 Percussion (Chart 1 Fixed)",
+                            polyphonyLimit = selectedModel == "pss680" ? 12 : 28
+                        });
                         break;
                     case "set_speed":
                         var speed = root.GetProperty("speed").GetDouble();
@@ -356,7 +382,7 @@ namespace PSS790Player.Bridge
                         _options.ChannelVoiceOverrides[ch] = voice;
                         if (_currentFilePath != null)
                         {
-                            VoiceOverrideStore.Instance.SetOverride(_currentFilePath, ch, voice);
+                            VoiceOverrideStore.Instance.SetOverride(_currentFilePath, ch, voice, _activeModel);
                         }
                         if (voice.HasValue)
                         {
@@ -507,13 +533,14 @@ namespace PSS790Player.Bridge
                         {
                             try
                             {
-                                var exportedPss = _recorder.ExportRecordingToPss790(expPssPath, customPssName);
+                                var modelLabel = _activeModel == "pss680" ? "PSS-680" : "PSS-790";
+                                var exportedPss = _recorder.ExportRecordingToPss(expPssPath, customPssName, _activeModel);
                                 SendLibraryUpdate();
-                                SendToJs("notification", new { message = $"Exported to PSS-790 library: {Path.GetFileName(exportedPss)}" });
+                                SendToJs("notification", new { message = $"Exported to {modelLabel} library: {Path.GetFileName(exportedPss)}" });
                             }
                             catch (Exception ex)
                             {
-                                SendToJs("error", new { message = $"Failed to export to PSS-790: {ex.Message}" });
+                                SendToJs("error", new { message = $"Failed to export to {(_activeModel == "pss680" ? "PSS-680" : "PSS-790")}: {ex.Message}" });
                             }
                         }
                         break;
@@ -551,14 +578,16 @@ namespace PSS790Player.Bridge
                         var takeFileName = root.TryGetProperty("fileName", out var fnProp) ? fnProp.GetString() ?? $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid" : $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
                         var isNativePss = root.TryGetProperty("isNativePss", out var nProp) ? nProp.GetBoolean() : (root.TryGetProperty("remapForPss790", out var rProp) && rProp.GetBoolean());
                         var savedPath = isNativePss 
-                            ? _recorder.SaveNativeTake(takeFileName) 
-                            : _recorder.ExportTakeToGeneralMidi(takeFileName);
+                            ? _recorder.SaveNativeTake(takeFileName, _activeModel) 
+                            : _recorder.ExportTakeToGeneralMidi(takeFileName, _activeModel);
                         SendLibraryUpdate();
                         SendToJs("take_saved", new
                         {
                             filePath = savedPath,
                             fileName = Path.GetFileName(savedPath),
-                            isPss790 = isNativePss
+                            isPss790 = isNativePss && _activeModel != "pss680",
+                            isPss680 = isNativePss && _activeModel == "pss680",
+                            activeModel = _activeModel
                         });
                         break;
                     case "send_take_to_player":
@@ -1482,20 +1511,31 @@ namespace PSS790Player.Bridge
             var allFlat = new List<FileItemDto>();
 
             var gmTree = BuildCategoryTree(AppPaths.GmMidiDir, "GM Midi", "gm", allFlat);
-            var pssTree = BuildCategoryTree(AppPaths.Pss790MidiDir, "PSS-790 Midi", "pss790", allFlat);
+            var pss790Tree = BuildCategoryTree(AppPaths.Pss790MidiDir, "PSS-790 Midi", "pss790", allFlat);
+            var pss680Tree = BuildCategoryTree(AppPaths.Pss680MidiDir, "PSS-680 Midi", "pss680", allFlat);
+
+            bool is680 = string.Equals(_activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
+            var pssTree = is680 ? pss680Tree : pss790Tree;
 
             var gmFiles = allFlat.Where(f => f.format == "gm").ToList();
-            var pssFiles = allFlat.Where(f => f.format == "pss790").ToList();
+            var pss790Files = allFlat.Where(f => f.format == "pss790").ToList();
+            var pss680Files = allFlat.Where(f => f.format == "pss680").ToList();
+            var pssFiles = is680 ? pss680Files : pss790Files;
 
             return new
             {
                 gmTree,
                 pssTree,
+                pss790Tree,
+                pss680Tree,
                 gmFiles,
                 pssFiles,
+                pss790Files,
+                pss680Files,
                 flatFiles = allFlat,
                 hasFiles = allFlat.Count > 0,
-                baseDir = AppPaths.BaseMidiDir
+                baseDir = AppPaths.BaseMidiDir,
+                activeModel = _activeModel
             };
         }
 
@@ -1684,147 +1724,179 @@ namespace PSS790Player.Bridge
 
                 var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                 var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
-                var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, title);
+                var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, title, _activeModel);
+
+                var modelTag = _activeModel == "pss680" ? "PSS-680" : "PSS-790";
+                bool isNativeThisModel = _activeModel == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
+                bool isNativeCounterpart = _activeModel == "pss680" ? (format == MidiFormat.Pss790Native) : (format == MidiFormat.Pss680Native);
+
+                string fmtCode = isRec ? "rec" : (isNativeThisModel ? _activeModel : (isNativeCounterpart ? (_activeModel == "pss680" ? "pss790" : "pss680") : "gm"));
+                string fmtLabel = isRec ? $"{modelTag} Studio Recording (Passthrough)" :
+                                  (isNativeThisModel ? $"{modelTag} Ready (Passthrough)" :
+                                  (isNativeCounterpart ? (_activeModel == "pss680" ? "PSS-790 Ready (Remapped for PSS-680)" : "PSS-680 Ready (Remapped for PSS-790)") :
+                                  $"General MIDI (Auto-Remapped for {modelTag})"));
 
                 SendToJs("file_loaded", new
                 {
                     fileName = title,
                     filePath = virtualPath ?? title,
                     relativeDir = "",
-                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
-                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
-                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" : "General MIDI (Auto-Remapped)"),
+                    format = fmtCode,
+                    formatLabel = fmtLabel,
                     durationSeconds = duration.TotalSeconds,
                     durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                     channels = channelInfo,
                     hasCustomOverrides = false,
                     health = BuildHealthPayload(health)
                 });
+                }
+                catch (Exception ex)
+                {
+                    SendToJs("error", new { message = $"Error loading recorded take: {ex.Message}" });
+                }
             }
-            catch (Exception ex)
+
+            public void LoadFile(string pathOrName, bool autoPlay = false)
             {
-                SendToJs("error", new { message = $"Error loading recorded take: {ex.Message}" });
+                try
+                {
+                    string resolvedPath = pathOrName;
+                    if (!File.Exists(resolvedPath))
+                    {
+                        var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
+                        var pss790Candidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
+                        var pss680Candidate = Path.Combine(AppPaths.Pss680MidiDir, pathOrName);
+
+                        if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
+                        else if (File.Exists(pss790Candidate)) resolvedPath = pss790Candidate;
+                        else if (File.Exists(pss680Candidate)) resolvedPath = pss680Candidate;
+                    }
+
+                    if (!File.Exists(resolvedPath))
+                    {
+                        SendToJs("error", new { message = $"File not found: {pathOrName}" });
+                        return;
+                    }
+
+                    _player.Stop();
+                    _player.Seek(TimeSpan.Zero);
+
+                    _currentFilePath = resolvedPath;
+                    _loadedOriginalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
+
+                    // Restore saved per-song voice overrides for the active model from VoiceOverrideStore
+                    _options.ChannelVoiceOverrides.Clear();
+                    _options.TargetModel = _activeModel;
+                    var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath, _activeModel);
+                    foreach (var (ch, voice) in savedOverrides)
+                    {
+                        _options.ChannelVoiceOverrides[ch] = voice;
+                    }
+
+                    var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                    bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
+                    ReapplyRemapping(preservePosition: false);
+
+                    bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                    bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
+                    bool isGmPassthrough = isMsGs && !isNative;
+
+                    var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
+                    var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
+                    var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(resolvedPath), _activeModel);
+
+                    var modelTag = _activeModel == "pss680" ? "PSS-680" : "PSS-790";
+                    bool isNativeThisModel = _activeModel == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
+                    bool isNativeCounterpart = _activeModel == "pss680" ? (format == MidiFormat.Pss790Native) : (format == MidiFormat.Pss680Native);
+
+                    string fmtCode = isRec ? "rec" : (isNativeThisModel ? _activeModel : (isNativeCounterpart ? (_activeModel == "pss680" ? "pss790" : "pss680") : "gm"));
+                    string fmtLabel = isRec ? $"{modelTag} Studio Recording (Passthrough)" :
+                                      (isNativeThisModel ? $"{modelTag} Ready (Passthrough)" :
+                                      (isNativeCounterpart ? (_activeModel == "pss680" ? "PSS-790 Ready (Remapped for PSS-680)" : "PSS-680 Ready (Remapped for PSS-790)") :
+                                      (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : $"General MIDI (Auto-Remapped for {modelTag})")));
+
+                    SendToJs("file_loaded", new
+                    {
+                        fileName = Path.GetFileName(resolvedPath),
+                        filePath = resolvedPath,
+                        relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
+                        format = fmtCode,
+                        formatLabel = fmtLabel,
+                        isGmPassthrough = isGmPassthrough,
+                        durationSeconds = duration.TotalSeconds,
+                        durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
+                        channels = channelInfo,
+                        hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath),
+                        health = BuildHealthPayload(health)
+                    });
+
+                    if (autoPlay)
+                    {
+                        _player.Play();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}" });
+                }
             }
-        }
 
-        public void LoadFile(string pathOrName, bool autoPlay = false)
-        {
-            try
+            private void HandleDeviceSelectionChanged()
             {
-                string resolvedPath = pathOrName;
-                if (!File.Exists(resolvedPath))
+                if (_loadedOriginalMidi != null)
                 {
-                    var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
-                    var pssCandidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
+                    var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
+                    bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
+                    bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                    bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
+                    bool isGmPassthrough = isMsGs && !isNative;
 
-                    if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
-                    else if (File.Exists(pssCandidate)) resolvedPath = pssCandidate;
+                    ReapplyRemapping(preservePosition: true);
+
+                    var modelTag = _activeModel == "pss680" ? "PSS-680" : "PSS-790";
+                    bool isNativeThisModel = _activeModel == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
+                    bool isNativeCounterpart = _activeModel == "pss680" ? (format == MidiFormat.Pss790Native) : (format == MidiFormat.Pss680Native);
+
+                    string fmtCode = isRec ? "rec" : (isNativeThisModel ? _activeModel : (isNativeCounterpart ? (_activeModel == "pss680" ? "pss790" : "pss680") : "gm"));
+                    string fmtLabel = isRec ? $"{modelTag} Studio Recording (Passthrough)" :
+                                      (isNativeThisModel ? $"{modelTag} Ready (Passthrough)" :
+                                      (isNativeCounterpart ? (_activeModel == "pss680" ? "PSS-790 Ready (Remapped for PSS-680)" : "PSS-680 Ready (Remapped for PSS-790)") :
+                                      (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : $"General MIDI (Auto-Remapped for {modelTag})")));
+
+                    var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
+                    SendToJs("playback_format_updated", new
+                    {
+                        format = fmtCode,
+                        formatLabel = fmtLabel,
+                        isGmPassthrough = isGmPassthrough,
+                        channels = channelInfo
+                    });
                 }
+            }
 
-                if (!File.Exists(resolvedPath))
-                {
-                    SendToJs("error", new { message = $"File not found: {pathOrName}" });
-                    return;
-                }
+            private void ReapplyRemapping(bool preservePosition = false)
+            {
+                if (_loadedOriginalMidi == null) return;
 
-                _player.Stop();
-                _player.Seek(TimeSpan.Zero);
+                var wasPlaying = _player.IsPlaying;
+                var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
 
-                _currentFilePath = resolvedPath;
-                _loadedOriginalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
-
-                // Restore saved per-song voice overrides from VoiceOverrideStore!
-                _options.ChannelVoiceOverrides.Clear();
-                var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath);
-                foreach (var (ch, voice) in savedOverrides)
-                {
-                    _options.ChannelVoiceOverrides[ch] = voice;
-                }
+                _options.TargetModel = _activeModel;
+                _loadedRemappedMidi = Remapper.Remap(_loadedOriginalMidi, _options);
 
                 var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-                bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
-                ReapplyRemapping(preservePosition: false);
-
                 bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
+                bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
 
-                var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
-                var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
-                var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(resolvedPath));
-
-                SendToJs("file_loaded", new
+                if (isMsGs && !isNative)
                 {
-                    fileName = Path.GetFileName(resolvedPath),
-                    filePath = resolvedPath,
-                    relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
-                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
-                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
-                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
-                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)")),
-                    isGmPassthrough = isGmPassthrough,
-                    durationSeconds = duration.TotalSeconds,
-                    durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
-                    channels = channelInfo,
-                    hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath),
-                    health = BuildHealthPayload(health)
-                });
-
-                if (autoPlay)
-                {
-                    _player.Play();
+                    // Play unmodified General MIDI directly through Microsoft GS Wavetable Synth
+                    _player.LoadMidi(_loadedOriginalMidi);
                 }
-            }
-            catch (Exception ex)
-            {
-                SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}" });
-            }
-        }
-
-        private void HandleDeviceSelectionChanged()
-        {
-            if (_loadedOriginalMidi != null)
-            {
-                var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-                bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
-                bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
-
-                ReapplyRemapping(preservePosition: true);
-
-                var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
-                SendToJs("playback_format_updated", new
+                else
                 {
-                    format = isRec ? "rec" : (format == MidiFormat.Pss790Native ? "pss790" : "gm"),
-                    formatLabel = isRec ? "PSS-790 Studio Recording (Passthrough)" :
-                                  (format == MidiFormat.Pss790Native ? "PSS-790 Ready (Passthrough)" :
-                                  (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : "General MIDI (Auto-Remapped)")),
-                    isGmPassthrough = isGmPassthrough,
-                    channels = channelInfo
-                });
-            }
-        }
-
-        private void ReapplyRemapping(bool preservePosition = false)
-        {
-            if (_loadedOriginalMidi == null) return;
-
-            var wasPlaying = _player.IsPlaying;
-            var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
-
-            _loadedRemappedMidi = Remapper.Remap(_loadedOriginalMidi, _options);
-
-            var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-            bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-
-            if (isMsGs && format != MidiFormat.Pss790Native)
-            {
-                // Play unmodified General MIDI directly through Microsoft GS Wavetable Synth
-                _player.LoadMidi(_loadedOriginalMidi);
-            }
-            else
-            {
-                _player.LoadMidi(_loadedRemappedMidi);
-            }
+                    _player.LoadMidi(_loadedRemappedMidi);
+                }
 
             if (wasPlaying && preservePosition)
             {
@@ -1924,21 +1996,42 @@ namespace PSS790Player.Bridge
                     inferredTag = inf.InferredSource;
                 }
 
-                bool isDrum = (format == MidiFormat.Pss790Native) ? (ch == 15) : (ch == 9);
+                bool is680 = string.Equals(_activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                bool isDrum = (format == MidiFormat.Pss790Native || format == MidiFormat.Pss680Native) ? (ch == 15) : (ch == 9);
 
                 bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native);
+                bool isGmPassthrough = isMsGs && (format != MidiFormat.Pss790Native && format != MidiFormat.Pss680Native);
 
                 string role = isDrum
-                    ? (format == MidiFormat.Pss790Native ? "Fixed Rhythm (Ch 16)" :
-                       (isGmPassthrough ? "Standard GM Rhythm (Ch 10)" : "Drums (Remapped to Ch 16)"))
+                    ? (is680 ? "Hand Percussion (Ch 16)" : "Fixed Rhythm (Ch 16)")
                     : $"Channel {ch + 1}";
 
                 string detectedInstrument;
                 int defaultPssVoice;
                 string defaultPssVoiceName;
 
-                if (format == MidiFormat.Pss790Native)
+                if (format == MidiFormat.Pss680Native)
+                {
+                    if (isDrum)
+                    {
+                        detectedInstrument = "PSS-680 Percussion (32 Hand Percussion Instruments)";
+                        defaultPssVoice = 99;
+                        defaultPssVoiceName = "Hand Percussion (Ch 16)";
+                    }
+                    else if (prog.HasValue && Pss680Constants.Voices.TryGetValue((int)prog.Value, out var vInfo))
+                    {
+                        defaultPssVoice = vInfo.VoiceNumber;
+                        defaultPssVoiceName = vInfo.Name;
+                        detectedInstrument = vInfo.Name;
+                    }
+                    else
+                    {
+                        defaultPssVoice = 3;
+                        defaultPssVoiceName = "Piano 1";
+                        detectedInstrument = "Default Piano";
+                    }
+                }
+                else if (format == MidiFormat.Pss790Native)
                 {
                     if (isDrum)
                     {
@@ -1964,21 +2057,29 @@ namespace PSS790Player.Bridge
                     if (isDrum)
                     {
                         detectedInstrument = "GM Standard Drum Kit";
-                        defaultPssVoice = 96;
-                        defaultPssVoiceName = "PERCUSSIONS";
+                        defaultPssVoice = is680 ? 99 : 96;
+                        defaultPssVoiceName = is680 ? "Hand Percussion (Ch 16)" : "PERCUSSIONS";
                     }
                     else if (prog.HasValue)
                     {
                         var gmName = Remapper.GetGmInstrumentName(prog.Value);
                         detectedInstrument = inferredTag != null ? $"{gmName} [{inferredTag}]" : gmName;
-                        defaultPssVoice = Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0);
-                        defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO";
+                        if (is680)
+                        {
+                            defaultPssVoice = Pss680Constants.GmToPss680VoiceMap.GetValueOrDefault(prog.Value, 3);
+                            defaultPssVoiceName = Pss680Constants.Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "Piano 1";
+                        }
+                        else
+                        {
+                            defaultPssVoice = Constants.GmToPss790VoiceMap.GetValueOrDefault(prog.Value, 0);
+                            defaultPssVoiceName = Constants.Pss790Voices.GetValueOrDefault(defaultPssVoice)?.Name ?? "PIANO";
+                        }
                     }
                     else
                     {
                         detectedInstrument = "Default Piano";
-                        defaultPssVoice = 0;
-                        defaultPssVoiceName = "PIANO";
+                        defaultPssVoice = is680 ? 3 : 0;
+                        defaultPssVoiceName = is680 ? "Piano 1" : "PIANO";
                     }
                 }
 
@@ -2048,7 +2149,7 @@ namespace PSS790Player.Bridge
                         try
                         {
                             var midi = MidiFile.Read(file, Constants.DefaultReadingSettings);
-                            var report = MidiHealthInspector.Analyze(midi, fileName: Path.GetRelativePath(resolvedDir, file));
+                            var report = MidiHealthInspector.Analyze(midi, fileName: Path.GetRelativePath(resolvedDir, file), model: _activeModel);
                             reports.Add(report);
                         }
                         catch (Exception)
@@ -2062,8 +2163,9 @@ namespace PSS790Player.Bridge
                         }
                     }
 
+                    int polyLimit = _activeModel == "pss680" ? 12 : 28;
                     int totalWithFixes = reports.Count(r => r.AppliedAutoFixes.Count > 0);
-                    int totalHighPolyphony = reports.Count(r => r.PeakPolyphony > 28);
+                    int totalHighPolyphony = reports.Count(r => r.PeakPolyphony > polyLimit);
                     int totalInferred = reports.Count(r => r.InferredProgramChannels.Count > 0);
                     int totalXg = reports.Count(r => r.XgSysExChannels.Count > 0);
                     int totalStuckPedal = reports.Count(r => r.StuckPedalIntervalsCount > 0);
@@ -2126,23 +2228,25 @@ namespace PSS790Player.Bridge
 
             Application.Current.Dispatcher.Invoke(() =>
             {
+                bool is680 = string.Equals(_activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                string suffix = is680 ? "_PSS680" : "_PSS790";
                 var originalName = _currentFilePath != null ? Path.GetFileNameWithoutExtension(_currentFilePath) : "Remapped";
-                if (!originalName.EndsWith("_PSS790", StringComparison.OrdinalIgnoreCase))
+                if (!originalName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 {
-                    originalName += "_PSS790";
+                    originalName += suffix;
                 }
 
                 var dialog = new SaveFileDialog
                 {
                     Filter = "MIDI File (*.mid)|*.mid",
-                    InitialDirectory = AppPaths.Pss790MidiDir,
+                    InitialDirectory = AppPaths.GetModelMidiDir(_activeModel),
                     FileName = $"{originalName}.mid",
-                    Title = "Save Remapped PSS-790 MIDI File"
+                    Title = $"Save Remapped {(is680 ? "PSS-680" : "PSS-790")} MIDI File"
                 };
 
                 if (dialog.ShowDialog() == true)
                 {
-                    Remapper.SaveRemapped(_loadedRemappedMidi, dialog.FileName);
+                    Remapper.SaveRemapped(_loadedRemappedMidi, dialog.FileName, _activeModel);
                     SendToJs("notification", new { message = $"Saved to: {Path.GetFileName(dialog.FileName)}" });
                     SendLibraryUpdate();
                 }
@@ -2156,7 +2260,6 @@ namespace PSS790Player.Bridge
             _batchCts = new CancellationTokenSource();
 
             var resolvedSource = Directory.Exists(sourceDir) ? sourceDir : AppPaths.GmMidiDir;
-            var resolvedTarget = Directory.Exists(targetDir) ? targetDir : AppPaths.Pss790MidiDir;
 
             Task.Run(async () =>
             {
@@ -2173,11 +2276,19 @@ namespace PSS790Player.Bridge
 
                 try
                 {
-                    int count = await BatchConverter.ConvertDirectoryAsync(resolvedSource, resolvedTarget, options, progress, _batchCts.Token);
+                    // Convert for both PSS-790 and PSS-680 to keep both libraries synchronized
+                    int count = await BatchConverter.ConvertDirectoryDualAsync(
+                        resolvedSource,
+                        AppPaths.Pss790MidiDir,
+                        AppPaths.Pss680MidiDir,
+                        options,
+                        progress,
+                        _batchCts.Token);
+
                     SendToJs("batch_complete", new
                     {
                         convertedCount = count,
-                        targetDirectory = resolvedTarget
+                        targetDirectory = $"{AppPaths.Pss790MidiDir} & {AppPaths.Pss680MidiDir}"
                     });
                     SendLibraryUpdate();
                 }
@@ -2192,18 +2303,20 @@ namespace PSS790Player.Bridge
         {
             try
             {
-                var analysis = BatchConverter.AnalyzeSync(AppPaths.GmMidiDir, AppPaths.Pss790MidiDir);
+                var dual = BatchConverter.AnalyzeDualSync(AppPaths.GmMidiDir, AppPaths.Pss790MidiDir, AppPaths.Pss680MidiDir);
                 SendToJs("library_sync_analysis", new
                 {
-                    missingCount = analysis.MissingInTarget.Count,
-                    outdatedCount = analysis.OutdatedInTarget.Count,
-                    orphanCount = analysis.OrphanInTarget.Count,
-                    totalGm = analysis.TotalGmFiles,
-                    totalPss = analysis.TotalPssFiles,
-                    isInSync = analysis.IsInSync,
-                    missingFiles = analysis.MissingInTarget.Take(50).ToList(),
-                    outdatedFiles = analysis.OutdatedInTarget.Take(50).ToList(),
-                    orphanFiles = analysis.OrphanInTarget.Take(50).ToList()
+                    missingCount = dual.TotalMissing,
+                    outdatedCount = dual.TotalOutdated,
+                    orphanCount = dual.TotalOrphans,
+                    totalGm = dual.TotalGmFiles,
+                    totalPss = dual.TotalPss790Files + dual.TotalPss680Files,
+                    totalPss790 = dual.TotalPss790Files,
+                    totalPss680 = dual.TotalPss680Files,
+                    isInSync = dual.IsInSync,
+                    missingFiles = dual.Analysis790.MissingInTarget.Concat(dual.Analysis680.MissingInTarget).Distinct().Take(50).ToList(),
+                    outdatedFiles = dual.Analysis790.OutdatedInTarget.Concat(dual.Analysis680.OutdatedInTarget).Distinct().Take(50).ToList(),
+                    orphanFiles = dual.Analysis790.OrphanInTarget.Concat(dual.Analysis680.OrphanInTarget).Distinct().Take(50).ToList()
                 });
             }
             catch (Exception ex)
@@ -2247,9 +2360,11 @@ namespace PSS790Player.Bridge
 
                 try
                 {
-                    var result = await BatchConverter.ExecuteSyncAsync(
+                    // Execute dual library synchronization for both PSS-790 and PSS-680
+                    var result = await BatchConverter.ExecuteDualSyncAsync(
                         AppPaths.GmMidiDir,
                         AppPaths.Pss790MidiDir,
+                        AppPaths.Pss680MidiDir,
                         syncOptions,
                         VoiceOverrideStore.Instance,
                         progress,

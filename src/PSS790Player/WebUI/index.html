@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.0.0">
+    <link rel="stylesheet" href="styles.css?v=2.1.0">
     <script>
         tailwind.config = {
             theme: {
@@ -378,7 +378,7 @@
                 <div class="flex items-center justify-between">
                     <div>
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">16-Channel Mixer & Voice Selector</h3>
-                        <p class="text-[10px] text-slate-500">Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)</p>
+                        <p id="mixerSubtitle" class="text-[10px] text-slate-500">Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)</p>
                     </div>
                     <button id="btnResetOverrides" title="Reset Overrides: Restore all 16 channels back to their default auto-mapped General MIDI voices" class="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
                 </div>
@@ -574,13 +574,13 @@
 
                 <!-- 3 Action Pathways -->
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-                    <!-- Action 1: Save Native PSS-790 Take -->
-                    <button id="btnSaveTakePss790" title="Save Native PSS-790 Take: Store direct 1:1 capture to PSS-790 Midi folder for immediate playback on hardware" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-emerald-950/40 to-slate-900 border border-emerald-800/60 hover:border-emerald-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
+                    <!-- Action 1: Save Native PSS Take -->
+                    <button id="btnSaveTakePss790" title="Save Native PSS Take: Store direct 1:1 capture to PSS Midi folder for immediate playback on hardware" class="flex flex-col items-center justify-center p-4 rounded-xl bg-gradient-to-b from-emerald-950/40 to-slate-900 border border-emerald-800/60 hover:border-emerald-500 text-center transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group">
                         <div class="flex items-center space-x-1.5 text-emerald-400 font-bold text-xs mb-1">
                             <span>⚡</span>
-                            <span>Save Native (PSS-790 Ready)</span>
+                            <span id="lblSaveTakePss">Save Native (PSS-790 Ready)</span>
                         </div>
-                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Direct 1:1 capture with native marker to PSS-790 Midi folder. Zero translation needed.</p>
+                        <p id="descSaveTakePss" class="text-[11px] text-slate-400 group-hover:text-slate-300">Direct 1:1 capture with native marker to PSS-790 Midi folder. Zero translation needed.</p>
                     </button>
 
                     <!-- Action 2: Export to General MIDI -->
@@ -689,14 +689,14 @@
                         </svg>
                     </div>
                     <div>
-                        <h2 class="text-xs sm:text-sm font-bold text-white tracking-wide">Yamaha PSS-790 SysEx Vault</h2>
+                        <h2 id="sysexVaultHeaderTitle" class="text-xs sm:text-sm font-bold text-white tracking-wide">Yamaha PSS-790 SysEx Vault</h2>
                         <p class="text-[10px] text-slate-400">Capture internal memory bulk dumps, restore bank backups, and send system commands</p>
                     </div>
                 </div>
 
-                <!-- Quick SysEx Hardware Controls -->
-                <div class="flex items-center space-x-1.5 flex-wrap">
-                    <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Quick Commands:</span>
+                <!-- Quick SysEx Hardware Controls: PSS-790 Profile -->
+                <div id="sysexControlsPss790" class="flex items-center space-x-1.5 flex-wrap">
+                    <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Commands:</span>
                     <button id="btnQuickGmOn" title="Send GM System On SysEx (F0 7E 7F 09 01 F7): Resets General MIDI devices to power-on default parameters" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
                         GM On
                     </button>
@@ -710,6 +710,37 @@
                         All Reset
                     </button>
                     <button id="btnOpenSysExFolder" title="Open SysEx Folder: Reveal Music\Midi\SysEx directory in Windows Explorer" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 ml-1">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Quick SysEx Hardware Controls: PSS-680 Profile -->
+                <div id="sysexControlsPss680" class="flex items-center space-x-1.5 flex-wrap hidden">
+                    <span class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Commands:</span>
+                    <button id="btnQuickMode99" title="Send Mode 99 SysEx (F0 43 76 00 05 99 F7): Activates PSS-680 multi-timbral velocity-sensitive FM synth mode" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-emerald-900/60 text-[11px] font-medium text-emerald-300 hover:text-white border border-emerald-800/50 transition active:scale-95">
+                        Mode 99 (FM)
+                    </button>
+                    <button id="btnQuickReqVoice" title="Request Format 00H FM Voice Bank Dump (F0 43 20 23 00 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
+                        Req Voices
+                    </button>
+                    <button id="btnQuickReqMelody" title="Request Format 01H Melody Memory Dump (F0 43 20 23 01 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-cyan-300 hover:text-white border border-cyan-800/40 transition active:scale-95">
+                        Req Melody
+                    </button>
+                    <button id="btnQuickReqChord" title="Request Format 02H Chord Memory Dump (F0 43 20 23 02 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
+                        Req Chord
+                    </button>
+                    <button id="btnQuickReqRhythm" title="Request Format 03H Custom Drummer Pattern Dump (F0 43 20 23 03 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-indigo-300 hover:text-white border border-indigo-800/40 transition active:scale-95">
+                        Req Drummer
+                    </button>
+                    <button id="btnQuickMasterVol680" title="Send Universal Master Volume SysEx: Sets master volume to 100%" class="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
+                        Vol 100%
+                    </button>
+                    <button id="btnQuickAllReset680" title="All Reset: Sends Panic Note Off across all channels" class="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-rose-900/60 text-[11px] font-medium text-rose-300 hover:text-white border border-rose-800/40 transition active:scale-95">
+                        Reset
+                    </button>
+                    <button id="btnOpenSysExFolder680" title="Open SysEx Folder in Windows Explorer" class="p-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 ml-1">
                         <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                         </svg>
@@ -916,7 +947,7 @@
             </div>
 
             <p class="text-xs text-slate-300">
-                Batch convert all standard General MIDI files into PSS-790 compatible MIDI files. All drum tracks will be remapped to Channel 16 with Chart 1 percussion notes, and melodic programs translated to Chart 2 values.
+                Batch convert all standard General MIDI files into PSS-790 and PSS-680 compatible MIDI files. All drum tracks will be remapped to Channel 16 with native hardware percussion notes, and melodic programs translated to keyboard presets for both models.
             </p>
 
             <div class="space-y-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
@@ -941,9 +972,9 @@
                     <input type="checkbox" id="chkBatchPitchTune" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
                     <span><strong>Acoustic Auto-Tune:</strong> Neutralizes micro-pitch bends & detune drift on piano/strings</span>
                 </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="28-Voice Polyphony Guard: Protects lead melody from voice stealing during heavy multi-channel chords">
-                    <input type="checkbox" id="chkBatchPolyphony" title="28-Voice Polyphony Guard: Protects lead melody from voice stealing during heavy multi-channel chords" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>28-Voice Polyphony Guard:</strong> Protects lead melody from voice stealing</span>
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Smart Polyphony Guard: Protects lead melody from voice stealing (28-voice limit for PSS-790, 12-voice limit for PSS-680)">
+                    <input type="checkbox" id="chkBatchPolyphony" title="Smart Polyphony Guard: Protects lead melody from voice stealing" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                    <span><strong>Smart Polyphony Guard:</strong> Protects lead melody from voice stealing (28/12 voices)</span>
                 </label>
                 <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)">
                     <input type="checkbox" id="chkBatchReverb" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
@@ -1120,23 +1151,23 @@
                 <div id="syncStatusIcon" class="text-xl">🔍</div>
                 <div class="min-w-0 flex-1">
                     <div id="syncStatusHeadline" class="font-bold text-white text-xs">Analyzing library folders...</div>
-                    <div id="syncStatusSubtext" class="text-[11px] text-slate-400">Comparing files in GM Midi and PSS-790 Midi</div>
+                    <div id="syncStatusSubtext" class="text-[11px] text-slate-400">Comparing files across GM Midi, PSS-790 Midi, and PSS-680 Midi</div>
                 </div>
             </div>
 
             <!-- Metrics Card Grid -->
             <div class="grid grid-cols-3 gap-2">
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of General MIDI songs that do not yet have a converted PSS-790 version">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of General MIDI songs that do not yet have converted PSS-790 or PSS-680 versions">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Missing PSS</div>
                     <div id="syncMetricMissing" class="text-lg font-black text-cyan-400">0</div>
                     <div class="text-[10px] text-slate-500">Need conversion</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of PSS-790 files whose original GM source file has a newer modification date">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of PSS files whose original GM source file has a newer modification date">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Outdated</div>
                     <div id="syncMetricOutdated" class="text-lg font-black text-amber-400">0</div>
                     <div class="text-[10px] text-slate-500">GM file is newer</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Files in PSS-790 folder that no longer correspond to any existing GM file">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Files in PSS-790/PSS-680 folders that no longer correspond to any existing GM file">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Orphan PSS</div>
                     <div id="syncMetricOrphans" class="text-lg font-black text-rose-400">0</div>
                     <div class="text-[10px] text-slate-500">No GM source</div>
@@ -1145,36 +1176,36 @@
 
             <!-- Sync Options Checkboxes -->
             <div class="space-y-2 pt-1 text-xs">
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Convert missing GM songs to PSS-790 format applying full voice and drum remapping">
-                    <input type="checkbox" id="chkSyncMissing" title="Convert missing GM songs to PSS-790 format applying full voice and drum remapping" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Convert missing GM songs to both PSS-790 and PSS-680 formats applying tailored voice and drum remapping">
+                    <input type="checkbox" id="chkSyncMissing" title="Convert missing GM songs to both PSS-790 and PSS-680 formats applying tailored voice and drum remapping" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
                     <div class="min-w-0">
-                        <span class="font-semibold text-slate-200">Convert missing GM songs to PSS-790 format</span>
-                        <div class="text-[11px] text-slate-400">Applies full Chart 1/Chart 2 voices & polyphony guard</div>
+                        <span class="font-semibold text-slate-200">Convert missing GM songs to PSS-790 & PSS-680 formats</span>
+                        <div class="text-[11px] text-slate-400">Applies tailored voices, drum mappings & polyphony guard for both keyboards</div>
                     </div>
                 </label>
 
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Re-convert any PSS-790 files whose source GM files have been modified">
-                    <input type="checkbox" id="chkSyncOutdated" title="Re-convert any PSS-790 files whose source GM files have been modified" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Re-convert any PSS-790 or PSS-680 files whose source GM files have been modified">
+                    <input type="checkbox" id="chkSyncOutdated" title="Re-convert any PSS-790 or PSS-680 files whose source GM files have been modified" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500" checked>
                     <div class="min-w-0">
-                        <span class="font-semibold text-slate-200">Update out-of-date PSS-790 songs</span>
+                        <span class="font-semibold text-slate-200">Update out-of-date PSS songs</span>
                         <div class="text-[11px] text-slate-400">Re-converts any PSS files whose GM original has been edited</div>
                     </div>
                 </label>
 
-                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Remove orphaned PSS-790 files that have no matching source GM file">
-                    <input type="checkbox" id="chkSyncOrphans" title="Remove orphaned PSS-790 files that have no matching source GM file" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 accent-rose-500" checked>
+                <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Remove orphaned PSS files that have no matching source GM file">
+                    <input type="checkbox" id="chkSyncOrphans" title="Remove orphaned PSS files that have no matching source GM file" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 accent-rose-500" checked>
                     <div class="min-w-0">
-                        <span class="font-semibold text-rose-300">Clean up orphan files in PSS-790 folder</span>
-                        <div class="text-[11px] text-slate-400">Removes files in PSS-790 folder that no longer exist in GM Midi</div>
+                        <span class="font-semibold text-rose-300">Clean up orphan files in PSS folders</span>
+                        <div class="text-[11px] text-slate-400">Removes files in PSS-790 & PSS-680 folders that no longer exist in GM Midi</div>
                     </div>
                 </label>
 
                 <div class="pt-2 border-t border-slate-800/80">
-                    <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Force re-conversion of the entire library with the latest remapping and SysEx rules">
-                        <input type="checkbox" id="chkSyncForceAll" title="Force re-conversion of the entire library with the latest remapping and SysEx rules" class="w-4 h-4 mt-0.5 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500">
+                    <label class="flex items-start space-x-2.5 cursor-pointer select-none" title="Force re-conversion of the entire library with the latest remapping and SysEx rules for both keyboards">
+                        <input type="checkbox" id="chkSyncForceAll" title="Force re-conversion of the entire library with the latest remapping and SysEx rules for both keyboards" class="w-4 h-4 mt-0.5 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500">
                         <div class="min-w-0">
-                            <span class="font-semibold text-amber-300">Force re-convert entire library</span>
-                            <div class="text-[11px] text-slate-400">Re-runs all 113+ files with latest SysEx filtering and pitch bend rules</div>
+                            <span class="font-semibold text-amber-300">Force re-convert entire library (both keyboards)</span>
+                            <div class="text-[11px] text-slate-400">Re-runs all files generating both PSS-790 and PSS-680 native versions</div>
                         </div>
                     </label>
                 </div>
@@ -1294,7 +1325,7 @@
                     <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.0.0</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.1.0</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -1440,6 +1471,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.0.0"></script>
+    <script src="app.js?v=2.1.0"></script>
 </body>
 </html>
