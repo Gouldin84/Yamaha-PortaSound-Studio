@@ -785,13 +785,42 @@
                         <!-- Presets Dropdown -->
                         <select id="selFmPresets" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer">
                             <option value="">FM Presets...</option>
-                            <option value="init">Initialize (2-Op Sine)</option>
-                            <option value="dx_piano">DX Electric Piano</option>
-                            <option value="slap_bass">Solid FM Slap Bass</option>
-                            <option value="space_bell">Cosmic Chime / Bell</option>
-                            <option value="analog_brass">Warm FM Brass</option>
-                            <option value="metallic_lead">Metallic FM Lead</option>
-                            <option value="sci_fi">Sci-Fi Theremin</option>
+                            <optgroup label="Init Templates">
+                                <option value="init">Initialize (2-Op Sine)</option>
+                            </optgroup>
+                            <optgroup label="80s Synth Classics">
+                                <option value="aha_take_on_me">Take On Me Lead</option>
+                                <option value="van_halen_jump">Jump OB Brass</option>
+                                <option value="axel_f_brass">Axel F Brass Lead</option>
+                                <option value="stranger_things_arp">Stranger Things Arp Bass</option>
+                                <option value="daft_punk_hbfs">Harder Better Lead</option>
+                            </optgroup>
+                            <optgroup label="Basses & Leads">
+                                <option value="tx81z_lately_bass">LatelyBass / Solid Bass</option>
+                                <option value="eurythmics_sweet_dreams">Sweet Dreams Pulse</option>
+                                <option value="new_order_blue_monday">Blue Monday Octaver</option>
+                                <option value="danger_zone_slap">Danger Zone FM Slap</option>
+                                <option value="sonic2_chemical_plant_bass">Chemical Plant Slap Bass</option>
+                                <option value="sor2_go_straight_bass">Go Straight Gritty House Bass</option>
+                            </optgroup>
+                            <optgroup label="Pads & Keys">
+                                <option value="dx7_tine_ep">DX7 Ballad Tine EP</option>
+                                <option value="vangelis_blade_runner_pad">Blade Runner CS-80 Pad</option>
+                                <option value="toto_africa_pad">Africa Polysynth Pad</option>
+                                <option value="enya_orinoco_pad">Orinoco Shimmer Pad</option>
+                            </optgroup>
+                            <optgroup label="Chiptune & Sega Genesis">
+                                <option value="sonic_knuckles_sky_sanctuary">Sky Sanctuary Crystalline Lead</option>
+                                <option value="sonic_steel_drum">Green Hill Steel Drum</option>
+                                <option value="wham_last_christmas_bell">Last Christmas FM Bell</option>
+                                <option value="phil_collins_air_bell">In the Air Glass Chime</option>
+                                <option value="madonna_fm_marimba">80s DX7 Wood Marimba</option>
+                            </optgroup>
+                            <optgroup label="Percussion Hits">
+                                <option value="gated_fm_snare">80s Gated Noise Snare</option>
+                                <option value="electro_808_fm_kick">Planet Rock Sub Kick</option>
+                                <option value="electro_metallic_cowbell">Blue Monday Metallic Clank</option>
+                            </optgroup>
                         </select>
 
                         <!-- Randomize -->
@@ -1219,10 +1248,46 @@
                         <!-- Presets Selector -->
                         <select id="selVecPresets" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer">
                             <option value="">Vector Presets...</option>
-                            <option value="cinema">Cinema Orchestral Pad (Strings, Choir, Brass, Bell)</option>
-                            <option value="hybrid_ep">Hybrid Electric Piano (EP 1, EP 2, Strings, Harp)</option>
-                            <option value="morph_lead">Morphing Synth Lead (Lead, Mute Guitar, Jazz Organ, Flute)</option>
-                            <option value="evolving_bells">Cosmic Bellscape (Celesta, Glockenspiel, Music Box, Strings)</option>
+                            <optgroup label="Iconic 80s Soundscapes">
+                                <option value="aha_take_on_me">Take On Me Vector Lead</option>
+                                <option value="van_halen_jump">Jump OB Vector Brass</option>
+                                <option value="dx7_tine_ep">Ballad Tine & Crystal EP</option>
+                                <option value="axel_f_brass">Axel F Marimba-Brass Lead</option>
+                                <option value="stranger_things_arp">Stranger Things Analog Vector</option>
+                                <option value="daft_punk_hbfs">Harder Better Talk-Lead</option>
+                            </optgroup>
+                            <optgroup label="Ambient & Ethereal Pads">
+                                <option value="vangelis_blade_runner_pad">Blade Runner CS-80 Vector Pad</option>
+                                <option value="toto_africa_pad">Africa Kalimba & Polysynth</option>
+                                <option value="enya_orinoco_pad">Orinoco Pizzicato & Choir</option>
+                                <option value="wham_last_christmas_bell">Last Christmas Sleigh & Bell</option>
+                                <option value="phil_collins_air_bell">In the Air Glass & Atmosphere</option>
+                            </optgroup>
+                            <optgroup label="Bass & Riff Morph">
+                                <option value="haddaway_lately_bass">What Is Love Club Bass</option>
+                                <option value="eurythmics_sweet_dreams">Sweet Dreams Vector Pulse</option>
+                                <option value="new_order_blue_monday">Blue Monday Choir & Bass</option>
+                                <option value="danger_zone_slap">Danger Zone Slap & Brass</option>
+                                <option value="sonic2_chemical_plant_bass">Chemical Plant Slap & Synth</option>
+                                <option value="sor2_go_straight_bass">Go Straight Rave Stab & Bass</option>
+                                <option value="toejam_earl_funk_bass">Big Earl Slap & Clavinet</option>
+                            </optgroup>
+                            <optgroup label="Game & Arcade Morph">
+                                <option value="sonic_knuckles_sky_sanctuary">Sky Sanctuary Harp & Crystal</option>
+                                <option value="sonic_steel_drum">Green Hill Steel Drum Ensemble</option>
+                                <option value="outrun_magical_sound_marimba">Magical Sound Steel & Marimba</option>
+                                <option value="thunder_force_iv_guitar">Metal Squad Vector Shred</option>
+                                <option value="castlevania_bloodlines_harpsichord">Reincarnated Gothic Harpsichord</option>
+                                <option value="phantasy_star_iv_brass">Algol Battle Vector Brass</option>
+                                <option value="after_burner_ii_lead">Final Take Off Arcade Lead</option>
+                                <option value="shinobi_iii_shakuhachi">Whirlwind Shakuhachi & Koto</option>
+                            </optgroup>
+                            <optgroup label="Percussive & Mallet Morph">
+                                <option value="madonna_fm_marimba">80s Wood Marimba & Vibe</option>
+                                <option value="gated_fm_snare">80s Gated Timpani & Metal Hit</option>
+                                <option value="planet_rock_orch_hit">Planet Rock Fairlight Hit</option>
+                                <option value="electro_metallic_cowbell">Blue Monday Metallic Clank</option>
+                            </optgroup>
                         </select>
 
                         <!-- Audition Vector Chord -->

@@ -60,6 +60,9 @@ namespace PSS790Player.Core
                 }
                 catch { }
             }
+
+            // Seed factory FM voices and Vector presets if library directories are empty
+            SoundDesignSeeder.SeedAll();
         }
 
         public static void SyncMirroredDirectories(string? gmDir = null, string? pss790Dir = null, string? pss680Dir = null)

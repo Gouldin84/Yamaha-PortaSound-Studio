@@ -200,6 +200,50 @@ namespace PSS790Player.Tests
             }
         }
 
+        [Fact]
+        public void SoundDesignSeeder_SeedsAll23FmVoicesAnd30VectorPresets()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            SoundDesignSeeder.SeedAll();
+
+            var fmFiles = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly);
+            Assert.Equal(23, fmFiles.Length);
+
+            foreach (var file in fmFiles)
+            {
+                var bytes = File.ReadAllBytes(file);
+                Assert.Equal(72, bytes.Length);
+                Assert.Equal(0xF0, bytes[0]);
+                Assert.Equal(0x43, bytes[1]);
+                Assert.Equal(0x00, bytes[3]);
+                Assert.Equal(0xF7, bytes[71]);
+
+                var voice = PSS680Voice.FromSysExMessage(bytes);
+                Assert.NotNull(voice);
+                Assert.False(string.IsNullOrWhiteSpace(voice.Name));
+            }
+
+            var vecFiles = Directory.GetFiles(AppPaths.VectorPresetsDir, "*.json", SearchOption.TopDirectoryOnly);
+            Assert.Equal(30, vecFiles.Length);
+
+            foreach (var file in vecFiles)
+            {
+                var text = File.ReadAllText(file);
+                using var doc = System.Text.Json.JsonDocument.Parse(text);
+                var root = doc.RootElement;
+                Assert.True(root.TryGetProperty("name", out var nameProp));
+                Assert.False(string.IsNullOrWhiteSpace(nameProp.GetString()));
+                Assert.True(root.TryGetProperty("voiceA", out _));
+                Assert.True(root.TryGetProperty("voiceB", out _));
+                Assert.True(root.TryGetProperty("voiceC", out _));
+                Assert.True(root.TryGetProperty("voiceD", out _));
+                Assert.True(root.TryGetProperty("posX", out _));
+                Assert.True(root.TryGetProperty("posY", out _));
+                Assert.True(root.TryGetProperty("orbitMode", out _));
+                Assert.True(root.TryGetProperty("orbitSpeed", out _));
+            }
+        }
+
         private static (double wA, double wB, double wC, double wD) CalculateWeights(double x, double y)
         {
             double rawA = Math.Max(0, y);
