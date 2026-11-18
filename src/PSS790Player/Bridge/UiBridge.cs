@@ -270,6 +270,8 @@ namespace PSS790Player.Bridge
                         break;
                     case "refresh_library":
                         SendLibraryUpdate();
+                        SendFmVoiceLibraryUpdate();
+                        SendVectorLibraryUpdate();
                         break;
                     case "analyze_library_sync":
                         HandleAnalyzeLibrarySync();
@@ -363,6 +365,8 @@ namespace PSS790Player.Bridge
                             SendToJs("health_updated", BuildHealthPayload(activeHealth));
                         }
                         SendLibraryUpdate();
+                        SendFmVoiceLibraryUpdate();
+                        SendVectorLibraryUpdate();
                         SendToJs("model_changed", new
                         {
                             model = selectedModel,
@@ -753,6 +757,164 @@ namespace PSS790Player.Bridge
                     case "open_sysex_folder":
                         AppPaths.OpenSysExFolderInExplorer();
                         break;
+                    case "transmit_fm_voice":
+                        {
+                            var fmVoice = ParseVoiceFromJson(root);
+                            byte[] sysex = fmVoice.ToSysExMessage();
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(sysex));
+                            var isSilent = root.TryGetProperty("silent", out var s) && s.GetBoolean();
+                            if (!isSilent)
+                            {
+                                SendToJs("notification", new { message = $"Transmitted FM Voice '{fmVoice.Name}' to PSS-680 (Bank {fmVoice.BankNumber + 1})" });
+                            }
+                        }
+                        break;
+                    case "audition_fm_voice_note":
+                        {
+                            var note = root.TryGetProperty("note", out var nP) ? Math.Clamp(nP.GetInt32(), 24, 108) : 60;
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                    await Task.Delay(800);
+                                    _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                }
+                                catch { }
+                            });
+                        }
+                        break;
+                    case "save_fm_voice_patch":
+                        {
+                            var fmVoice = ParseVoiceFromJson(root);
+                            byte[] sysex = fmVoice.ToSysExMessage();
+                            var safeName = SanitizeFileName(fmVoice.Name);
+                            if (!safeName.EndsWith(".syx", StringComparison.OrdinalIgnoreCase)) safeName += ".syx";
+                            AppPaths.EnsureDirectoriesExist();
+                            var outPath = Path.Combine(AppPaths.FmVoicesDir, safeName);
+                            File.WriteAllBytes(outPath, sysex);
+                            SendFmVoiceLibraryUpdate();
+                            SendToJs("notification", new { message = $"Saved FM Voice patch: {Path.GetFileNameWithoutExtension(safeName)}" });
+                        }
+                        break;
+                    case "get_fm_voice_library":
+                        SendFmVoiceLibraryUpdate();
+                        break;
+                    case "load_fm_voice_patch":
+                        {
+                            var vPath = root.TryGetProperty("filePath", out var vp) ? vp.GetString() : null;
+                            if (string.IsNullOrEmpty(vPath) && root.TryGetProperty("fileName", out var fn))
+                            {
+                                vPath = Path.Combine(AppPaths.FmVoicesDir, fn.GetString() ?? "");
+                            }
+                            if (!string.IsNullOrEmpty(vPath) && File.Exists(vPath))
+                            {
+                                byte[] bytes = File.ReadAllBytes(vPath);
+                                var fmVoice = PSS680Voice.FromSysExMessage(bytes);
+                                fmVoice.Name = Path.GetFileNameWithoutExtension(vPath);
+                                SendToJs("fm_voice_loaded", VoiceToObject(fmVoice));
+                                SendToJs("notification", new { message = $"Loaded FM Voice: {fmVoice.Name}" });
+                            }
+                        }
+                        break;
+                    case "delete_fm_voice_patch":
+                        {
+                            var delFmPath = root.TryGetProperty("filePath", out var dp) ? dp.GetString() : null;
+                            if (!string.IsNullOrEmpty(delFmPath) && File.Exists(delFmPath))
+                            {
+                                File.Delete(delFmPath);
+                                SendFmVoiceLibraryUpdate();
+                                SendToJs("notification", new { message = "FM Voice patch deleted." });
+                            }
+                        }
+                        break;
+                    case "set_vector_voices":
+                        {
+                            var vA = root.TryGetProperty("voiceA", out var vaP) ? Math.Clamp(vaP.GetInt32(), 0, 99) : 0;
+                            var vB = root.TryGetProperty("voiceB", out var vbP) ? Math.Clamp(vbP.GetInt32(), 0, 99) : 34;
+                            var vC = root.TryGetProperty("voiceC", out var vcP) ? Math.Clamp(vcP.GetInt32(), 0, 99) : 16;
+                            var vD = root.TryGetProperty("voiceD", out var vdP) ? Math.Clamp(vdP.GetInt32(), 0, 99) : 56;
+                            _player.SendVoiceOverride(0, vA);
+                            _player.SendVoiceOverride(1, vB);
+                            _player.SendVoiceOverride(2, vC);
+                            _player.SendVoiceOverride(3, vD);
+                        }
+                        break;
+                    case "set_vector_volumes":
+                        {
+                            var volA = root.TryGetProperty("volA", out var va) ? Math.Clamp(va.GetInt32(), 0, 127) : 64;
+                            var volB = root.TryGetProperty("volB", out var vb) ? Math.Clamp(vb.GetInt32(), 0, 127) : 64;
+                            var volC = root.TryGetProperty("volC", out var vc) ? Math.Clamp(vc.GetInt32(), 0, 127) : 64;
+                            var volD = root.TryGetProperty("volD", out var vd) ? Math.Clamp(vd.GetInt32(), 0, 127) : 64;
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)7, (Melanchall.DryWetMidi.Common.SevenBitNumber)volA) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)7, (Melanchall.DryWetMidi.Common.SevenBitNumber)volB) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)1 });
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)7, (Melanchall.DryWetMidi.Common.SevenBitNumber)volC) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)2 });
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)7, (Melanchall.DryWetMidi.Common.SevenBitNumber)volD) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)3 });
+                        }
+                        break;
+                    case "audition_vector_chord":
+                        {
+                            var note = root.TryGetProperty("note", out var nP) ? Math.Clamp(nP.GetInt32(), 24, 108) : 60;
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    for (int ch = 0; ch < 4; ch++)
+                                    {
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)ch });
+                                    }
+                                    await Task.Delay(850);
+                                    for (int ch = 0; ch < 4; ch++)
+                                    {
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)ch });
+                                    }
+                                }
+                                catch { }
+                            });
+                        }
+                        break;
+                    case "save_vector_preset":
+                        {
+                            var pName = root.TryGetProperty("name", out var pnP) ? pnP.GetString() : "Vector Preset";
+                            var safeName = SanitizeFileName(pName ?? "Vector Preset");
+                            if (!safeName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) safeName += ".json";
+                            AppPaths.EnsureDirectoriesExist();
+                            var outPath = Path.Combine(AppPaths.VectorPresetsDir, safeName);
+                            File.WriteAllText(outPath, root.GetRawText());
+                            SendVectorLibraryUpdate();
+                            SendToJs("notification", new { message = $"Saved Vector preset: {Path.GetFileNameWithoutExtension(safeName)}" });
+                        }
+                        break;
+                    case "get_vector_library":
+                        SendVectorLibraryUpdate();
+                        break;
+                    case "load_vector_preset":
+                        {
+                            var vPath = root.TryGetProperty("filePath", out var vp) ? vp.GetString() : null;
+                            if (string.IsNullOrEmpty(vPath) && root.TryGetProperty("fileName", out var fn))
+                            {
+                                vPath = Path.Combine(AppPaths.VectorPresetsDir, fn.GetString() ?? "");
+                            }
+                            if (!string.IsNullOrEmpty(vPath) && File.Exists(vPath))
+                            {
+                                var jsonText = File.ReadAllText(vPath);
+                                using var vecDoc = JsonDocument.Parse(jsonText);
+                                SendToJs("vector_preset_loaded", vecDoc.RootElement.Clone());
+                                SendToJs("notification", new { message = $"Loaded Vector preset: {Path.GetFileNameWithoutExtension(vPath)}" });
+                            }
+                        }
+                        break;
+                    case "delete_vector_preset":
+                        {
+                            var delVecPath = root.TryGetProperty("filePath", out var dp) ? dp.GetString() : null;
+                            if (!string.IsNullOrEmpty(delVecPath) && File.Exists(delVecPath))
+                            {
+                                File.Delete(delVecPath);
+                                SendVectorLibraryUpdate();
+                                SendToJs("notification", new { message = "Vector preset deleted." });
+                            }
+                        }
+                        break;
                 }
             }
             catch (Exception ex)
@@ -819,7 +981,9 @@ namespace PSS790Player.Bridge
                     midiThru = _recorder.MidiThruEnabled,
                     recorderBpm = _recorder.Bpm,
                     sysexLibrary = _sysexManager.GetSysExLibrary(),
-                    recordingsLibrary = _recorder.GetRecordingsLibrary()
+                    recordingsLibrary = _recorder.GetRecordingsLibrary(),
+                    fmVoiceLibrary = GetFmVoiceLibraryData(),
+                    vectorLibrary = GetVectorLibraryData()
                 });
 
                 if (devices.Count > 0)
@@ -2643,6 +2807,176 @@ namespace PSS790Player.Bridge
         {
             var list = _recorder.GetRecordingsLibrary();
             SendToJs("recordings_library_updated", new { recordings = list });
+        }
+
+        private List<object> GetFmVoiceLibraryData()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            var list = new List<object>();
+            if (Directory.Exists(AppPaths.FmVoicesDir))
+            {
+                var files = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx")
+                    .OrderByDescending(f => File.GetLastWriteTime(f));
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        var fi = new FileInfo(file);
+                        byte[] bytes = File.ReadAllBytes(file);
+                        var voice = PSS680Voice.FromSysExMessage(bytes);
+                        list.Add(new
+                        {
+                            fileName = fi.Name,
+                            filePath = fi.FullName,
+                            voiceName = string.IsNullOrWhiteSpace(voice.Name) ? Path.GetFileNameWithoutExtension(fi.Name) : voice.Name,
+                            bankNumber = voice.BankNumber,
+                            bankDisplay = voice.BankNumber + 1,
+                            fileSize = SysExManager.FormatBytes(fi.Length),
+                            updatedAt = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+                        });
+                    }
+                    catch { }
+                }
+            }
+            return list;
+        }
+
+        private void SendFmVoiceLibraryUpdate()
+        {
+            var list = GetFmVoiceLibraryData();
+            SendToJs("fm_voice_library_updated", new { voices = list });
+        }
+
+        private List<object> GetVectorLibraryData()
+        {
+            AppPaths.EnsureDirectoriesExist();
+            var list = new List<object>();
+            if (Directory.Exists(AppPaths.VectorPresetsDir))
+            {
+                var files = Directory.GetFiles(AppPaths.VectorPresetsDir, "*.json")
+                    .OrderByDescending(f => File.GetLastWriteTime(f));
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        var fi = new FileInfo(file);
+                        var text = File.ReadAllText(file);
+                        using var doc = JsonDocument.Parse(text);
+                        var root = doc.RootElement;
+                        var name = root.TryGetProperty("name", out var np) ? np.GetString() : Path.GetFileNameWithoutExtension(fi.Name);
+                        var vA = root.TryGetProperty("voiceA", out var va) ? va.GetInt32() : 0;
+                        var vB = root.TryGetProperty("voiceB", out var vb) ? vb.GetInt32() : 34;
+                        var vC = root.TryGetProperty("voiceC", out var vc) ? vc.GetInt32() : 16;
+                        var vD = root.TryGetProperty("voiceD", out var vd) ? vd.GetInt32() : 56;
+                        list.Add(new
+                        {
+                            fileName = fi.Name,
+                            filePath = fi.FullName,
+                            name = name ?? Path.GetFileNameWithoutExtension(fi.Name),
+                            voiceA = vA,
+                            voiceB = vB,
+                            voiceC = vC,
+                            voiceD = vD,
+                            fileSize = SysExManager.FormatBytes(fi.Length),
+                            updatedAt = fi.LastWriteTime.ToString("yyyy-MM-dd HH:mm")
+                        });
+                    }
+                    catch { }
+                }
+            }
+            return list;
+        }
+
+        private void SendVectorLibraryUpdate()
+        {
+            var list = GetVectorLibraryData();
+            SendToJs("vector_library_updated", new { presets = list });
+        }
+
+        private static PSS680Voice ParseVoiceFromJson(JsonElement el)
+        {
+            if (el.TryGetProperty("voice", out var vSub) && vSub.ValueKind == JsonValueKind.Object)
+            {
+                el = vSub;
+            }
+            var voice = new PSS680Voice();
+            if (el.TryGetProperty("name", out var n)) voice.Name = n.GetString() ?? "Custom Voice";
+            if (el.TryGetProperty("bankNumber", out var bn)) voice.BankNumber = Math.Clamp(bn.GetInt32(), 0, 4);
+            if (el.TryGetProperty("feedback", out var fb)) voice.Feedback = Math.Clamp(fb.GetInt32(), 0, 7);
+            if (el.TryGetProperty("pitchModulationSensitivity", out var pms)) voice.PitchModulationSensitivity = Math.Clamp(pms.GetInt32(), 0, 7);
+            if (el.TryGetProperty("amplitudeModulationSensitivity", out var ams)) voice.AmplitudeModulationSensitivity = Math.Clamp(ams.GetInt32(), 0, 3);
+            if (el.TryGetProperty("vibratoDelayTime", out var vdt)) voice.VibratoDelayTime = Math.Clamp(vdt.GetInt32(), 0, 127);
+            if (el.TryGetProperty("vibrato", out var vib)) voice.Vibrato = vib.GetBoolean();
+            if (el.TryGetProperty("sustain", out var sus)) voice.Sustain = sus.GetBoolean();
+
+            if (el.TryGetProperty("modulator", out var mod))
+            {
+                ParseOperatorFromJson(mod, voice.Modulator);
+            }
+            if (el.TryGetProperty("carrier", out var car))
+            {
+                ParseOperatorFromJson(car, voice.Carrier);
+            }
+            return voice;
+        }
+
+        private static void ParseOperatorFromJson(JsonElement el, FmOperatorParameters op)
+        {
+            if (el.TryGetProperty("fineDetune", out var dt1)) op.FineDetune = Math.Clamp(dt1.GetInt32(), -3, 3);
+            if (el.TryGetProperty("multiplier", out var mul)) op.Multiplier = Math.Clamp(mul.GetInt32(), 0, 15);
+            if (el.TryGetProperty("panelLevel", out var pl)) op.PanelLevel = Math.Clamp(pl.GetInt32(), 0, 99);
+            if (el.TryGetProperty("levelKeyScalingHigh", out var lkh)) op.LevelKeyScalingHigh = Math.Clamp(lkh.GetInt32(), 0, 15);
+            if (el.TryGetProperty("levelKeyScalingLow", out var lkl)) op.LevelKeyScalingLow = Math.Clamp(lkl.GetInt32(), 0, 15);
+            if (el.TryGetProperty("rateKeyScaling", out var rks)) op.RateKeyScaling = Math.Clamp(rks.GetInt32(), 0, 3);
+            if (el.TryGetProperty("attackRate", out var ar)) op.AttackRate = Math.Clamp(ar.GetInt32(), 0, 63);
+            if (el.TryGetProperty("amplitudeModulationEnable", out var ame)) op.AmplitudeModulationEnable = ame.GetBoolean();
+            if (el.TryGetProperty("coarseDetune", out var cd)) op.CoarseDetune = cd.GetBoolean();
+            if (el.TryGetProperty("decay1Rate", out var d1r)) op.Decay1Rate = Math.Clamp(d1r.GetInt32(), 0, 63);
+            if (el.TryGetProperty("waveform", out var wf)) op.Waveform = (FmWaveform)Math.Clamp(wf.GetInt32(), 0, 3);
+            if (el.TryGetProperty("decay2Rate", out var d2r)) op.Decay2Rate = Math.Clamp(d2r.GetInt32(), 0, 31);
+            if (el.TryGetProperty("decay1Level", out var d1l)) op.Decay1Level = Math.Clamp(d1l.GetInt32(), 0, 15);
+            if (el.TryGetProperty("releaseRate", out var rr)) op.ReleaseRate = Math.Clamp(rr.GetInt32(), 0, 15);
+            if (el.TryGetProperty("sustainReleaseRate", out var srr)) op.SustainReleaseRate = Math.Clamp(srr.GetInt32(), 0, 15);
+        }
+
+        private static object VoiceToObject(PSS680Voice v) => new
+        {
+            name = v.Name,
+            bankNumber = v.BankNumber,
+            feedback = v.Feedback,
+            pitchModulationSensitivity = v.PitchModulationSensitivity,
+            amplitudeModulationSensitivity = v.AmplitudeModulationSensitivity,
+            vibratoDelayTime = v.VibratoDelayTime,
+            vibrato = v.Vibrato,
+            sustain = v.Sustain,
+            modulator = OperatorToObject(v.Modulator),
+            carrier = OperatorToObject(v.Carrier)
+        };
+
+        private static object OperatorToObject(FmOperatorParameters op) => new
+        {
+            fineDetune = op.FineDetune,
+            multiplier = op.Multiplier,
+            panelLevel = op.PanelLevel,
+            levelKeyScalingHigh = op.LevelKeyScalingHigh,
+            levelKeyScalingLow = op.LevelKeyScalingLow,
+            rateKeyScaling = op.RateKeyScaling,
+            attackRate = op.AttackRate,
+            amplitudeModulationEnable = op.AmplitudeModulationEnable,
+            coarseDetune = op.CoarseDetune,
+            decay1Rate = op.Decay1Rate,
+            waveform = (int)op.Waveform,
+            decay2Rate = op.Decay2Rate,
+            decay1Level = op.Decay1Level,
+            releaseRate = op.ReleaseRate,
+            sustainReleaseRate = op.SustainReleaseRate
+        };
+
+        private static string SanitizeFileName(string name)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var clean = new string(name.Where(c => !invalid.Contains(c)).ToArray()).Trim();
+            return string.IsNullOrWhiteSpace(clean) ? "Preset" : clean;
         }
 
         public void Dispose()

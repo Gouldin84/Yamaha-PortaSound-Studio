@@ -21,6 +21,9 @@ let state = {
     speed: 1.0,
     isLooping: false,
     polyphonyGuard: true,
+    sysexViewMode: "designer",
+    fmVoices: [],
+    vectorPresets: [],
     // Jukebox & Quick-Pick Tree State
     isSidebarCollapsed: false,
     selectedSongPath: null,
@@ -167,6 +170,7 @@ function switchTab(tab) {
 
     if (isSysex) {
         renderSysExLibrary();
+        updateSysexDeckVisibility();
     }
     if (isRecorder) {
         renderRecordingsLibrary();
@@ -298,6 +302,15 @@ function handleHostMessage(msg) {
                 state.sysexLibrary = msg.data.sysexLibrary;
                 renderSysExLibrary();
             }
+            if (msg.data.fmVoiceLibrary) {
+                state.fmVoices = msg.data.fmVoiceLibrary;
+                renderFmVoiceLibrary();
+            }
+            if (msg.data.vectorLibrary) {
+                state.vectorPresets = msg.data.vectorLibrary;
+                renderVectorPresetLibrary();
+            }
+            initVectorVoiceDropdowns();
             if (msg.data.recordingsLibrary) {
                 handleRecordingsLibraryUpdated(msg.data.recordingsLibrary);
             }
@@ -533,6 +546,28 @@ function handleHostMessage(msg) {
 
         case "sysex_dump_inspected":
             showSysexInspectModal(msg.data);
+            break;
+
+        case "fm_voice_library_updated":
+            state.fmVoices = msg.data.voices || [];
+            renderFmVoiceLibrary();
+            break;
+
+        case "fm_voice_loaded":
+            if (msg.data) {
+                updateFmVoiceUI(msg.data);
+            }
+            break;
+
+        case "vector_library_updated":
+            state.vectorPresets = msg.data.presets || [];
+            renderVectorPresetLibrary();
+            break;
+
+        case "vector_preset_loaded":
+            if (msg.data) {
+                updateVectorPresetUI(msg.data);
+            }
             break;
 
         case "model_changed":
@@ -3855,7 +3890,18 @@ function applyActiveModel(modelKey, syncHost = true) {
 
     // Update SysEx Vault Title
     const sysexTitle = document.getElementById("sysexVaultHeaderTitle");
-    if (sysexTitle) sysexTitle.textContent = is680 ? "Yamaha PSS-680 SysEx Vault" : "Yamaha PSS-790 SysEx Vault";
+    const sysexSubtitle = document.getElementById("sysexVaultHeaderSubtitle");
+    const designerPillIcon = document.getElementById("sysexDesignerPillIcon");
+    const designerPillLabel = document.getElementById("sysexDesignerPillLabel");
+
+    if (sysexTitle) sysexTitle.textContent = is680 ? "Yamaha PSS-680 FM Sound Designer & SysEx Vault" : "Yamaha PSS-790 Vector Synthesizer & SysEx Vault";
+    if (sysexSubtitle) sysexSubtitle.textContent = is680 
+        ? "Design 2-op FM voices, access 18 hidden parameters, and manage memory backups" 
+        : "Real-time 2D 4-voice vector synthesis, LFO orbit automation, and memory backups";
+    if (designerPillIcon) designerPillIcon.textContent = is680 ? "🎛️" : "🕹️";
+    if (designerPillLabel) designerPillLabel.textContent = is680 ? "FM Sound Designer" : "Vector Synthesizer";
+
+    updateSysexDeckVisibility();
 
     // Update Recorder Save button label & description
     const lblSave = document.getElementById("lblSaveTakePss");
@@ -3971,6 +4017,1249 @@ function applyActiveModel(modelKey, syncHost = true) {
     }
 }
 
+// =========================================================================
+// TAB 3: SOUND DESIGNER & VECTOR SYNTHESIZER WORKSTATION
+// =========================================================================
+
+function updateSysexDeckVisibility() {
+    const is680 = state.activeModel === "pss680";
+    const mode = state.sysexViewMode || "designer";
+
+    const fmDeck = document.getElementById("deckFmSoundDesigner");
+    const vecDeck = document.getElementById("deckVectorSynthesizer");
+    const dumpsDeck = document.getElementById("deckBulkDumps");
+
+    const btnDesigner = document.getElementById("btnSysexViewDesigner");
+    const btnDumps = document.getElementById("btnSysexViewDumps");
+
+    if (mode === "designer") {
+        if (dumpsDeck) dumpsDeck.classList.add("hidden");
+        if (is680) {
+            if (fmDeck) fmDeck.classList.remove("hidden");
+            if (vecDeck) vecDeck.classList.add("hidden");
+        } else {
+            if (vecDeck) vecDeck.classList.remove("hidden");
+            if (fmDeck) fmDeck.classList.add("hidden");
+            if (typeof drawVectorCanvas === "function") {
+                requestAnimationFrame(drawVectorCanvas);
+            }
+        }
+
+        if (btnDesigner) {
+            btnDesigner.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5";
+        }
+        if (btnDumps) {
+            btnDumps.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
+        }
+    } else {
+        if (fmDeck) fmDeck.classList.add("hidden");
+        if (vecDeck) vecDeck.classList.add("hidden");
+        if (dumpsDeck) dumpsDeck.classList.remove("hidden");
+
+        if (btnDesigner) {
+            btnDesigner.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
+        }
+        if (btnDumps) {
+            btnDumps.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5";
+        }
+    }
+}
+
+function initSysexViewSwitcher() {
+    const btnDesigner = document.getElementById("btnSysexViewDesigner");
+    const btnDumps = document.getElementById("btnSysexViewDumps");
+
+    if (btnDesigner) {
+        btnDesigner.addEventListener("click", () => {
+            state.sysexViewMode = "designer";
+            updateSysexDeckVisibility();
+        });
+    }
+    if (btnDumps) {
+        btnDumps.addEventListener("click", () => {
+            state.sysexViewMode = "dumps";
+            updateSysexDeckVisibility();
+        });
+    }
+}
+
+// -------------------------------------------------------------------------
+// PSS-680: FM SOUND DESIGNER
+// -------------------------------------------------------------------------
+let selectedFmBank = 0;
+let selectedModWave = 0;
+let selectedCarWave = 0;
+let fmLiveSendTimer = null;
+
+const FM_PRESETS = {
+    init: {
+        name: "Init Sine (2-Op)",
+        feedback: 0,
+        pitchModulationSensitivity: 0,
+        amplitudeModulationSensitivity: 0,
+        vibratoDelayTime: 0,
+        vibrato: false,
+        sustain: false,
+        modulator: {
+            multiplier: 1, panelLevel: 0, waveform: 0, attackRate: 63, decay1Rate: 20, releaseRate: 6,
+            fineDetune: 0, coarseDetune: false, decay1Level: 0, decay2Rate: 0, sustainReleaseRate: 5,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: false
+        },
+        carrier: {
+            multiplier: 1, panelLevel: 80, waveform: 0, attackRate: 63, decay1Rate: 20, releaseRate: 6,
+            fineDetune: 0, coarseDetune: false, decay1Level: 0, decay2Rate: 0, sustainReleaseRate: 5,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: false
+        }
+    },
+    dx_piano: {
+        name: "DX Electric Piano",
+        feedback: 3,
+        pitchModulationSensitivity: 0,
+        amplitudeModulationSensitivity: 0,
+        vibratoDelayTime: 0,
+        vibrato: false,
+        sustain: true,
+        modulator: {
+            multiplier: 14, panelLevel: 58, waveform: 0, attackRate: 63, decay1Rate: 25, releaseRate: 5,
+            fineDetune: 1, coarseDetune: false, decay1Level: 4, decay2Rate: 6, sustainReleaseRate: 5,
+            levelKeyScalingHigh: 4, levelKeyScalingLow: 0, rateKeyScaling: 1, amplitudeModulationEnable: false
+        },
+        carrier: {
+            multiplier: 1, panelLevel: 85, waveform: 0, attackRate: 63, decay1Rate: 18, releaseRate: 6,
+            fineDetune: 0, coarseDetune: false, decay1Level: 3, decay2Rate: 5, sustainReleaseRate: 6,
+            levelKeyScalingHigh: 3, levelKeyScalingLow: 0, rateKeyScaling: 1, amplitudeModulationEnable: false
+        }
+    },
+    slap_bass: {
+        name: "Solid FM Slap Bass",
+        feedback: 5,
+        pitchModulationSensitivity: 0,
+        amplitudeModulationSensitivity: 0,
+        vibratoDelayTime: 0,
+        vibrato: false,
+        sustain: false,
+        modulator: {
+            multiplier: 1, panelLevel: 76, waveform: 1, attackRate: 63, decay1Rate: 38, releaseRate: 8,
+            fineDetune: 0, coarseDetune: false, decay1Level: 2, decay2Rate: 8, sustainReleaseRate: 4,
+            levelKeyScalingHigh: 5, levelKeyScalingLow: 0, rateKeyScaling: 2, amplitudeModulationEnable: false
+        },
+        carrier: {
+            multiplier: 1, panelLevel: 92, waveform: 0, attackRate: 63, decay1Rate: 24, releaseRate: 7,
+            fineDetune: -1, coarseDetune: false, decay1Level: 1, decay2Rate: 4, sustainReleaseRate: 4,
+            levelKeyScalingHigh: 3, levelKeyScalingLow: 0, rateKeyScaling: 1, amplitudeModulationEnable: false
+        }
+    },
+    space_bell: {
+        name: "Cosmic Chime / Bell",
+        feedback: 2,
+        pitchModulationSensitivity: 2,
+        amplitudeModulationSensitivity: 1,
+        vibratoDelayTime: 40,
+        vibrato: true,
+        sustain: true,
+        modulator: {
+            multiplier: 7, panelLevel: 68, waveform: 2, attackRate: 63, decay1Rate: 12, releaseRate: 4,
+            fineDetune: 2, coarseDetune: false, decay1Level: 0, decay2Rate: 4, sustainReleaseRate: 6,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: true
+        },
+        carrier: {
+            multiplier: 1, panelLevel: 82, waveform: 0, attackRate: 63, decay1Rate: 10, releaseRate: 4,
+            fineDetune: 0, coarseDetune: false, decay1Level: 0, decay2Rate: 3, sustainReleaseRate: 6,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: false
+        }
+    },
+    analog_brass: {
+        name: "Warm FM Brass",
+        feedback: 4,
+        pitchModulationSensitivity: 3,
+        amplitudeModulationSensitivity: 0,
+        vibratoDelayTime: 55,
+        vibrato: true,
+        sustain: false,
+        modulator: {
+            multiplier: 1, panelLevel: 62, waveform: 0, attackRate: 45, decay1Rate: 22, releaseRate: 7,
+            fineDetune: 1, coarseDetune: false, decay1Level: 2, decay2Rate: 4, sustainReleaseRate: 5,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 1, amplitudeModulationEnable: false
+        },
+        carrier: {
+            multiplier: 1, panelLevel: 84, waveform: 1, attackRate: 42, decay1Rate: 16, releaseRate: 7,
+            fineDetune: 0, coarseDetune: false, decay1Level: 1, decay2Rate: 3, sustainReleaseRate: 5,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 1, amplitudeModulationEnable: false
+        }
+    },
+    metallic_lead: {
+        name: "Metallic FM Lead",
+        feedback: 6,
+        pitchModulationSensitivity: 4,
+        amplitudeModulationSensitivity: 0,
+        vibratoDelayTime: 20,
+        vibrato: true,
+        sustain: true,
+        modulator: {
+            multiplier: 5, panelLevel: 82, waveform: 3, attackRate: 63, decay1Rate: 15, releaseRate: 8,
+            fineDetune: -2, coarseDetune: true, decay1Level: 3, decay2Rate: 0, sustainReleaseRate: 6,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: false
+        },
+        carrier: {
+            multiplier: 2, panelLevel: 88, waveform: 1, attackRate: 63, decay1Rate: 15, releaseRate: 8,
+            fineDetune: 1, coarseDetune: false, decay1Level: 2, decay2Rate: 0, sustainReleaseRate: 6,
+            levelKeyScalingHigh: 0, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: false
+        }
+    },
+    sci_fi: {
+        name: "Sci-Fi Theremin",
+        feedback: 7,
+        pitchModulationSensitivity: 6,
+        amplitudeModulationSensitivity: 3,
+        vibratoDelayTime: 10,
+        vibrato: true,
+        sustain: true,
+        modulator: {
+            multiplier: 11, panelLevel: 88, waveform: 2, attackRate: 25, decay1Rate: 8, releaseRate: 3,
+            fineDetune: 3, coarseDetune: true, decay1Level: 0, decay2Rate: 2, sustainReleaseRate: 7,
+            levelKeyScalingHigh: 2, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: true
+        },
+        carrier: {
+            multiplier: 3, panelLevel: 80, waveform: 2, attackRate: 30, decay1Rate: 8, releaseRate: 3,
+            fineDetune: -2, coarseDetune: false, decay1Level: 0, decay2Rate: 2, sustainReleaseRate: 7,
+            levelKeyScalingHigh: 2, levelKeyScalingLow: 0, rateKeyScaling: 0, amplitudeModulationEnable: true
+        }
+    }
+};
+
+function collectFmVoiceFromUI() {
+    return {
+        name: document.getElementById("fmVoiceName")?.value.trim() || "Custom FM",
+        bankNumber: selectedFmBank,
+        feedback: parseInt(document.getElementById("fmFeedback")?.value || 0, 10),
+        pitchModulationSensitivity: parseInt(document.getElementById("fmPitchModSens")?.value || 0, 10),
+        amplitudeModulationSensitivity: parseInt(document.getElementById("fmAmpModSens")?.value || 0, 10),
+        vibratoDelayTime: parseInt(document.getElementById("fmVibratoDelay")?.value || 0, 10),
+        vibrato: !!document.getElementById("fmVibrato")?.checked,
+        sustain: !!document.getElementById("fmSustain")?.checked,
+        modulator: {
+            multiplier: parseInt(document.getElementById("fmModMul")?.value || 1, 10),
+            panelLevel: parseInt(document.getElementById("fmModTl")?.value || 50, 10),
+            waveform: selectedModWave,
+            attackRate: parseInt(document.getElementById("fmModAr")?.value || 63, 10),
+            decay1Rate: parseInt(document.getElementById("fmModD1r")?.value || 25, 10),
+            releaseRate: parseInt(document.getElementById("fmModRr")?.value || 6, 10),
+            fineDetune: parseInt(document.getElementById("fmModFine")?.value || 0, 10),
+            coarseDetune: !!document.getElementById("fmModCoarse")?.checked,
+            decay1Level: parseInt(document.getElementById("fmModD1l")?.value || 0, 10),
+            decay2Rate: parseInt(document.getElementById("fmModD2r")?.value || 0, 10),
+            sustainReleaseRate: parseInt(document.getElementById("fmModSrr")?.value || 5, 10),
+            levelKeyScalingHigh: parseInt(document.getElementById("fmModLksHi")?.value || 0, 10),
+            levelKeyScalingLow: parseInt(document.getElementById("fmModLksLo")?.value || 0, 10),
+            rateKeyScaling: parseInt(document.getElementById("fmModRks")?.value || 0, 10),
+            amplitudeModulationEnable: !!document.getElementById("fmModAm")?.checked
+        },
+        carrier: {
+            multiplier: parseInt(document.getElementById("fmCarMul")?.value || 1, 10),
+            panelLevel: parseInt(document.getElementById("fmCarTl")?.value || 80, 10),
+            waveform: selectedCarWave,
+            attackRate: parseInt(document.getElementById("fmCarAr")?.value || 63, 10),
+            decay1Rate: parseInt(document.getElementById("fmCarD1r")?.value || 20, 10),
+            releaseRate: parseInt(document.getElementById("fmCarRr")?.value || 6, 10),
+            fineDetune: parseInt(document.getElementById("fmCarFine")?.value || 0, 10),
+            coarseDetune: !!document.getElementById("fmCarCoarse")?.checked,
+            decay1Level: parseInt(document.getElementById("fmCarD1l")?.value || 0, 10),
+            decay2Rate: parseInt(document.getElementById("fmCarD2r")?.value || 0, 10),
+            sustainReleaseRate: parseInt(document.getElementById("fmCarSrr")?.value || 5, 10),
+            levelKeyScalingHigh: parseInt(document.getElementById("fmCarLksHi")?.value || 0, 10),
+            levelKeyScalingLow: parseInt(document.getElementById("fmCarLksLo")?.value || 0, 10),
+            rateKeyScaling: parseInt(document.getElementById("fmCarRks")?.value || 0, 10),
+            amplitudeModulationEnable: !!document.getElementById("fmCarAm")?.checked
+        }
+    };
+}
+
+function sendFmVoiceLiveThrottled() {
+    const chkLive = document.getElementById("chkFmLiveSend");
+    if (!chkLive || !chkLive.checked) return;
+
+    if (fmLiveSendTimer) clearTimeout(fmLiveSendTimer);
+    fmLiveSendTimer = setTimeout(() => {
+        const voice = collectFmVoiceFromUI();
+        sendToHost("transmit_fm_voice", { voice, silent: true });
+    }, 75);
+}
+
+function setSliderAndVal(sliderId, valId, val, formatter) {
+    if (val === undefined || val === null) return;
+    const slider = document.getElementById(sliderId);
+    const label = document.getElementById(valId);
+    if (slider) slider.value = val;
+    if (label) label.textContent = formatter ? formatter(val) : val;
+}
+
+function updateFmVoiceUI(voice) {
+    if (!voice) return;
+    if (voice.name) {
+        const nameEl = document.getElementById("fmVoiceName");
+        if (nameEl) nameEl.value = voice.name;
+    }
+
+    if (voice.bankNumber !== undefined) {
+        selectedFmBank = Math.max(0, Math.min(4, voice.bankNumber));
+        document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
+            const b = parseInt(btn.dataset.bank, 10);
+            if (b === selectedFmBank) {
+                btn.className = "fm-bank-btn active px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white border border-indigo-400 shadow-sm transition";
+            } else {
+                btn.className = "fm-bank-btn px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+            }
+        });
+    }
+
+    // Modulator
+    if (voice.modulator) {
+        const m = voice.modulator;
+        setSliderAndVal("fmModMul", "fmModMulVal", m.multiplier, (v) => `${v} (${v == 0 ? '0.5x' : v + '.0x'})`);
+        setSliderAndVal("fmModTl", "fmModTlVal", m.panelLevel);
+        setSliderAndVal("fmModAr", "fmModArVal", m.attackRate);
+        setSliderAndVal("fmModD1r", "fmModD1rVal", m.decay1Rate);
+        setSliderAndVal("fmModRr", "fmModRrVal", m.releaseRate);
+        setSliderAndVal("fmModFine", "fmModFineVal", m.fineDetune);
+        setSliderAndVal("fmModD1l", "fmModD1lVal", m.decay1Level);
+        setSliderAndVal("fmModD2r", "fmModD2rVal", m.decay2Rate);
+        setSliderAndVal("fmModSrr", "fmModSrrVal", m.sustainReleaseRate);
+        setSliderAndVal("fmModLksHi", "fmModLksHiVal", m.levelKeyScalingHigh);
+        setSliderAndVal("fmModLksLo", "fmModLksLoVal", m.levelKeyScalingLow);
+        setSliderAndVal("fmModRks", "fmModRksVal", m.rateKeyScaling);
+
+        const chkCoarse = document.getElementById("fmModCoarse");
+        if (chkCoarse) chkCoarse.checked = !!m.coarseDetune;
+        const chkAm = document.getElementById("fmModAm");
+        if (chkAm) chkAm.checked = !!m.amplitudeModulationEnable;
+
+        if (m.waveform !== undefined) {
+            selectedModWave = m.waveform;
+            document.querySelectorAll("#fmModWaveGroup .fm-mod-wave").forEach(btn => {
+                const w = parseInt(btn.dataset.wave, 10);
+                if (w === selectedModWave) {
+                    btn.className = "fm-mod-wave active py-1 rounded text-[9px] font-bold bg-cyan-600 text-white border border-cyan-400 transition";
+                } else {
+                    btn.className = "fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+                }
+            });
+        }
+    }
+
+    // Carrier
+    if (voice.carrier) {
+        const c = voice.carrier;
+        setSliderAndVal("fmCarMul", "fmCarMulVal", c.multiplier, (v) => `${v} (${v == 0 ? '0.5x' : v + '.0x'})`);
+        setSliderAndVal("fmCarTl", "fmCarTlVal", c.panelLevel);
+        setSliderAndVal("fmCarAr", "fmCarArVal", c.attackRate);
+        setSliderAndVal("fmCarD1r", "fmCarD1rVal", c.decay1Rate);
+        setSliderAndVal("fmCarRr", "fmCarRrVal", c.releaseRate);
+        setSliderAndVal("fmCarFine", "fmCarFineVal", c.fineDetune);
+        setSliderAndVal("fmCarD1l", "fmCarD1lVal", c.decay1Level);
+        setSliderAndVal("fmCarD2r", "fmCarD2rVal", c.decay2Rate);
+        setSliderAndVal("fmCarSrr", "fmCarSrrVal", c.sustainReleaseRate);
+        setSliderAndVal("fmCarLksHi", "fmCarLksHiVal", c.levelKeyScalingHigh);
+        setSliderAndVal("fmCarLksLo", "fmCarLksLoVal", c.levelKeyScalingLow);
+        setSliderAndVal("fmCarRks", "fmCarRksVal", c.rateKeyScaling);
+
+        const chkCoarse = document.getElementById("fmCarCoarse");
+        if (chkCoarse) chkCoarse.checked = !!c.coarseDetune;
+        const chkAm = document.getElementById("fmCarAm");
+        if (chkAm) chkAm.checked = !!c.amplitudeModulationEnable;
+
+        if (c.waveform !== undefined) {
+            selectedCarWave = c.waveform;
+            document.querySelectorAll("#fmCarWaveGroup .fm-car-wave").forEach(btn => {
+                const w = parseInt(btn.dataset.wave, 10);
+                if (w === selectedCarWave) {
+                    btn.className = "fm-car-wave active py-1 rounded text-[9px] font-bold bg-emerald-600 text-white border border-emerald-400 transition";
+                } else {
+                    btn.className = "fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+                }
+            });
+        }
+    }
+
+    // Global
+    setSliderAndVal("fmFeedback", "fmFeedbackVal", voice.feedback);
+    setSliderAndVal("fmVibratoDelay", "fmVibratoDelayVal", voice.vibratoDelayTime, (v) => `${v} ms`);
+    setSliderAndVal("fmPitchModSens", "fmPitchModSensVal", voice.pitchModulationSensitivity);
+    setSliderAndVal("fmAmpModSens", "fmAmpModSensVal", voice.amplitudeModulationSensitivity);
+
+    const chkVib = document.getElementById("fmVibrato");
+    if (chkVib) chkVib.checked = !!voice.vibrato;
+    const chkSus = document.getElementById("fmSustain");
+    if (chkSus) chkSus.checked = !!voice.sustain;
+
+    sendFmVoiceLiveThrottled();
+}
+
+function randomizeFmVoice() {
+    const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+    const randChoice = (arr) => arr[randInt(0, arr.length - 1)];
+
+    const voice = {
+        name: `FM Rand ${randInt(10, 99)}`,
+        bankNumber: selectedFmBank,
+        feedback: randChoice([0, 1, 2, 3, 4, 5]),
+        pitchModulationSensitivity: randChoice([0, 1, 2, 3]),
+        amplitudeModulationSensitivity: randChoice([0, 0, 1]),
+        vibratoDelayTime: randInt(0, 50),
+        vibrato: Math.random() > 0.6,
+        sustain: Math.random() > 0.5,
+        modulator: {
+            multiplier: randChoice([1, 1, 2, 2, 3, 4, 5, 7, 11]),
+            panelLevel: randInt(25, 85),
+            waveform: randChoice([0, 0, 1, 2, 3]),
+            attackRate: randInt(35, 63),
+            decay1Rate: randInt(10, 45),
+            releaseRate: randInt(4, 9),
+            fineDetune: randChoice([-1, 0, 0, 0, 1]),
+            coarseDetune: Math.random() > 0.85,
+            decay1Level: randInt(0, 6),
+            decay2Rate: randInt(0, 15),
+            sustainReleaseRate: randInt(3, 7),
+            levelKeyScalingHigh: randChoice([0, 0, 2, 4]),
+            levelKeyScalingLow: 0,
+            rateKeyScaling: randChoice([0, 1]),
+            amplitudeModulationEnable: Math.random() > 0.8
+        },
+        carrier: {
+            multiplier: randChoice([1, 1, 1, 2, 3, 4]),
+            panelLevel: randInt(70, 95),
+            waveform: randChoice([0, 0, 0, 1, 2]),
+            attackRate: randInt(40, 63),
+            decay1Rate: randInt(12, 35),
+            releaseRate: randInt(4, 8),
+            fineDetune: 0,
+            coarseDetune: false,
+            decay1Level: randInt(0, 4),
+            decay2Rate: randInt(0, 10),
+            sustainReleaseRate: randInt(4, 7),
+            levelKeyScalingHigh: randChoice([0, 0, 2]),
+            levelKeyScalingLow: 0,
+            rateKeyScaling: randChoice([0, 1]),
+            amplitudeModulationEnable: false
+        }
+    };
+    updateFmVoiceUI(voice);
+}
+
+function applyFmPreset(key) {
+    if (!key || !FM_PRESETS[key]) return;
+    const template = JSON.parse(JSON.stringify(FM_PRESETS[key]));
+    template.bankNumber = selectedFmBank;
+    updateFmVoiceUI(template);
+}
+
+function renderFmVoiceLibrary() {
+    const countBadge = document.getElementById("fmVoiceCountBadge");
+    const listEl = document.getElementById("fmPatchList");
+    const filter = (document.getElementById("fmSearchInput")?.value || "").toLowerCase().trim();
+
+    if (!listEl) return;
+    const voices = state.fmVoices || [];
+    if (countBadge) countBadge.textContent = `${voices.length} ${voices.length === 1 ? 'patch' : 'patches'}`;
+
+    const filtered = filter 
+        ? voices.filter(v => (v.name || v.fileName || "").toLowerCase().includes(filter))
+        : voices;
+
+    if (filtered.length === 0) {
+        listEl.innerHTML = `
+            <div class="p-6 text-center text-slate-500 text-[11px]">
+                ${filter ? 'No patches match your filter.' : 'No saved FM patches. Edit parameters and click "Save Patch" above!'}
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = filtered.map(v => {
+        const patchName = v.name || (v.fileName ? v.fileName.replace(/\.syx$/i, "") : "Custom FM");
+        const bankNum = (v.bankNumber !== undefined ? v.bankNumber + 1 : 1);
+        const dateStr = v.date || "";
+        return `
+            <div class="p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 transition flex items-center justify-between group">
+                <div class="min-w-0 flex-1 pr-2">
+                    <div class="flex items-center space-x-1.5">
+                        <span class="text-xs font-bold text-white truncate" title="${patchName}">${patchName}</span>
+                        <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/60">B${bankNum}</span>
+                    </div>
+                    <div class="text-[9px] text-slate-400 truncate">${dateStr ? dateStr + ' • ' : ''}72 bytes SysEx</div>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button type="button" data-file="${v.fileName || ''}" data-path="${v.filePath || ''}" class="btn-load-fm px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 transition active:scale-95" title="Load into FM Sound Designer">Load</button>
+                    <button type="button" data-path="${v.filePath || ''}" class="btn-del-fm p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete patch">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    listEl.querySelectorAll(".btn-load-fm").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const filePath = btn.dataset.path;
+            const fileName = btn.dataset.file;
+            sendToHost("load_fm_voice_patch", { filePath, fileName });
+        });
+    });
+
+    listEl.querySelectorAll(".btn-del-fm").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const filePath = btn.dataset.path;
+            if (confirm("Are you sure you want to delete this FM voice patch?")) {
+                sendToHost("delete_fm_voice_patch", { filePath });
+            }
+        });
+    });
+}
+
+function initFmSynthEditor() {
+    // Bank pills
+    document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            selectedFmBank = parseInt(btn.dataset.bank, 10);
+            document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(b => {
+                const bNum = parseInt(b.dataset.bank, 10);
+                if (bNum === selectedFmBank) {
+                    b.className = "fm-bank-btn active px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white border border-indigo-400 shadow-sm transition";
+                } else {
+                    b.className = "fm-bank-btn px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+                }
+            });
+            sendFmVoiceLiveThrottled();
+        });
+    });
+
+    // Modulator Waveform buttons
+    document.querySelectorAll("#fmModWaveGroup .fm-mod-wave").forEach(btn => {
+        btn.addEventListener("click", () => {
+            selectedModWave = parseInt(btn.dataset.wave, 10);
+            document.querySelectorAll("#fmModWaveGroup .fm-mod-wave").forEach(b => {
+                const w = parseInt(b.dataset.wave, 10);
+                if (w === selectedModWave) {
+                    b.className = "fm-mod-wave active py-1 rounded text-[9px] font-bold bg-cyan-600 text-white border border-cyan-400 transition";
+                } else {
+                    b.className = "fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+                }
+            });
+            sendFmVoiceLiveThrottled();
+        });
+    });
+
+    // Carrier Waveform buttons
+    document.querySelectorAll("#fmCarWaveGroup .fm-car-wave").forEach(btn => {
+        btn.addEventListener("click", () => {
+            selectedCarWave = parseInt(btn.dataset.wave, 10);
+            document.querySelectorAll("#fmCarWaveGroup .fm-car-wave").forEach(b => {
+                const w = parseInt(b.dataset.wave, 10);
+                if (w === selectedCarWave) {
+                    b.className = "fm-car-wave active py-1 rounded text-[9px] font-bold bg-emerald-600 text-white border border-emerald-400 transition";
+                } else {
+                    b.className = "fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+                }
+            });
+            sendFmVoiceLiveThrottled();
+        });
+    });
+
+    // Sliders
+    const sliderDefs = [
+        { id: "fmModMul", valId: "fmModMulVal", fmt: (v) => `${v} (${v == 0 ? '0.5x' : v + '.0x'})` },
+        { id: "fmModTl", valId: "fmModTlVal" },
+        { id: "fmModAr", valId: "fmModArVal" },
+        { id: "fmModD1r", valId: "fmModD1rVal" },
+        { id: "fmModRr", valId: "fmModRrVal" },
+        { id: "fmModFine", valId: "fmModFineVal" },
+        { id: "fmModD1l", valId: "fmModD1lVal" },
+        { id: "fmModD2r", valId: "fmModD2rVal" },
+        { id: "fmModSrr", valId: "fmModSrrVal" },
+        { id: "fmModLksHi", valId: "fmModLksHiVal" },
+        { id: "fmModLksLo", valId: "fmModLksLoVal" },
+        { id: "fmModRks", valId: "fmModRksVal" },
+
+        { id: "fmCarMul", valId: "fmCarMulVal", fmt: (v) => `${v} (${v == 0 ? '0.5x' : v + '.0x'})` },
+        { id: "fmCarTl", valId: "fmCarTlVal" },
+        { id: "fmCarAr", valId: "fmCarArVal" },
+        { id: "fmCarD1r", valId: "fmCarD1rVal" },
+        { id: "fmCarRr", valId: "fmCarRrVal" },
+        { id: "fmCarFine", valId: "fmCarFineVal" },
+        { id: "fmCarD1l", valId: "fmCarD1lVal" },
+        { id: "fmCarD2r", valId: "fmCarD2rVal" },
+        { id: "fmCarSrr", valId: "fmCarSrrVal" },
+        { id: "fmCarLksHi", valId: "fmCarLksHiVal" },
+        { id: "fmCarLksLo", valId: "fmCarLksLoVal" },
+        { id: "fmCarRks", valId: "fmCarRksVal" },
+
+        { id: "fmFeedback", valId: "fmFeedbackVal" },
+        { id: "fmVibratoDelay", valId: "fmVibratoDelayVal", fmt: (v) => `${v} ms` },
+        { id: "fmPitchModSens", valId: "fmPitchModSensVal" },
+        { id: "fmAmpModSens", valId: "fmAmpModSensVal" }
+    ];
+
+    sliderDefs.forEach(def => {
+        const slider = document.getElementById(def.id);
+        const label = document.getElementById(def.valId);
+        if (slider) {
+            slider.addEventListener("input", () => {
+                if (label) label.textContent = def.fmt ? def.fmt(slider.value) : slider.value;
+                sendFmVoiceLiveThrottled();
+            });
+        }
+    });
+
+    // Checkboxes
+    ["fmModCoarse", "fmModAm", "fmCarCoarse", "fmCarAm", "fmVibrato", "fmSustain"].forEach(id => {
+        const chk = document.getElementById(id);
+        if (chk) {
+            chk.addEventListener("change", () => {
+                sendFmVoiceLiveThrottled();
+            });
+        }
+    });
+
+    // Presets dropdown
+    const selPresets = document.getElementById("selFmPresets");
+    if (selPresets) {
+        selPresets.addEventListener("change", () => {
+            applyFmPreset(selPresets.value);
+            selPresets.value = "";
+        });
+    }
+
+    // Randomize button
+    const btnRand = document.getElementById("btnFmRandomize");
+    if (btnRand) {
+        btnRand.addEventListener("click", randomizeFmVoice);
+    }
+
+    // Audition Note
+    const btnAud = document.getElementById("btnFmAudition");
+    if (btnAud) {
+        btnAud.addEventListener("click", () => {
+            sendToHost("audition_fm_voice_note", { note: 60 });
+        });
+    }
+
+    // Transmit to Synth
+    const btnTrans = document.getElementById("btnFmTransmit");
+    if (btnTrans) {
+        btnTrans.addEventListener("click", () => {
+            const voice = collectFmVoiceFromUI();
+            sendToHost("transmit_fm_voice", { voice, silent: false });
+        });
+    }
+
+    // Save Patch
+    const btnSave = document.getElementById("btnFmSave");
+    if (btnSave) {
+        btnSave.addEventListener("click", () => {
+            const voice = collectFmVoiceFromUI();
+            sendToHost("save_fm_voice_patch", { voice });
+        });
+    }
+
+    // Search filter
+    const searchIn = document.getElementById("fmSearchInput");
+    if (searchIn) {
+        searchIn.addEventListener("input", renderFmVoiceLibrary);
+    }
+
+    renderFmVoiceLibrary();
+}
+
+// -------------------------------------------------------------------------
+// PSS-790: VECTOR SYNTHESIZER
+// -------------------------------------------------------------------------
+let vectorState = {
+    x: 0.0,
+    y: 0.0,
+    voiceA: 0,
+    voiceB: 34,
+    voiceC: 16,
+    voiceD: 56,
+    orbitMode: "manual",
+    orbitSpeed: 3.0,
+    isOrbiting: false,
+    animFrameId: null,
+    orbitStartTime: null,
+    lastVolumeSendTime: 0
+};
+
+const VECTOR_PRESETS = {
+    cinema: {
+        name: "Cinema Orchestral Pad",
+        voiceA: 34, // STRINGS 1
+        voiceB: 64, // CHORUS
+        voiceC: 52, // BRASS ENSEMBLE
+        voiceD: 7,  // CELESTA
+        orbitMode: "circle",
+        orbitSpeed: 3.5,
+        posX: 0.0,
+        posY: 0.0
+    },
+    hybrid_ep: {
+        name: "Hybrid Electric Piano",
+        voiceA: 1,  // ELECTRIC PIANO 1
+        voiceB: 2,  // ELECTRIC PIANO 2
+        voiceC: 34, // STRINGS 1
+        voiceD: 37, // HARP
+        orbitMode: "pingpong",
+        orbitSpeed: 3.0,
+        posX: 0.0,
+        posY: 0.0
+    },
+    morph_lead: {
+        name: "Morphing Synth Lead",
+        voiceA: 65, // SYNTH BRASS 1
+        voiceB: 18, // MUTE GUITAR
+        voiceC: 10, // JAZZ ORGAN 1
+        voiceD: 55, // FLUTE
+        orbitMode: "figure8",
+        orbitSpeed: 2.5,
+        posX: 0.0,
+        posY: 0.0
+    },
+    evolving_bells: {
+        name: "Cosmic Bellscape",
+        voiceA: 7,  // CELESTA
+        voiceB: 43, // GLOCKENSPIEL
+        voiceC: 98, // MUSIC BOX
+        voiceD: 82, // FANTASY
+        orbitMode: "spiral",
+        orbitSpeed: 4.5,
+        posX: 0.0,
+        posY: 0.0
+    }
+};
+
+function calculateVectorWeights(x, y) {
+    const rawA = Math.max(0, y);
+    const rawB = Math.max(0, x);
+    const rawC = Math.max(0, -y);
+    const rawD = Math.max(0, -x);
+
+    const manhattan = Math.abs(x) + Math.abs(y);
+    const radius = Math.min(1.0, Math.sqrt(x * x + y * y));
+
+    let dirA = 0.25, dirB = 0.25, dirC = 0.25, dirD = 0.25;
+    if (manhattan > 0.0001) {
+        dirA = rawA / manhattan;
+        dirB = rawB / manhattan;
+        dirC = rawC / manhattan;
+        dirD = rawD / manhattan;
+    }
+
+    const wA = (1.0 - radius) * 0.25 + radius * dirA;
+    const wB = (1.0 - radius) * 0.25 + radius * dirB;
+    const wC = (1.0 - radius) * 0.25 + radius * dirC;
+    const wD = (1.0 - radius) * 0.25 + radius * dirD;
+
+    return { wA, wB, wC, wD };
+}
+
+function drawVectorCanvas() {
+    const canvas = document.getElementById("vecCanvas");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const scale = w * 0.4;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Subtle dark gradient background
+    const bgGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, w * 0.5);
+    bgGrad.addColorStop(0, "rgba(30, 41, 59, 0.6)");
+    bgGrad.addColorStop(1, "rgba(10, 15, 29, 0.95)");
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Grid circles
+    ctx.strokeStyle = "rgba(71, 85, 105, 0.35)";
+    ctx.lineWidth = 1;
+    [0.25, 0.5, 0.75, 1.0].forEach(r => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, scale * r, 0, Math.PI * 2);
+        ctx.stroke();
+    });
+
+    // Crosshairs
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - scale);
+    ctx.lineTo(cx, cy + scale);
+    ctx.moveTo(cx - scale, cy);
+    ctx.lineTo(cx + scale, cy);
+    ctx.stroke();
+
+    // Cardinal Labels
+    ctx.font = "bold 10px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    ctx.fillStyle = "#22d3ee"; // Cyan - Voice A
+    ctx.fillText("A", cx, cy - scale - 8);
+
+    ctx.fillStyle = "#34d399"; // Emerald - Voice B
+    ctx.fillText("B", cx + scale + 8, cy);
+
+    ctx.fillStyle = "#fbbf24"; // Amber - Voice C
+    ctx.fillText("C", cx, cy + scale + 8);
+
+    ctx.fillStyle = "#fb7185"; // Rose - Voice D
+    ctx.fillText("D", cx - scale - 8, cy);
+
+    // Puck coordinate
+    const puckX = cx + vectorState.x * scale;
+    const puckY = cy - vectorState.y * scale;
+
+    // Line from center
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(puckX, puckY);
+    ctx.strokeStyle = "rgba(99, 102, 241, 0.6)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Puck outer glow
+    const puckGrad = ctx.createRadialGradient(puckX, puckY, 2, puckX, puckY, 14);
+    puckGrad.addColorStop(0, "rgba(99, 102, 241, 1)");
+    puckGrad.addColorStop(0.5, "rgba(56, 189, 248, 0.7)");
+    puckGrad.addColorStop(1, "rgba(99, 102, 241, 0)");
+    ctx.fillStyle = puckGrad;
+    ctx.beginPath();
+    ctx.arc(puckX, puckY, 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Puck center dot
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(puckX, puckY, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#4f46e5";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+}
+
+function setVectorPosition(x, y, notifyHost = true) {
+    vectorState.x = Math.max(-1.0, Math.min(1.0, x));
+    vectorState.y = Math.max(-1.0, Math.min(1.0, y));
+
+    const weights = calculateVectorWeights(vectorState.x, vectorState.y);
+
+    const coordX = document.getElementById("vecCoordX");
+    const coordY = document.getElementById("vecCoordY");
+    const volA = document.getElementById("vecVolA");
+    const volB = document.getElementById("vecVolB");
+    const volC = document.getElementById("vecVolC");
+    const volD = document.getElementById("vecVolD");
+
+    if (coordX) coordX.textContent = (vectorState.x >= 0 ? "+" : "") + vectorState.x.toFixed(2);
+    if (coordY) coordY.textContent = (vectorState.y >= 0 ? "+" : "") + vectorState.y.toFixed(2);
+    if (volA) volA.textContent = Math.round(weights.wA * 100) + "%";
+    if (volB) volB.textContent = Math.round(weights.wB * 100) + "%";
+    if (volC) volC.textContent = Math.round(weights.wC * 100) + "%";
+    if (volD) volD.textContent = Math.round(weights.wD * 100) + "%";
+
+    const m1 = document.getElementById("meterVecCh1");
+    const m2 = document.getElementById("meterVecCh2");
+    const m3 = document.getElementById("meterVecCh3");
+    const m4 = document.getElementById("meterVecCh4");
+
+    if (m1) m1.style.height = Math.round(weights.wA * 100) + "%";
+    if (m2) m2.style.height = Math.round(weights.wB * 100) + "%";
+    if (m3) m3.style.height = Math.round(weights.wC * 100) + "%";
+    if (m4) m4.style.height = Math.round(weights.wD * 100) + "%";
+
+    drawVectorCanvas();
+
+    if (notifyHost) {
+        const now = performance.now();
+        if (now - vectorState.lastVolumeSendTime > 25) {
+            vectorState.lastVolumeSendTime = now;
+            sendToHost("set_vector_volumes", {
+                volA: Math.round(weights.wA * 127),
+                volB: Math.round(weights.wB * 127),
+                volC: Math.round(weights.wC * 127),
+                volD: Math.round(weights.wD * 127)
+            });
+        }
+    }
+}
+
+function setupVectorTouchpad() {
+    const canvas = document.getElementById("vecCanvas");
+    if (!canvas) return;
+
+    let isDragging = false;
+
+    function handlePointer(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+
+        const mouseX = clientX - rect.left;
+        const mouseY = clientY - rect.top;
+        const cX = rect.width / 2;
+        const cY = rect.height / 2;
+        const scale = rect.width * 0.4;
+
+        let x = (mouseX - cX) / scale;
+        let y = (cY - mouseY) / scale;
+
+        if (vectorState.isOrbiting) {
+            stopVectorOrbit();
+        }
+
+        setVectorPosition(x, y, true);
+    }
+
+    canvas.addEventListener("pointerdown", (e) => {
+        isDragging = true;
+        canvas.setPointerCapture(e.pointerId);
+        handlePointer(e);
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+        if (!isDragging) return;
+        handlePointer(e);
+    });
+
+    const stopDragging = (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        try {
+            if (canvas.hasPointerCapture(e.pointerId)) {
+                canvas.releasePointerCapture(e.pointerId);
+            }
+        } catch { }
+    };
+
+    canvas.addEventListener("pointerup", stopDragging);
+    canvas.addEventListener("pointercancel", stopDragging);
+}
+
+function startVectorOrbit() {
+    if (vectorState.isOrbiting) return;
+    const mode = document.getElementById("selVecOrbitMode")?.value || "circle";
+    if (mode === "manual") return;
+
+    vectorState.isOrbiting = true;
+    vectorState.orbitStartTime = performance.now();
+
+    const btnIcon = document.getElementById("vecOrbitBtnIcon");
+    const btnLabel = document.getElementById("vecOrbitBtnLabel");
+    const badge = document.getElementById("vecOrbitStatusBadge");
+    if (btnIcon) btnIcon.textContent = "⏸";
+    if (btnLabel) btnLabel.textContent = "Pause Vector Orbit";
+    if (badge) {
+        badge.textContent = "Orbiting";
+        badge.className = "px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-700/60";
+    }
+
+    function step(now) {
+        if (!vectorState.isOrbiting) return;
+        const elapsed = (now - vectorState.orbitStartTime) / 1000.0;
+        const speedVal = parseFloat(document.getElementById("vecOrbitSpeed")?.value || 30);
+        const period = Math.max(0.5, speedVal / 10.0);
+        const theta = (elapsed / period) * (Math.PI * 2);
+
+        const currentMode = document.getElementById("selVecOrbitMode")?.value || "circle";
+        let x = 0, y = 0;
+
+        switch (currentMode) {
+            case "circle":
+                x = Math.cos(theta) * 0.75;
+                y = Math.sin(theta) * 0.75;
+                break;
+            case "figure8":
+                x = Math.sin(theta) * 0.8;
+                y = Math.sin(theta * 2) * 0.75;
+                break;
+            case "spiral": {
+                const r = 0.25 + 0.6 * (0.5 + 0.5 * Math.sin(theta * 0.25));
+                x = Math.cos(theta) * r;
+                y = Math.sin(theta) * r;
+                break;
+            }
+            case "pingpong": {
+                const s = Math.sin(theta);
+                x = s * 0.8;
+                y = s * 0.8;
+                break;
+            }
+            case "wander":
+                x = Math.max(-0.9, Math.min(0.9, 0.5 * Math.sin(theta) + 0.35 * Math.sin(2.3 * theta + 1.2)));
+                y = Math.max(-0.9, Math.min(0.9, 0.5 * Math.cos(0.9 * theta) + 0.35 * Math.cos(1.7 * theta + 2.5)));
+                break;
+            default:
+                stopVectorOrbit();
+                return;
+        }
+
+        setVectorPosition(x, y, true);
+        vectorState.animFrameId = requestAnimationFrame(step);
+    }
+
+    vectorState.animFrameId = requestAnimationFrame(step);
+}
+
+function stopVectorOrbit() {
+    vectorState.isOrbiting = false;
+    if (vectorState.animFrameId) {
+        cancelAnimationFrame(vectorState.animFrameId);
+        vectorState.animFrameId = null;
+    }
+    const btnIcon = document.getElementById("vecOrbitBtnIcon");
+    const btnLabel = document.getElementById("vecOrbitBtnLabel");
+    const badge = document.getElementById("vecOrbitStatusBadge");
+    if (btnIcon) btnIcon.textContent = "▶";
+    if (btnLabel) btnLabel.textContent = "Start Vector Orbit";
+    if (badge) {
+        badge.textContent = "Manual";
+        badge.className = "px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700";
+    }
+}
+
+function initVectorVoiceDropdowns() {
+    const list = state.pss790Voices && state.pss790Voices.length > 0 ? state.pss790Voices : (state.voices || []);
+    if (!list || list.length === 0) return;
+
+    ["vecVoiceA", "vecVoiceB", "vecVoiceC", "vecVoiceD"].forEach((id, idx) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const currentVal = parseInt(select.value, 10);
+        select.innerHTML = list.map(v => 
+            `<option value="${v.number}">${v.number.toString().padStart(2, '0')}: ${v.name}</option>`
+        ).join("");
+
+        if (!isNaN(currentVal) && currentVal >= 0) {
+            select.value = currentVal;
+        } else {
+            const defaults = [0, 34, 16, 56];
+            select.value = defaults[idx] !== undefined ? defaults[idx] : 0;
+        }
+    });
+}
+
+function onVectorVoiceChanged() {
+    const vA = parseInt(document.getElementById("vecVoiceA")?.value || 0, 10);
+    const vB = parseInt(document.getElementById("vecVoiceB")?.value || 34, 10);
+    const vC = parseInt(document.getElementById("vecVoiceC")?.value || 16, 10);
+    const vD = parseInt(document.getElementById("vecVoiceD")?.value || 56, 10);
+    vectorState.voiceA = vA;
+    vectorState.voiceB = vB;
+    vectorState.voiceC = vC;
+    vectorState.voiceD = vD;
+    sendToHost("set_vector_voices", { voiceA: vA, voiceB: vB, voiceC: vC, voiceD: vD });
+}
+
+function applyVectorPreset(key) {
+    if (!key || !VECTOR_PRESETS[key]) return;
+    const template = JSON.parse(JSON.stringify(VECTOR_PRESETS[key]));
+    updateVectorPresetUI(template);
+}
+
+function updateVectorPresetUI(preset) {
+    if (!preset) return;
+    if (preset.name) {
+        const nameEl = document.getElementById("vecPresetName");
+        if (nameEl) nameEl.value = preset.name;
+    }
+    if (preset.voiceA !== undefined) {
+        const sel = document.getElementById("vecVoiceA");
+        if (sel) sel.value = preset.voiceA;
+        vectorState.voiceA = preset.voiceA;
+    }
+    if (preset.voiceB !== undefined) {
+        const sel = document.getElementById("vecVoiceB");
+        if (sel) sel.value = preset.voiceB;
+        vectorState.voiceB = preset.voiceB;
+    }
+    if (preset.voiceC !== undefined) {
+        const sel = document.getElementById("vecVoiceC");
+        if (sel) sel.value = preset.voiceC;
+        vectorState.voiceC = preset.voiceC;
+    }
+    if (preset.voiceD !== undefined) {
+        const sel = document.getElementById("vecVoiceD");
+        if (sel) sel.value = preset.voiceD;
+        vectorState.voiceD = preset.voiceD;
+    }
+
+    sendToHost("set_vector_voices", {
+        voiceA: vectorState.voiceA,
+        voiceB: vectorState.voiceB,
+        voiceC: vectorState.voiceC,
+        voiceD: vectorState.voiceD
+    });
+
+    if (preset.orbitMode) {
+        const selMode = document.getElementById("selVecOrbitMode");
+        if (selMode) selMode.value = preset.orbitMode;
+    }
+    if (preset.orbitSpeed !== undefined) {
+        const spdInput = document.getElementById("vecOrbitSpeed");
+        const spdVal = document.getElementById("vecOrbitSpeedVal");
+        if (spdInput) spdInput.value = Math.round(preset.orbitSpeed * 10);
+        if (spdVal) spdVal.textContent = (preset.orbitSpeed).toFixed(1) + "s";
+        vectorState.orbitSpeed = preset.orbitSpeed;
+    }
+
+    const posX = preset.posX !== undefined ? preset.posX : 0.0;
+    const posY = preset.posY !== undefined ? preset.posY : 0.0;
+    setVectorPosition(posX, posY, true);
+
+    if (preset.orbitMode && preset.orbitMode !== "manual") {
+        startVectorOrbit();
+    } else {
+        stopVectorOrbit();
+    }
+}
+
+function renderVectorPresetLibrary() {
+    const countBadge = document.getElementById("vecPresetCountBadge");
+    const listEl = document.getElementById("vecPresetList");
+
+    if (!listEl) return;
+    const presets = state.vectorPresets || [];
+    if (countBadge) countBadge.textContent = `${presets.length} ${presets.length === 1 ? 'preset' : 'presets'}`;
+
+    if (presets.length === 0) {
+        listEl.innerHTML = `
+            <div class="p-3 text-center text-slate-500 text-[10px]">
+                No custom vector presets. Click "Save Preset" to store your favorite blends!
+            </div>
+        `;
+        return;
+    }
+
+    listEl.innerHTML = presets.map(p => {
+        const presetName = p.name || (p.fileName ? p.fileName.replace(/\.json$/i, "") : "Vector Preset");
+        const dateStr = p.date || "";
+        return `
+            <div class="p-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 transition flex items-center justify-between group">
+                <div class="min-w-0 flex-1 pr-1.5">
+                    <span class="text-[11px] font-bold text-white truncate block" title="${presetName}">${presetName}</span>
+                    <span class="text-[9px] text-slate-400 block">${dateStr}</span>
+                </div>
+                <div class="flex items-center space-x-1 shrink-0">
+                    <button type="button" data-path="${p.filePath || ''}" data-file="${p.fileName || ''}" class="btn-load-vec px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 transition active:scale-95" title="Load Vector Preset">Load</button>
+                    <button type="button" data-path="${p.filePath || ''}" class="btn-del-vec p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete preset">🗑️</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    listEl.querySelectorAll(".btn-load-vec").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const filePath = btn.dataset.path;
+            const fileName = btn.dataset.file;
+            sendToHost("load_vector_preset", { filePath, fileName });
+        });
+    });
+
+    listEl.querySelectorAll(".btn-del-vec").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const filePath = btn.dataset.path;
+            if (confirm("Are you sure you want to delete this vector preset?")) {
+                sendToHost("delete_vector_preset", { filePath });
+            }
+        });
+    });
+}
+
+function initVectorSynthesizer() {
+    setupVectorTouchpad();
+    initVectorVoiceDropdowns();
+
+    ["vecVoiceA", "vecVoiceB", "vecVoiceC", "vecVoiceD"].forEach(id => {
+        const sel = document.getElementById(id);
+        if (sel) {
+            sel.addEventListener("change", onVectorVoiceChanged);
+        }
+    });
+
+    const selPresets = document.getElementById("selVecPresets");
+    if (selPresets) {
+        selPresets.addEventListener("change", () => {
+            applyVectorPreset(selPresets.value);
+            selPresets.value = "";
+        });
+    }
+
+    const spdSlider = document.getElementById("vecOrbitSpeed");
+    const spdVal = document.getElementById("vecOrbitSpeedVal");
+    if (spdSlider) {
+        spdSlider.addEventListener("input", () => {
+            const val = (parseFloat(spdSlider.value) / 10.0).toFixed(1) + "s";
+            if (spdVal) spdVal.textContent = val;
+            vectorState.orbitSpeed = parseFloat(spdSlider.value) / 10.0;
+        });
+    }
+
+    const selOrbitMode = document.getElementById("selVecOrbitMode");
+    if (selOrbitMode) {
+        selOrbitMode.addEventListener("change", () => {
+            vectorState.orbitMode = selOrbitMode.value;
+            if (selOrbitMode.value === "manual") {
+                stopVectorOrbit();
+            } else if (vectorState.isOrbiting) {
+                vectorState.orbitStartTime = performance.now();
+            }
+        });
+    }
+
+    const btnToggleOrbit = document.getElementById("btnVecToggleOrbit");
+    if (btnToggleOrbit) {
+        btnToggleOrbit.addEventListener("click", () => {
+            if (vectorState.isOrbiting) {
+                stopVectorOrbit();
+            } else {
+                startVectorOrbit();
+            }
+        });
+    }
+
+    const btnAud = document.getElementById("btnVecAudition");
+    if (btnAud) {
+        btnAud.addEventListener("click", () => {
+            sendToHost("audition_vector_chord", { note: 60 });
+        });
+    }
+
+    const btnSave = document.getElementById("btnVecSave");
+    if (btnSave) {
+        btnSave.addEventListener("click", () => {
+            const pName = document.getElementById("vecPresetName")?.value.trim() || "Vector Preset";
+            const vA = parseInt(document.getElementById("vecVoiceA")?.value || 0, 10);
+            const vB = parseInt(document.getElementById("vecVoiceB")?.value || 34, 10);
+            const vC = parseInt(document.getElementById("vecVoiceC")?.value || 16, 10);
+            const vD = parseInt(document.getElementById("vecVoiceD")?.value || 56, 10);
+            const orbitMode = document.getElementById("selVecOrbitMode")?.value || "manual";
+            const orbitSpeed = parseFloat(document.getElementById("vecOrbitSpeed")?.value || 30) / 10.0;
+
+            sendToHost("save_vector_preset", {
+                name: pName,
+                voiceA: vA,
+                voiceB: vB,
+                voiceC: vC,
+                voiceD: vD,
+                posX: vectorState.x,
+                posY: vectorState.y,
+                orbitMode: orbitMode,
+                orbitSpeed: orbitSpeed
+            });
+        });
+    }
+
+    setVectorPosition(0, 0, false);
+    renderVectorPresetLibrary();
+}
+
 function initModelSelector() {
     const btn = document.getElementById("modelSelectorBtn");
     const menu = document.getElementById("modelDropdownMenu");
@@ -4037,6 +5326,12 @@ function startApp() {
     initVuMeters();
     renderRecordingsLibrary();
     initModelSelector();
+
+    // Sound Designer & SysEx Workstation initializers
+    initSysexViewSwitcher();
+    initFmSynthEditor();
+    initVectorSynthesizer();
+    updateSysexDeckVisibility();
 
     // Immediately render initial mixer strips, device dropdowns, and song tree so the UI is never blank
     renderMixer();

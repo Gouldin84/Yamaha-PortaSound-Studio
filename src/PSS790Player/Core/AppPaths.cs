@@ -15,6 +15,8 @@ namespace PSS790Player.Core
         public static string Pss790MidiDir => Path.Combine(BaseMidiDir, "PSS-790 Midi");
         public static string Pss680MidiDir => Path.Combine(BaseMidiDir, "PSS-680 Midi");
         public static string SysExDir => Path.Combine(BaseMidiDir, "SysEx Library");
+        public static string FmVoicesDir => Path.Combine(SysExDir, "PSS-680 Voices");
+        public static string VectorPresetsDir => Path.Combine(SysExDir, "PSS-790 Vectors");
         public static string RecordingsDir => Path.Combine(BaseMidiDir, "Recordings");
         public static string MetadataDir => Path.Combine(BaseMidiDir, ".pss790");
         public static string OverridesFilePath => Path.Combine(MetadataDir, "overrides.json");
@@ -38,6 +40,12 @@ namespace PSS790Player.Core
 
             if (!Directory.Exists(SysExDir))
                 Directory.CreateDirectory(SysExDir);
+
+            if (!Directory.Exists(FmVoicesDir))
+                Directory.CreateDirectory(FmVoicesDir);
+
+            if (!Directory.Exists(VectorPresetsDir))
+                Directory.CreateDirectory(VectorPresetsDir);
 
             if (!Directory.Exists(RecordingsDir))
                 Directory.CreateDirectory(RecordingsDir);

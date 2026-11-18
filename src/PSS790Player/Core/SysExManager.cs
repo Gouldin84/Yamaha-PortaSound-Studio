@@ -180,7 +180,9 @@ namespace PSS790Player.Core
             }
         }
 
-        public List<SysExDumpInfo> GetSysExLibrary()
+        public List<SysExDumpInfo> GetSysExLibrary() => GetSysExLibraryFromDisk();
+
+        public static List<SysExDumpInfo> GetSysExLibraryFromDisk()
         {
             AppPaths.EnsureDirectoriesExist();
             var list = new List<SysExDumpInfo>();
