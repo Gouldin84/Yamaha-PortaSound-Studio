@@ -3884,7 +3884,7 @@ document.getElementById("btnOpenSysExFolder")?.addEventListener("click", () => {
 // PSS-680 SysEx Hardware Controls
 document.getElementById("btnQuickMode99")?.addEventListener("click", () => {
     sendToHost("send_quick_sysex", { command: "mode_99" });
-    showToast("Sent Yamaha PSS-680 Mode 99 (F0 43 76 00 05 99 F7)");
+    showToast("PSS-680 Mode 99: Press [MIDI MODE] then [+] on keyboard until display shows 'c.99'.");
 });
 
 document.getElementById("btnQuickReqVoice")?.addEventListener("click", () => {

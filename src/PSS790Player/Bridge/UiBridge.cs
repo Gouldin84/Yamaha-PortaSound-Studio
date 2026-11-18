@@ -771,7 +771,14 @@ namespace PSS790Player.Bridge
                         if (!string.IsNullOrEmpty(cmd))
                         {
                             _sysexManager.SendQuickCommand(cmd);
-                            SendToJs("notification", new { message = $"Transmitted SysEx command: {cmd.ToUpperInvariant()}" });
+                            if (cmd.Equals("mode_99", StringComparison.OrdinalIgnoreCase) || cmd.Equals("pss680_mode_99", StringComparison.OrdinalIgnoreCase))
+                            {
+                                SendToJs("notification", new { message = "PSS-680 Sound Source Mode: Press [MIDI MODE] on keyboard, then press [+] so display shows 'c.99'. (Channels reset)" });
+                            }
+                            else
+                            {
+                                SendToJs("notification", new { message = $"Transmitted SysEx command: {cmd.ToUpperInvariant()}" });
+                            }
                         }
                         break;
                     case "open_sysex_folder":

@@ -3,6 +3,8 @@ bin/
 obj/
 dist/
 publish/
+publish_output/
+release_assets/
 release_output/
 TestResults/
 *.log

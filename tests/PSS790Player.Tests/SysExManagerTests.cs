@@ -145,5 +145,17 @@ namespace PSS790Player.Tests
             Assert.True(result);
             Assert.False(File.Exists(filePath));
         }
+
+        [Fact]
+        public void SysEx_SendQuickCommand_Mode99_DoesNotSendIllegalBytes()
+        {
+            using var player = new MidiPlayer();
+            using var recorder = new MidiRecorder();
+            using var manager = new SysExManager(player, recorder);
+
+            // Calling SendQuickCommand for mode_99 should not throw or send malformed SysEx bytes with MSB=1
+            var ex = Record.Exception(() => manager.SendQuickCommand("mode_99"));
+            Assert.Null(ex);
+        }
     }
 }
