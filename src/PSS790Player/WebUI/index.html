@@ -227,7 +227,7 @@
                     <div class="flex items-center space-x-1">
                         <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode: Enable checkboxes on all songs for batch moving or deleting" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
                         <button id="btnCollapseAll" title="Collapse / Expand All: Toggle expansion state for all folders in the library tree" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
-                        <span id="sidebarSongCount" title="Total songs indexed across General MIDI and PSS-790 library folders" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60 cursor-help">0 songs</span>
+                        <span id="sidebarSongCount" title="Total songs indexed across General MIDI, PSS-790, and PSS-680 library folders" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60 cursor-help">0 songs</span>
                         <button id="btnCloseSidebar" title="Collapse Sidebar (Ctrl+B): Hide library panel to maximize mixer and transport deck view" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -354,9 +354,9 @@
                     </div>
 
                     <!-- Smart Polyphony Guard Toggle -->
-                    <div class="flex items-center space-x-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing">
+                    <div id="polyphonyGuardContainer" class="flex items-center space-x-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800 shrink-0" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing">
                         <input type="checkbox" id="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" checked class="w-3.5 h-3.5 rounded text-cyan-500 focus:ring-0 focus:outline-none cursor-pointer accent-cyan-500">
-                        <label for="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">
+                        <label id="polyphonyGuardLabel" for="polyphonyGuardToggle" title="Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">
                             Smart Polyphony Guard
                         </label>
                         <span id="polyphonyGuardBadge" class="polyphony-guard-badge text-[9px] font-semibold px-1.5 py-0.5 rounded">Protected</span>
@@ -421,7 +421,7 @@
                                 <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
                             </label>
                             <span class="text-xs font-medium text-slate-300">MIDI Thru Forward</span>
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800/60 cursor-help" title="Loop Guard: Hardware safety circuit preventing MIDI feedback loops between PSS-790 OUT and IN">Loop Guard</span>
+                            <span id="loopGuardBadge" class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-950 text-amber-400 border border-amber-800/60 cursor-help" title="Loop Guard: Hardware safety circuit preventing MIDI feedback loops between PSS-790 OUT and IN">Loop Guard</span>
                         </div>
                     </div>
 
@@ -589,7 +589,7 @@
                             <span>🎵</span>
                             <span>Export to General MIDI (DAW/PC)</span>
                         </div>
-                        <p class="text-[11px] text-slate-400 group-hover:text-slate-300">Reverse remaps Ch 16 &rarr; 10 drums, Chart 1 notes, and Chart 2 voices to standard GM.</p>
+                        <p id="descSaveTakeGm" class="text-[11px] text-slate-400 group-hover:text-slate-300">Reverse remaps Ch 16 &rarr; 10 drums, Chart 1 notes, and Chart 2 voices to standard GM.</p>
                     </button>
 
                     <!-- Action 3: Send to Player -->
@@ -835,7 +835,7 @@
                         <div class="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
                             <div class="space-y-0.5">
                                 <label for="sysexPacketDelaySelect" class="font-semibold text-slate-300">Paced Packet Delay:</label>
-                                <div class="text-[10px] text-slate-400">Prevents PSS-790 &lt;bu full&gt; overflow</div>
+                                <div id="sysexPacketDelayDesc" class="text-[10px] text-slate-400">Prevents PSS-790 &lt;bu full&gt; overflow</div>
                             </div>
                             <select id="sysexPacketDelaySelect" title="Paced Packet Delay: Inter-packet delay interval to prevent hardware buffer overrun ('bu full' error on PSS-790 LCD)" class="bg-slate-800 text-xs font-semibold text-white px-2.5 py-1 rounded-lg border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer">
                                 <option value="15">15 ms (Fast)</option>
@@ -1101,9 +1101,9 @@
                         <div id="auditStuckPedalCount" class="text-sm font-bold text-amber-400">0</div>
                         <div class="text-[10px] text-slate-400">Stuck Pedals</div>
                     </div>
-                    <div class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Songs with note bursts exceeding 28 simultaneous voices protected by Polyphony Guard">
+                    <div id="auditPolyphonyCard" class="bg-slate-900/90 p-1.5 rounded-lg border border-slate-800" title="Songs with note bursts exceeding 28 simultaneous voices protected by Polyphony Guard">
                         <div id="auditPolyphonyCount" class="text-sm font-bold text-emerald-400">0</div>
-                        <div class="text-[10px] text-slate-400">&gt;28 Voices</div>
+                        <div id="auditPolyphonyLabel" class="text-[10px] text-slate-400">&gt;28 Voices</div>
                     </div>
                 </div>
                 <div id="auditFilesList" class="max-h-40 overflow-y-auto custom-scrollbar space-y-1 pt-1">
@@ -1152,11 +1152,11 @@
                 <div class="flex items-center justify-between text-xs">
                     <span class="text-slate-300 font-semibold flex items-center space-x-1.5">
                         <span>🎹</span>
-                        <span>Yamaha PSS-790 Polyphony Load</span>
+                        <span id="healthPolyphonyTitle">Yamaha PSS-790 Polyphony Load</span>
                     </span>
                     <span id="healthPeakVoices" title="Peak concurrent note count vs. 28-voice hardware limit of the Yamaha PSS-790" class="font-mono font-bold text-cyan-400 cursor-help">18 / 28 Voices</span>
                 </div>
-                <div class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5" title="Peak concurrent note count vs. 28-voice hardware limit of the Yamaha PSS-790">
+                <div id="healthPolyphonyBarContainer" class="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5" title="Peak concurrent note count vs. 28-voice hardware limit of the Yamaha PSS-790">
                     <div id="healthPolyphonyBar" class="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-300" style="width: 64%;"></div>
                 </div>
                 <div id="healthPolyphonyDescription" class="text-[11px] text-slate-400">

@@ -3230,27 +3230,44 @@ function openHealthDiagnosticsModal(health) {
 
     document.getElementById("healthModalSongTitle").textContent = state.currentFile || "Current Song";
 
+    const is680 = state.activeModel === "pss680";
+    const maxVoices = is680 ? 12 : 28;
+    const safeVoices = is680 ? 10 : 24;
+    const modelName = is680 ? "Yamaha PSS-680" : "Yamaha PSS-790";
+
+    const titleEl = document.getElementById("healthPolyphonyTitle");
+    if (titleEl) titleEl.textContent = `${modelName} Polyphony Load`;
+
     const peak = health.peakPolyphony || 0;
     const peakVoicesEl = document.getElementById("healthPeakVoices");
     const barEl = document.getElementById("healthPolyphonyBar");
+    const barContainer = document.getElementById("healthPolyphonyBarContainer");
     const descEl = document.getElementById("healthPolyphonyDescription");
 
-    peakVoicesEl.textContent = `${peak} / 28 Voices`;
-    const percent = Math.min(100, Math.round((peak / 28) * 100));
-    barEl.style.width = `${percent}%`;
+    const voiceTitle = `Peak concurrent note count vs. ${maxVoices}-voice hardware limit of the ${modelName}${is680 ? " (Mode 99)" : ""}`;
+    if (peakVoicesEl) {
+        peakVoicesEl.textContent = `${peak} / ${maxVoices} Voices`;
+        peakVoicesEl.title = voiceTitle;
+    }
+    if (barContainer) {
+        barContainer.title = voiceTitle;
+    }
 
-    if (peak <= 24) {
-        barEl.className = "bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-300";
-        peakVoicesEl.className = "font-mono font-bold text-emerald-400";
-        descEl.textContent = "Safe peak polyphony. No hardware voice-stealing will occur on Yamaha PSS-790.";
-    } else if (peak <= 28) {
-        barEl.className = "bg-gradient-to-r from-cyan-500 to-amber-500 h-full rounded-full transition-all duration-300";
-        peakVoicesEl.className = "font-mono font-bold text-amber-400";
-        descEl.textContent = "Moderate polyphony near the 28-voice hardware limit. Smooth playback guaranteed.";
+    const percent = Math.min(100, Math.round((peak / maxVoices) * 100));
+    if (barEl) barEl.style.width = `${percent}%`;
+
+    if (peak <= safeVoices) {
+        if (barEl) barEl.className = "bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-300";
+        if (peakVoicesEl) peakVoicesEl.className = "font-mono font-bold text-emerald-400";
+        if (descEl) descEl.textContent = `Safe peak polyphony. No hardware voice-stealing will occur on ${modelName}${is680 ? " (Mode 99)" : ""}.`;
+    } else if (peak <= maxVoices) {
+        if (barEl) barEl.className = "bg-gradient-to-r from-cyan-500 to-amber-500 h-full rounded-full transition-all duration-300";
+        if (peakVoicesEl) peakVoicesEl.className = "font-mono font-bold text-amber-400";
+        if (descEl) descEl.textContent = `Moderate polyphony near the ${maxVoices}-voice hardware limit. Smooth playback guaranteed.`;
     } else {
-        barEl.className = "bg-gradient-to-r from-amber-500 to-rose-500 h-full rounded-full transition-all duration-300";
-        peakVoicesEl.className = "font-mono font-bold text-rose-400";
-        descEl.textContent = `High polyphony (${peak} voices). Polyphony Guard & hardware voice-stealing active to preserve melody.`;
+        if (barEl) barEl.className = "bg-gradient-to-r from-amber-500 to-rose-500 h-full rounded-full transition-all duration-300";
+        if (peakVoicesEl) peakVoicesEl.className = "font-mono font-bold text-rose-400";
+        if (descEl) descEl.textContent = `High polyphony (${peak} voices). ${is680 ? "Mode 99 " : ""}Polyphony Guard active to preserve lead melody & bass.`;
     }
 
     const listEl = document.getElementById("healthProtectionsList");
@@ -3842,13 +3859,96 @@ function applyActiveModel(modelKey, syncHost = true) {
     const mixerSubtitle = document.getElementById("mixerSubtitle");
     if (mixerSubtitle) mixerSubtitle.innerHTML = is680 ? "Live Voice Overrides (00-99 FM Presets) &bull; Channel 16 Percussion (32 Hand Percussion Instruments)" : "Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)";
 
-    // Update Polyphony Guard tooltip
+    // Update Polyphony Guard tooltip across container, toggle checkbox, and label
+    const polyGuardTooltip = is680
+        ? "Smart Polyphony Guard: Restricts concurrent voices to 12 (Sound Source Mode 99), dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing"
+        : "Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing";
+
+    const polyContainer = document.getElementById("polyphonyGuardContainer");
     const polyToggle = document.getElementById("polyphonyGuardToggle");
-    const polyLabel = polyToggle?.closest("div");
-    if (polyLabel) {
-        polyLabel.title = is680
-            ? "Smart Polyphony Guard: Restricts concurrent voices to 12 (Sound Source Mode 99), dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing"
-            : "Smart Polyphony Guard: Restricts concurrent voices to 28, dynamically dropping quiet background notes to protect lead melody and bass from hardware voice-stealing";
+    const polyLabel = document.getElementById("polyphonyGuardLabel");
+    if (polyContainer) polyContainer.title = polyGuardTooltip;
+    if (polyToggle) polyToggle.title = polyGuardTooltip;
+    if (polyLabel) polyLabel.title = polyGuardTooltip;
+
+    // Update Player Workspace Tab tooltip
+    const tabPlayer = document.getElementById("tabBtnPlayer");
+    if (tabPlayer) {
+        tabPlayer.title = is680
+            ? "Player Workspace: Load, preview, and play back MIDI files with real-time Yamaha PSS-680 remapping"
+            : "Player Workspace: Load, preview, and play back MIDI files with real-time Yamaha PSS-790 remapping";
+    }
+
+    // Update Export Active Song button tooltip
+    const btnSaveRemapped = document.getElementById("btnSaveRemapped");
+    if (btnSaveRemapped) {
+        btnSaveRemapped.title = is680
+            ? "Export Remapped MIDI: Save active song converted for native Yamaha PSS-680 playback"
+            : "Export Remapped MIDI: Save active song converted for native Yamaha PSS-790 playback";
+    }
+
+    // Update Studio Workspace GM Export button and description
+    const btnSaveTakeGm = document.getElementById("btnSaveTakeGm");
+    if (btnSaveTakeGm) {
+        btnSaveTakeGm.title = is680
+            ? "Export General MIDI: Reverse-remaps Channel 16 drums to Channel 10 and PSS-680 FM presets to GM programs for DAW or PC use"
+            : "Export General MIDI: Reverse-remaps Channel 16 drums to Channel 10 and PSS-790 voices to GM programs for DAW or PC use";
+    }
+    const descSaveTakeGm = document.getElementById("descSaveTakeGm");
+    if (descSaveTakeGm) {
+        descSaveTakeGm.innerHTML = is680
+            ? "Reverse remaps Ch 16 &rarr; 10 drums, 32 Hand Percussion notes, and FM presets (00-99) to standard GM."
+            : "Reverse remaps Ch 16 &rarr; 10 drums, Chart 1 notes, and Chart 2 voices to standard GM.";
+    }
+
+    // Update Loop Guard badge tooltip
+    const loopGuard = document.getElementById("loopGuardBadge");
+    if (loopGuard) {
+        loopGuard.title = is680
+            ? "Loop Guard: Hardware safety circuit preventing MIDI feedback loops between PSS-680 OUT and IN"
+            : "Loop Guard: Hardware safety circuit preventing MIDI feedback loops between PSS-790 OUT and IN";
+    }
+
+    // Update SysEx Vault tooltips & controls
+    const btnCapture = document.getElementById("btnStartSysexCapture");
+    if (btnCapture) {
+        btnCapture.title = is680
+            ? "Listen for Bulk Dump: Arm listener to capture internal memory transmitted from the PSS-680 (FM voices, melody, chord, or drum patterns)"
+            : "Listen for Bulk Dump: Arm listener to capture internal memory transmitted from the PSS-790 MEMORY BULK DUMP button";
+    }
+
+    const delayDesc = document.getElementById("sysexPacketDelayDesc");
+    if (delayDesc) {
+        delayDesc.textContent = is680
+            ? "Prevents PSS-680 serial buffer overflow"
+            : "Prevents PSS-790 <bu full> overflow";
+    }
+    const delaySelect = document.getElementById("sysexPacketDelaySelect");
+    if (delaySelect) {
+        delaySelect.title = is680
+            ? "Paced Packet Delay: Inter-packet delay interval to prevent hardware buffer overrun on PSS-680 (31,250 baud buffer)"
+            : "Paced Packet Delay: Inter-packet delay interval to prevent hardware buffer overrun ('bu full' error on PSS-790 LCD)";
+    }
+
+    const btnTransmit = document.getElementById("btnTransmitSysex");
+    if (btnTransmit) {
+        btnTransmit.title = is680
+            ? "Transmit SysEx: Send the selected bulk dump snapshot back into the PSS-680 to restore its memory banks"
+            : "Transmit SysEx: Send the selected bulk dump snapshot back into the PSS-790 to restore its memory banks";
+        const btnTransmitSpan = btnTransmit.querySelector("span");
+        if (btnTransmitSpan) btnTransmitSpan.textContent = is680 ? "Transmit to PSS-680" : "Transmit to PSS-790";
+    }
+
+    // Update Batch Remapper Health Audit Polyphony Card tooltip & label
+    const auditCard = document.getElementById("auditPolyphonyCard");
+    if (auditCard) {
+        auditCard.title = is680
+            ? "Songs with note bursts exceeding 12 simultaneous voices protected by Polyphony Guard"
+            : "Songs with note bursts exceeding 28 simultaneous voices protected by Polyphony Guard";
+    }
+    const auditLabel = document.getElementById("auditPolyphonyLabel");
+    if (auditLabel) {
+        auditLabel.textContent = is680 ? ">12 Voices" : ">28 Voices";
     }
 
     // Re-render library so category title and tree immediately switch to PSS-680 Ready vs PSS-790 Ready
