@@ -448,7 +448,7 @@ namespace PSS790Player.Tests
             // Channel 9 (Ch 10) and Channel 15 notes must both end up on Channel 15 as PSS-790 Chart 1 drums
             var ch15Notes = events.OfType<NoteOnEvent>().Where(n => n.Channel == (FourBitNumber)15).Select(n => (byte)n.NoteNumber).ToList();
             Assert.Contains((byte)45, ch15Notes); // GM 36 -> PSS 45 (BASS DRUM HI)
-            Assert.Contains((byte)38, ch15Notes); // GM 40 -> PSS 38 (SYNTH SNARE)
+            Assert.Contains((byte)49, ch15Notes); // GM 40 -> PSS 49 (SNARE HI)
             Assert.Contains((byte)44, ch15Notes); // GM 35 -> PSS 44 (BASS DRUM LO)
 
             // Channel 9 should have zero notes
@@ -459,11 +459,19 @@ namespace PSS790Player.Tests
         [Fact]
         public void Remap_OutOfRangeMelodicNotes_FoldsOctavesWithinPhysicalMultisampleRange()
         {
-            Assert.Equal((byte)41, Remapper.ClampMelodicNote(29)); // F0 -> F1 (36-96 range)
-            Assert.Equal((byte)46, Remapper.ClampMelodicNote(34)); // Bb0 -> Bb1
-            Assert.Equal((byte)91, Remapper.ClampMelodicNote(115)); // G8 -> G6
-            Assert.Equal((byte)37, Remapper.ClampMelodicNote(1)); // Note 1 -> Note 37
+            // Floor is Note 24 (C1), preserving all 4-string (E1=28) and 5-string (B0/C1) bass notes
+            Assert.Equal((byte)28, Remapper.ClampMelodicNote(28)); // E1 bass note stays 28
+            Assert.Equal((byte)29, Remapper.ClampMelodicNote(29)); // F1 stays 29
+            Assert.Equal((byte)34, Remapper.ClampMelodicNote(34)); // Bb1 stays 34
             Assert.Equal((byte)60, Remapper.ClampMelodicNote(60)); // C4 stays 60
+            Assert.Equal((byte)108, Remapper.ClampMelodicNote(108)); // C8 high note stays 108
+
+            // Outliers < 24 fold up by octaves
+            Assert.Equal((byte)25, Remapper.ClampMelodicNote(1));  // Note 1 -> Note 25 (>= 24)
+            Assert.Equal((byte)32, Remapper.ClampMelodicNote(20)); // Note 20 -> Note 32 (>= 24)
+
+            // Outliers > 108 fold down by octaves
+            Assert.Equal((byte)103, Remapper.ClampMelodicNote(115)); // Note 115 -> Note 103 (<= 108)
         }
 
         [Fact]
@@ -595,8 +603,54 @@ namespace PSS790Player.Tests
         {
             // For Piano (GM 0), note 92 (E6+) should fold down by 1 octave to 80
             Assert.Equal((byte)80, Remapper.ClampMelodicNote(92, 0));
-            // For Flute / Synth (GM 80), note 92 stays 92
+            // For Flute / Synth (GM 80), note 92 stays 92, and note 108 stays 108
             Assert.Equal((byte)92, Remapper.ClampMelodicNote(92, 80));
+            Assert.Equal((byte)108, Remapper.ClampMelodicNote(108, 80));
+            // For Flute / Synth, note 115 folds down to 103 (<= 108)
+            Assert.Equal((byte)103, Remapper.ClampMelodicNote(115, 80));
+        }
+
+        [Fact]
+        public void Remap_DoomE1M1_BasslineAndDrumsPreserved()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            
+            // Channel 3 (index 2): Pick Bass (GM 34) playing E1M1 riff (notes 28, 33, 35, 37, 40)
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)34) { Channel = (FourBitNumber)2 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)28, (SevenBitNumber)100) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)28, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 100 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)40, (SevenBitNumber)100) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)40, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 100 });
+
+            // Channel 10 (index 9): Drums with GM 40 (Electric Snare) and GM 51 (Ride Cymbal 1)
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)40, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)40, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 100 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)51, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)51, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 100 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)53, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 });
+            tr.Events.Add(new NoteOffEvent((SevenBitNumber)53, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 100 });
+
+            midi.Chunks.Add(tr);
+
+            var remapped = Remapper.Remap(midi);
+            var remappedNotes = remapped.GetNotes().ToList();
+
+            // Bass notes on Channel 3 should retain exact pitches 28 and 40 (no folding to unison!)
+            var ch2Notes = remappedNotes.Where(n => n.Channel == 2).ToList();
+            Assert.Equal(2, ch2Notes.Count);
+            Assert.Equal((byte)28, (byte)ch2Notes[0].NoteNumber);
+            Assert.Equal((byte)40, (byte)ch2Notes[1].NoteNumber);
+
+            // Drum notes on Channel 16:
+            var ch15Notes = remappedNotes.Where(n => n.Channel == 15).ToList();
+            Assert.Equal(3, ch15Notes.Count);
+            // GM 40 -> PSS-790 Note 49 (SNARE HI)
+            Assert.Equal((byte)49, (byte)ch15Notes[0].NoteNumber);
+            // GM 51 -> PSS-790 Note 63 (RIDE CYMBAL EDGE)
+            Assert.Equal((byte)63, (byte)ch15Notes[1].NoteNumber);
+            // GM 53 -> PSS-790 Note 62 (RIDE CYMBAL CUP)
+            Assert.Equal((byte)62, (byte)ch15Notes[2].NoteNumber);
         }
     }
 }

@@ -200,7 +200,7 @@ namespace PSS790Player.Core
             { 37, 46 }, // Side Stick -> RIM SHOT 1
             { 38, 49 }, // Acoustic Snare -> SNARE HI
             { 39, 54 }, // Hand Clap -> HAND CLAPS
-            { 40, 38 }, // Electric Snare -> SYNTH SNARE
+            { 40, 49 }, // Electric Snare -> SNARE HI (rock backbeat punch)
             { 41, 47 }, // Low Floor Tom -> TOM BASS
             { 42, 57 }, // Closed Hi-Hat -> HI HAT CLOSED
             { 43, 48 }, // High Floor Tom -> TOM LO
@@ -211,7 +211,7 @@ namespace PSS790Player.Core
             { 48, 50 }, // Hi-Mid Tom -> TOM MID
             { 49, 60 }, // Crash Cymbal 1 -> CRASH CYMBAL
             { 50, 53 }, // High Tom -> TOM HI
-            { 51, 62 }, // Ride Cymbal 1 -> RIDE CYMBAL CUP
+            { 51, 63 }, // Ride Cymbal 1 -> RIDE CYMBAL EDGE
             { 52, 60 }, // Chinese Cymbal -> CRASH CYMBAL
             { 53, 62 }, // Ride Bell -> RIDE CYMBAL CUP
             { 54, 71 }, // Tambourine -> TAMBOURINE

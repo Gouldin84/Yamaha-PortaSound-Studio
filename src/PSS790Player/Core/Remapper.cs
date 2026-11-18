@@ -598,16 +598,38 @@ namespace PSS790Player.Core
                    (gmProgram >= 88 && gmProgram <= 103);
         }
 
+        public static bool IsAliasingSensitiveAcousticVoice(byte gmProgram)
+        {
+            // Acoustic piano (GM 0-7), Organs (GM 16-23), and Strings/Choir/Ensemble (GM 40-55)
+            // exhibit harsh FM/AWM multisample aliasing above Note 88 (E6).
+            // Chromatic percussion/bells (GM 8-15), Woodwinds/Piccolos (GM 72-79), and Synth Leads (GM 80-87)
+            // naturally play up to Note 108 (C8) and must not be restricted to 88.
+            return (gmProgram >= 0 && gmProgram <= 7) ||
+                   (gmProgram >= 16 && gmProgram <= 23) ||
+                   (gmProgram >= 40 && gmProgram <= 55);
+        }
+
+        public static bool IsBassInstrument(int gmProg)
+        {
+            // GM 32-39: Basses, 43: Contrabass, 58: Tuba
+            return (gmProg >= 32 && gmProg <= 39) || gmProg == 43 || gmProg == 58;
+        }
+
         public static byte ClampMelodicNote(byte note, int gmProg)
         {
-            // PSS-790 keyboard and tone generator physical multisample range: C2 (36) to C7 (96)
-            // Acoustic piano, strings, and organ voices above note 88 (E6) exhibit harsh FM multisample aliasing
-            bool isAcoustic = gmProg >= 0 && IsAcousticOrKeyboardInstrument((byte)gmProg);
-            byte maxNote = isAcoustic ? (byte)88 : (byte)96;
+            // PSS-790 tone generator natively receives MIDI notes 12 to 108 (C0 to C8).
+            // Acoustic piano, organ, and strings voices above Note 88 (E6) exhibit harsh multisample aliasing.
+            // All other voices (synth leads, brass, bells, piccolos, flutes, guitars, bass) play cleanly up to Note 108 (C8).
+            bool isSensitive = gmProg >= 0 && IsAliasingSensitiveAcousticVoice((byte)gmProg);
+            byte maxNote = isSensitive ? (byte)88 : (byte)108;
 
-            while (note < 36) note += 12;
+            // Bass instruments and keyboards play naturally in Octave 1 (C1=24 to B1=35).
+            // Minimum note threshold is Note 24 (C1), preserving all 4-string (E1=28) and 5-string (B0/C1) bass notes.
+            byte minNote = 24;
+
+            while (note < minNote) note += 12;
             while (note > maxNote) note -= 12;
-            return Math.Clamp(note, (byte)36, maxNote);
+            return Math.Clamp(note, minNote, maxNote);
         }
 
         public static byte ClampMelodicNote(byte note) => ClampMelodicNote(note, -1);

@@ -67,8 +67,11 @@ The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polypho
   | `Ctrl + B` | Toggle quick-pick sidebar |
 - **Automatic Channel Routing**: Shifts GM percussion from Channel 10 to Channel 16 (PSS-790's fixed rhythm channel) and safely moves any melodic data on Channel 16 to free melodic channels.
 - **Percussion Note Translation & Extended Fallbacks**:
-  - Converts standard GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1).
+  - Converts standard GM drum notes (35–81) to PSS-790 percussion notes (36–85, Chart 1) with rock/metal snare punch (GM 40 Electric Snare &rarr; Note 49 `SNARE HI`) and dual-zone ride cymbal wash/bell separation (GM 51 &rarr; Note 63 `RIDE CYMBAL EDGE`, GM 53 &rarr; Note 62 `RIDE CYMBAL CUP`).
   - Musical fallbacks for extended Roland GS / GM drum notes outside the standard range (slaps &rarr; rimshots, sticks &rarr; woodblocks, shakers &rarr; maracas, bell trees &rarr; triangles, surdos &rarr; bass drums).
+- **Full-Register Melodic Range & Bassline Preservation**:
+  - Preserves full bass guitar ($E_1=28$ to $B_1=35$) and low keyboard registers down to Note 24 ($C_1$), eliminating artificial octave folding in basslines.
+  - Expands the high register up to Note 108 ($C_8$) for flutes, piccolos, glockenspiels, and synth leads, with intelligent Note 88 ($E_6$) sweet-spot protection for acoustic piano/strings to prevent vintage 12-bit AWM multisample aliasing.
 - **Non-Linear Voice Translation**: Converts GM Program Change events to the specific non-linear MIDI program numbers required by the PSS-790 (Chart 2) to trigger appropriate voices (00–99).
 - **Dynamic RPN 0,0 Pitch Bend Sensitivity & Scaling**:
   - Pre-scans controller streams for Registered Parameter Number (RPN 0,0) pitch bend range sensitivity declarations.
