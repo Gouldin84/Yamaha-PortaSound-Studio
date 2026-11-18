@@ -343,6 +343,10 @@ namespace PSS790Player.Bridge
                         var selectedModel = root.GetProperty("model").GetString() ?? "pss790";
                         _activeModel = selectedModel;
                         _options.TargetModel = selectedModel;
+                        _player.ActiveModel = selectedModel;
+                        bool modelIs680 = string.Equals(selectedModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                        _options.NormalizeAwmVelocities = !modelIs680;
+                        _options.DefaultReverbBoost = !modelIs680;
                         if (_currentFilePath != null && _loadedOriginalMidi != null)
                         {
                             _options.ChannelVoiceOverrides.Clear();
@@ -386,7 +390,7 @@ namespace PSS790Player.Bridge
                         }
                         if (voice.HasValue)
                         {
-                            _player.SendVoiceOverride(ch, voice.Value);
+                            _player.SendVoiceOverride(ch, voice.Value, _activeModel);
                         }
                         ReapplyRemapping(preservePosition: true);
                         break;

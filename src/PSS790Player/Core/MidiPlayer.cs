@@ -48,6 +48,7 @@ namespace PSS790Player.Core
         public TimeSpan TotalDuration => _currentFile?.GetDuration<MetricTimeSpan>() ?? TimeSpan.Zero;
         public TimeSpan CurrentPosition => _playback?.GetCurrentTime<MetricTimeSpan>() ?? TimeSpan.Zero;
         public string? CurrentOutputDeviceName { get; private set; }
+        public string ActiveModel { get; set; } = "pss790";
 
         public MidiPlayer()
         {
@@ -231,7 +232,10 @@ namespace PSS790Player.Core
                         scaled = Math.Clamp(scaled, 0, 127);
 
                         _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled) { Channel = fourBitCh });
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)56) { Channel = fourBitCh });
+                        if (!string.Equals(ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)56) { Channel = fourBitCh });
+                        }
                         _outputDevice.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
                     }
                     catch { }
@@ -403,26 +407,40 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SendVoiceOverride(int channel, int voiceNumber)
+        public void SendVoiceOverride(int channel, int voiceNumber, string? model = null)
         {
             lock (_lock)
             {
                 if (_outputDevice == null || channel < 0 || channel > 14) return; // Ch 15/16 is drum, ignores PC
 
-                if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
+                var effectiveModel = model ?? ActiveModel;
+                bool is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+
+                byte programNumber;
+                if (is680)
                 {
-                    var pc = new ProgramChangeEvent((SevenBitNumber)voiceInfo.MidiProgram)
-                    {
-                        Channel = (FourBitNumber)channel
-                    };
-                    try
-                    {
-                        _outputDevice.SendEvent(pc);
-                    }
-                    catch
-                    {
-                        HandleDeviceDisconnected();
-                    }
+                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 99);
+                }
+                else if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
+                {
+                    programNumber = voiceInfo.MidiProgram;
+                }
+                else
+                {
+                    return;
+                }
+
+                var pc = new ProgramChangeEvent((SevenBitNumber)programNumber)
+                {
+                    Channel = (FourBitNumber)channel
+                };
+                try
+                {
+                    _outputDevice.SendEvent(pc);
+                }
+                catch
+                {
+                    HandleDeviceDisconnected();
                 }
             }
         }

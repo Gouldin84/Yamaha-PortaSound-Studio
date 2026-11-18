@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
+using Melanchall.DryWetMidi.Multimedia;
 using PSS790Player.Core;
 using Xunit;
 
@@ -495,6 +496,125 @@ namespace PSS790Player.Tests
                     try { Directory.Delete(tempRoot, true); } catch { }
                 }
             }
+        }
+
+        private class MockOutputDevice : IOutputDevice
+        {
+            public List<MidiEvent> SentEvents { get; } = new();
+            public event EventHandler<MidiEventSentEventArgs>? EventSent;
+            public void SendEvent(MidiEvent midiEvent) { SentEvents.Add(midiEvent); EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent)); }
+            public void PrepareForEventsSending() { }
+            public void Dispose() { }
+        }
+
+        [Fact]
+        public void Remap_Pss680_AllowsFullNoteRangeUpTo108_ForAcousticPianosAndStrings()
+        {
+            // GM Program 0 (Acoustic Grand Piano) with notes 88 (E6), 92 (G#6), 100 (E7), 108 (C8)
+            var track = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)88, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)92, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 100 },
+                new NoteOnEvent((SevenBitNumber)100, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 100 },
+                new NoteOnEvent((SevenBitNumber)108, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 100 }
+            );
+            var midi = new MidiFile(track);
+
+            // Remap for PSS-680 (FM synthesis has no multisample aliasing, plays all notes up to 108)
+            var opt680 = new RemapperOptions { TargetModel = "pss680", ForceRemap = true };
+            var remapped680 = Remapper.Remap(midi, opt680);
+            var notes680 = remapped680.GetTimedEvents().Select(te => te.Event).OfType<NoteOnEvent>().ToList();
+
+            Assert.Equal(88, (byte)notes680[0].NoteNumber);
+            Assert.Equal(92, (byte)notes680[1].NoteNumber);
+            Assert.Equal(100, (byte)notes680[2].NoteNumber);
+            Assert.Equal(108, (byte)notes680[3].NoteNumber);
+
+            // Remap for PSS-790 (AWM engine has multisample aliasing above 88, folds notes down)
+            var opt790 = new RemapperOptions { TargetModel = "pss790", ForceRemap = true };
+            var remapped790 = Remapper.Remap(midi, opt790);
+            var notes790 = remapped790.GetTimedEvents().Select(te => te.Event).OfType<NoteOnEvent>().ToList();
+
+            Assert.Equal(88, (byte)notes790[0].NoteNumber);
+            Assert.Equal(80, (byte)notes790[1].NoteNumber); // 92 folded down to 80
+            Assert.Equal(88, (byte)notes790[2].NoteNumber); // 100 folded down to 88
+            Assert.Equal(84, (byte)notes790[3].NoteNumber); // 108 folded down to 84
+        }
+
+        [Fact]
+        public void SendVoiceOverride_Pss680_SendsDirectSequentialProgramChange()
+        {
+            using var player = new MidiPlayer();
+            var mockDev = new MockOutputDevice();
+            player.SetOutputDevice(mockDev);
+
+            // Test PSS-680 voice override: Voice 10 (Violin 1) -> sends Program 10 directly
+            player.SendVoiceOverride(0, 10, "pss680");
+            var pc680 = mockDev.SentEvents.OfType<ProgramChangeEvent>().Last();
+            Assert.Equal((SevenBitNumber)10, pc680.ProgramNumber);
+
+            // Test PSS-790 voice override: Voice 10 (JAZZ ORGAN 1) -> sends Chart 2 Program 1
+            player.SendVoiceOverride(0, 10, "pss790");
+            var pc790 = mockDev.SentEvents.OfType<ProgramChangeEvent>().Last();
+            Assert.Equal((SevenBitNumber)1, pc790.ProgramNumber);
+        }
+
+        [Fact]
+        public void ReverseRemap_Pss680_RestoresScaledPitchBends()
+        {
+            // Pitch bend scaled down by 1/6: delta = 1000 / 6 = 167 -> pitch = 8192 + 167 = 8359
+            var track = new TrackChunk(
+                new TextEvent(Remapper.Pss680MarkerText) { DeltaTime = 0 },
+                new ProgramChangeEvent((SevenBitNumber)3) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new PitchBendEvent((ushort)8359) { Channel = (FourBitNumber)0, DeltaTime = 0 }
+            );
+            var pss680Midi = new MidiFile(track);
+
+            var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pss680Midi, "pss680");
+            var pb = gmMidi.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
+
+            // (8359 - 8192) * 6.0 = 167 * 6 = 1002 -> 8192 + 1002 = 9194
+            Assert.True(pb.PitchValue > 9100 && pb.PitchValue < 9250);
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss680_CullsLatinHandPercussionFirst()
+        {
+            // Create a track with 12 melodic notes plus 1 PSS-680 incidental percussion (note 67 Bongo Low on Channel 15)
+            var events = new List<MidiEvent>();
+            for (int i = 0; i < 12; i++)
+            {
+                events.Add(new NoteOnEvent((SevenBitNumber)(60 + i), (SevenBitNumber)80) { Channel = (FourBitNumber)(i % 15), DeltaTime = 0 });
+            }
+            // Add PSS-680 Bongo Low (Pad C1, Note 67) on Channel 15 with low velocity
+            events.Add(new NoteOnEvent((SevenBitNumber)67, (SevenBitNumber)50) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+
+            // Add note offs at time 480
+            for (int i = 0; i < 12; i++)
+            {
+                events.Add(new NoteOffEvent((SevenBitNumber)(60 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)(i % 15), DeltaTime = i == 0 ? 480 : 0 });
+            }
+            events.Add(new NoteOffEvent((SevenBitNumber)67, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+
+            var midi = new MidiFile(new TrackChunk(events));
+
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 12, model: "pss680");
+            var optimized = optimizer.Optimize(midi);
+
+            var survivingNotes = optimized.GetNotes().ToList();
+            // Total was 13 notes at same time, exceeding threshold 12.
+            // Bongo Low (67 on Channel 15) should be culled, preserving all 12 melodic notes.
+            Assert.Equal(12, survivingNotes.Count);
+            Assert.DoesNotContain(survivingNotes, n => n.Channel == (FourBitNumber)15 && (byte)n.NoteNumber == 67);
+        }
+
+        [Fact]
+        public void MidiPlayer_ActiveModel_ConfiguresModelCorrectly()
+        {
+            using var player = new MidiPlayer();
+            Assert.Equal("pss790", player.ActiveModel);
+            player.ActiveModel = "pss680";
+            Assert.Equal("pss680", player.ActiveModel);
         }
     }
 }

@@ -38,6 +38,29 @@ namespace PSS790Player.Core
 
         public const int PolyphonyMode99 = 12;
 
+        // PSS-680 Incidental Hand Percussion note set (eligible for culling during polyphony congestion)
+        public static readonly HashSet<byte> IncidentalDrums = new()
+        {
+            54, // Hand Clap (Pad D7)
+            55, // Cowbell (Pad D5)
+            56, // Cabasa (Pad D6)
+            58, // Brush Hit (Pad A7)
+            61, // Splash Cymbal (Pad C8)
+            66, // Conga Hi Alt
+            67, // Bongo Low (Pad C1)
+            68, // Bongo Hi (Pad C2)
+            69, // Timbale Low (Pad D3)
+            70, // Timbale Hi (Pad D4)
+            71, // Tambourine (Pad C7)
+            73, // Cowbell Alt
+            74, // Agogo Low (Pad C3)
+            75, // Agogo Hi (Pad C4)
+            76, // Cuica Low (Pad C5)
+            77, // Cuica Hi (Pad C6)
+            78, // Whistle (Pad D8)
+            79  // Brush (Pad A6)
+        };
+
         // 100 Preset Voices (#00 - #99) directly from PSS-680 Owner's Manual p.40
         public static readonly ReadOnlyDictionary<int, Pss680VoiceInfo> Voices = new(new Dictionary<int, Pss680VoiceInfo>
         {

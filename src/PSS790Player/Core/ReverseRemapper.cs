@@ -210,6 +210,13 @@ namespace PSS790Player.Core
                                     pc.ProgramNumber = (SevenBitNumber)gmProg;
                                 }
                             }
+                            else if (evt is PitchBendEvent pb)
+                            {
+                                int centered = pb.PitchValue - 8192;
+                                int scaled = (int)Math.Round(centered * 6.0);
+                                int finalValue = Math.Clamp(8192 + scaled, 0, 16383);
+                                pb.PitchValue = (ushort)finalValue;
+                            }
                         }
                     }
                 }

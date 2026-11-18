@@ -11,11 +11,13 @@ namespace PSS790Player.Core
     {
         private readonly bool _enabled;
         private readonly int _threshold;
+        private readonly string _model;
 
-        public PolyphonyOptimizer(bool enabled = true, int threshold = Constants.PolyphonyGuardThreshold)
+        public PolyphonyOptimizer(bool enabled = true, int threshold = Constants.PolyphonyGuardThreshold, string model = "pss790")
         {
             _enabled = enabled;
             _threshold = threshold;
+            _model = model;
         }
 
         public MidiFile Optimize(MidiFile midiFile)
@@ -121,8 +123,11 @@ namespace PSS790Player.Core
                 while (activeNotes.Count >= _threshold)
                 {
                     // Cull incidental low-priority percussion on Channel 15 first (triangles, cowbells, maracas, etc.)
+                    bool is680 = string.Equals(_model, "pss680", StringComparison.OrdinalIgnoreCase);
+                    var incidentalSet = is680 ? Pss680Constants.IncidentalDrums : Constants.IncidentalDrums;
+
                     var incidentalDrum = activeNotes
-                        .Where(n => n.Channel == (FourBitNumber)15 && Constants.IncidentalDrums.Contains((byte)n.NoteNumber))
+                        .Where(n => n.Channel == (FourBitNumber)15 && incidentalSet.Contains((byte)n.NoteNumber))
                         .OrderBy(n => n.Velocity)
                         .FirstOrDefault();
 
