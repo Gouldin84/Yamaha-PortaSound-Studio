@@ -375,12 +375,23 @@
 
             <!-- 16-Channel Mixer Rack (Compact Height) -->
             <section class="space-y-1.5">
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between flex-wrap gap-2">
                     <div>
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">16-Channel Mixer & Voice Selector</h3>
                         <p id="mixerSubtitle" class="text-[10px] text-slate-500">Live Voice Overrides (Chart 2) &bull; Channel 16 Percussion (Chart 1)</p>
                     </div>
-                    <button id="btnResetOverrides" title="Reset Overrides: Restore all 16 channels back to their default auto-mapped General MIDI voices" class="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
+                    <div class="flex items-center space-x-2">
+                        <!-- Vector Quad Link (PSS-790 Only) -->
+                        <div id="vectorQuadControls" class="hidden flex items-center space-x-1.5 bg-slate-900/90 border border-indigo-800/50 rounded-lg px-2 py-0.5 shadow-sm">
+                            <span class="text-[10px] font-bold text-indigo-400" title="Vector Quad Link: Layers Channel 1 notes across Channels 1-4 with real-time vector volume weights">🕹️ Vector Quad (Ch 1-4):</span>
+                            <button id="btnToggleVectorQuad" type="button" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition" title="Toggle Vector Quad-Channel Playback Mode">OFF</button>
+                            <select id="selMixerVectorPreset" class="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-indigo-200 focus:outline-none focus:border-indigo-400 hidden cursor-pointer" title="Select Vector Preset to apply across Channels 1-4">
+                                <option value="">Select Vector Preset...</option>
+                            </select>
+                        </div>
+
+                        <button id="btnResetOverrides" title="Reset Overrides: Restore all 16 channels back to their default auto-mapped General MIDI voices" class="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition"><svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg><span>Reset to GM Voices</span></button>
+                    </div>
                 </div>
 
                 <!-- Mixer Grid (16 Channel Strips) -->

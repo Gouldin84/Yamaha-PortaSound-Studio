@@ -422,7 +422,7 @@ namespace PSS790Player.Core
                                 {
                                     if (is680)
                                     {
-                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 99);
+                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 107);
                                     }
                                     else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
                                     {
@@ -603,7 +603,7 @@ namespace PSS790Player.Core
                         {
                             if (is680)
                             {
-                                pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 99);
+                                pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 107);
                             }
                             else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
                             {

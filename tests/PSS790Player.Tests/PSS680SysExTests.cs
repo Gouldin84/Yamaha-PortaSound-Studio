@@ -278,13 +278,14 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Pss680_VoiceAndStyleTables_Contain100Entries()
+        public void Pss680_VoiceAndStyleTables_ContainExpectedEntries()
         {
-            Assert.Equal(100, Pss680Constants.Voices.Count);
+            Assert.Equal(108, Pss680Constants.Voices.Count);
             Assert.Equal(100, Pss680Constants.Styles.Count);
 
             Assert.Equal("Synth Brass", Pss680Constants.Voices[0].Name);
             Assert.Equal("Sine Wave", Pss680Constants.Voices[99].Name);
+            Assert.Equal("User FM Synth Bank 1", Pss680Constants.Voices[100].Name);
 
             Assert.Equal("Rhythm & Blues 1", Pss680Constants.Styles[0].Name);
             Assert.Equal("Barbershop Quartet", Pss680Constants.Styles[99].Name);

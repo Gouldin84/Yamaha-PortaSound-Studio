@@ -398,6 +398,26 @@ namespace PSS790Player.Bridge
                         }
                         ReapplyRemapping(preservePosition: true);
                         break;
+                    case "override_voice_fm_preset":
+                        {
+                            var fmCh = root.GetProperty("channel").GetInt32();
+                            var bank = root.TryGetProperty("bank", out var bP) ? Math.Clamp(bP.GetInt32(), 0, 4) : 0;
+                            var fmVoice = ParseVoiceFromJson(root);
+                            fmVoice.BankNumber = bank;
+                            byte[] sysex = fmVoice.ToSysExMessage();
+                            _player.SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(sysex));
+
+                            int voiceNumber = 100 + bank;
+                            _options.ChannelVoiceOverrides[fmCh] = voiceNumber;
+                            if (_currentFilePath != null)
+                            {
+                                VoiceOverrideStore.Instance.SetOverride(_currentFilePath, fmCh, voiceNumber, _activeModel);
+                            }
+                            _player.SendVoiceOverride(fmCh, voiceNumber, "pss680");
+                            ReapplyRemapping(preservePosition: true);
+                            SendToJs("channel_voice_overridden", new { channel = fmCh, voice = voiceNumber, voiceName = fmVoice.Name });
+                        }
+                        break;
                     case "set_channel_volume":
                         var vCh = root.GetProperty("channel").GetInt32();
                         var vol = (byte)root.GetProperty("volume").GetInt32();
@@ -871,6 +891,40 @@ namespace PSS790Player.Bridge
                                 }
                                 catch { }
                             });
+                        }
+                        break;
+                    case "set_vector_playback_mode":
+                        {
+                            bool enabled = root.TryGetProperty("enabled", out var enP) && enP.GetBoolean();
+                            _player.VectorQuadPlaybackEnabled = enabled;
+
+                            if (enabled)
+                            {
+                                var vA = root.TryGetProperty("voiceA", out var vaP) ? Math.Clamp(vaP.GetInt32(), 0, 99) : 65;
+                                var vB = root.TryGetProperty("voiceB", out var vbP) ? Math.Clamp(vbP.GetInt32(), 0, 99) : 65;
+                                var vC = root.TryGetProperty("voiceC", out var vcP) ? Math.Clamp(vcP.GetInt32(), 0, 99) : 0;
+                                var vD = root.TryGetProperty("voiceD", out var vdP) ? Math.Clamp(vdP.GetInt32(), 0, 99) : 7;
+
+                                _options.ChannelVoiceOverrides[0] = vA;
+                                _options.ChannelVoiceOverrides[1] = vB;
+                                _options.ChannelVoiceOverrides[2] = vC;
+                                _options.ChannelVoiceOverrides[3] = vD;
+
+                                _player.SendVoiceOverride(0, vA);
+                                _player.SendVoiceOverride(1, vB);
+                                _player.SendVoiceOverride(2, vC);
+                                _player.SendVoiceOverride(3, vD);
+
+                                if (root.TryGetProperty("volA", out var va) && root.TryGetProperty("volB", out var vb) &&
+                                    root.TryGetProperty("volC", out var vc) && root.TryGetProperty("volD", out var vd))
+                                {
+                                    _player.SetChannelVolume(0, (byte)Math.Clamp(va.GetInt32(), 0, 127));
+                                    _player.SetChannelVolume(1, (byte)Math.Clamp(vb.GetInt32(), 0, 127));
+                                    _player.SetChannelVolume(2, (byte)Math.Clamp(vc.GetInt32(), 0, 127));
+                                    _player.SetChannelVolume(3, (byte)Math.Clamp(vd.GetInt32(), 0, 127));
+                                }
+                            }
+                            SendToJs("vector_playback_mode_changed", new { enabled });
                         }
                         break;
                     case "save_vector_preset":

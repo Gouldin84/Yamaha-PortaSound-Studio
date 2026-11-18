@@ -49,6 +49,7 @@ namespace PSS790Player.Core
         public TimeSpan CurrentPosition => _playback?.GetCurrentTime<MetricTimeSpan>() ?? TimeSpan.Zero;
         public string? CurrentOutputDeviceName { get; private set; }
         public string ActiveModel { get; set; } = "pss790";
+        public bool VectorQuadPlaybackEnabled { get; set; } = false;
 
         public MidiPlayer()
         {
@@ -265,6 +266,10 @@ namespace PSS790Player.Core
                         lock (_activeNotes)
                         {
                             _activeNotes.Add((ch, (byte)noteOn.NoteNumber));
+                            if (VectorQuadPlaybackEnabled && ch == 0)
+                            {
+                                for (int q = 1; q <= 3; q++) _activeNotes.Add((q, (byte)noteOn.NoteNumber));
+                            }
                         }
                         ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                         {
@@ -273,6 +278,20 @@ namespace PSS790Player.Core
                             Velocity = (byte)noteOn.Velocity,
                             NoteNumber = (byte)noteOn.NoteNumber
                         });
+
+                        if (VectorQuadPlaybackEnabled && ch == 0)
+                        {
+                            for (int q = 1; q <= 3; q++)
+                            {
+                                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                                {
+                                    Channel = q,
+                                    IsActive = true,
+                                    Velocity = (byte)noteOn.Velocity,
+                                    NoteNumber = (byte)noteOn.NoteNumber
+                                });
+                            }
+                        }
                     }
                     else
                     {
@@ -280,6 +299,10 @@ namespace PSS790Player.Core
                         lock (_activeNotes)
                         {
                             _activeNotes.Remove((ch, (byte)noteOn.NoteNumber));
+                            if (VectorQuadPlaybackEnabled && ch == 0)
+                            {
+                                for (int q = 1; q <= 3; q++) _activeNotes.Remove((q, (byte)noteOn.NoteNumber));
+                            }
                             hasRemaining = _activeNotes.Any(n => n.Channel == ch);
                         }
                         if (!hasRemaining)
@@ -290,6 +313,18 @@ namespace PSS790Player.Core
                                 IsActive = false,
                                 Velocity = 0
                             });
+                            if (VectorQuadPlaybackEnabled && ch == 0)
+                            {
+                                for (int q = 1; q <= 3; q++)
+                                {
+                                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                                    {
+                                        Channel = q,
+                                        IsActive = false,
+                                        Velocity = 0
+                                    });
+                                }
+                            }
                         }
                     }
                 }
@@ -299,6 +334,10 @@ namespace PSS790Player.Core
                     lock (_activeNotes)
                     {
                         _activeNotes.Remove((ch, (byte)noteOff.NoteNumber));
+                        if (VectorQuadPlaybackEnabled && ch == 0)
+                        {
+                            for (int q = 1; q <= 3; q++) _activeNotes.Remove((q, (byte)noteOff.NoteNumber));
+                        }
                         hasRemaining = _activeNotes.Any(n => n.Channel == ch);
                     }
                     if (!hasRemaining)
@@ -309,6 +348,18 @@ namespace PSS790Player.Core
                             IsActive = false,
                             Velocity = 0
                         });
+                        if (VectorQuadPlaybackEnabled && ch == 0)
+                        {
+                            for (int q = 1; q <= 3; q++)
+                            {
+                                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                                {
+                                    Channel = q,
+                                    IsActive = false,
+                                    Velocity = 0
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -419,7 +470,7 @@ namespace PSS790Player.Core
                 byte programNumber;
                 if (is680)
                 {
-                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 99);
+                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 107);
                 }
                 else if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
                 {
@@ -638,6 +689,35 @@ namespace PSS790Player.Core
                     if (isMuted && (channelEvent is NoteOnEvent or NoteOffEvent))
                     {
                         return; // Suppress note from reaching hardware output
+                    }
+
+                    // Vector Quad Note Replication: When Vector Quad playback is enabled on PSS-790 and event is NoteOn/NoteOff on Channel 0,
+                    // send the note to Channel 0 and replicate to Channels 1, 2, 3 (Voice B, C, D)
+                    if (_player.VectorQuadPlaybackEnabled && ch == 0 && (channelEvent is NoteOnEvent or NoteOffEvent))
+                    {
+                        try
+                        {
+                            target.SendEvent(channelEvent);
+                            EventSent?.Invoke(this, new MidiEventSentEventArgs(channelEvent));
+
+                            for (byte qCh = 1; qCh <= 3; qCh++)
+                            {
+                                bool qMuted = _player._channelMutes[qCh] || (hasSolo && !_player._channelSolos[qCh]);
+                                if (qMuted) continue;
+
+                                ChannelEvent qEvt = channelEvent is NoteOnEvent nOn
+                                    ? new NoteOnEvent(nOn.NoteNumber, nOn.Velocity) { Channel = (FourBitNumber)qCh }
+                                    : new NoteOffEvent(((NoteOffEvent)channelEvent).NoteNumber, ((NoteOffEvent)channelEvent).Velocity) { Channel = (FourBitNumber)qCh };
+
+                                target.SendEvent(qEvt);
+                                EventSent?.Invoke(this, new MidiEventSentEventArgs(qEvt));
+                            }
+                        }
+                        catch
+                        {
+                            _player.HandleDeviceDisconnected();
+                        }
+                        return;
                     }
 
                     // Proportional Mixer Scaling: scale incoming file CC 7 by user channel volume slider %

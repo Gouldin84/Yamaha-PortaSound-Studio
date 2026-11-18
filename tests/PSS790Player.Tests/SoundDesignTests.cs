@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using Melanchall.DryWetMidi.Core;
 using PSS790Player.Core;
 using Xunit;
 
@@ -242,6 +243,76 @@ namespace PSS790Player.Tests
                 Assert.True(root.TryGetProperty("orbitMode", out _));
                 Assert.True(root.TryGetProperty("orbitSpeed", out _));
             }
+        }
+
+        [Fact]
+        public void PSS680_UserBanks100To107_ExistAndMapToDigitalSynthesizer()
+        {
+            Assert.Equal(108, Pss680Constants.Voices.Count);
+
+            for (int i = 100; i <= 107; i++)
+            {
+                Assert.True(Pss680Constants.Voices.ContainsKey(i));
+                var v = Pss680Constants.Voices[i];
+                Assert.Equal(i, v.Number);
+                Assert.Equal("Digital Synthesizer", v.Category);
+            }
+
+            Assert.Equal("User FM Synth Bank 1", Pss680Constants.Voices[100].Name);
+            Assert.Equal("User FM Synth Bank 2", Pss680Constants.Voices[101].Name);
+            Assert.Equal("User FM Synth Bank 3", Pss680Constants.Voices[102].Name);
+            Assert.Equal("User FM Synth Bank 4", Pss680Constants.Voices[103].Name);
+            Assert.Equal("User FM Synth Bank 5", Pss680Constants.Voices[104].Name);
+            Assert.Equal("Extended FM Bank 1", Pss680Constants.Voices[105].Name);
+            Assert.Equal("Extended FM Bank 2", Pss680Constants.Voices[106].Name);
+            Assert.Equal("Extended FM Bank 3", Pss680Constants.Voices[107].Name);
+        }
+
+        [Fact]
+        public void Remapper_PreservesUserBanks100To107_OnPSS680()
+        {
+            var midi = new Melanchall.DryWetMidi.Core.MidiFile(
+                new Melanchall.DryWetMidi.Core.TrackChunk(
+                    new Melanchall.DryWetMidi.Core.ProgramChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)0)
+                    {
+                        Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0
+                    },
+                    new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)60, (Melanchall.DryWetMidi.Common.SevenBitNumber)100)
+                    {
+                        Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0
+                    }
+                )
+            );
+
+            var options = new RemapperOptions
+            {
+                TargetModel = "pss680",
+                ChannelVoiceOverrides = new System.Collections.Generic.Dictionary<int, int?>
+                {
+                    { 0, 103 } // Override Channel 1 to User FM Synth Bank 4 (Voice 103)
+                }
+            };
+
+            var remapped = Remapper.Remap(midi, options);
+            var pc = System.Linq.Enumerable.OfType<Melanchall.DryWetMidi.Core.ProgramChangeEvent>(
+                remapped.GetTrackChunks().SelectMany(t => t.Events)
+            ).FirstOrDefault(p => p.Channel == (Melanchall.DryWetMidi.Common.FourBitNumber)0);
+
+            Assert.NotNull(pc);
+            Assert.Equal(103, (int)pc.ProgramNumber); // Must NOT clamp to 99!
+        }
+
+        [Fact]
+        public void MidiPlayer_VectorQuadPlayback_PropertyTogglesAndDefaultsFalse()
+        {
+            using var player = new MidiPlayer();
+            Assert.False(player.VectorQuadPlaybackEnabled);
+
+            player.VectorQuadPlaybackEnabled = true;
+            Assert.True(player.VectorQuadPlaybackEnabled);
+
+            player.VectorQuadPlaybackEnabled = false;
+            Assert.False(player.VectorQuadPlaybackEnabled);
         }
 
         private static (double wA, double wB, double wC, double wD) CalculateWeights(double x, double y)

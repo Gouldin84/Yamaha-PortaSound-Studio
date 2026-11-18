@@ -24,6 +24,8 @@ let state = {
     sysexViewMode: "designer",
     fmVoices: [],
     vectorPresets: [],
+    vectorQuadActive: false,
+    selectedVectorPresetKey: null,
     // Jukebox & Quick-Pick Tree State
     isSidebarCollapsed: false,
     selectedSongPath: null,
@@ -1963,17 +1965,75 @@ function renderMixer() {
     const grid = document.getElementById("mixerGrid");
     grid.innerHTML = "";
 
+    const vecQuadBox = document.getElementById("vectorQuadControls");
+    const btnVecQuad = document.getElementById("btnToggleVectorQuad");
+    const selVecPreset = document.getElementById("selMixerVectorPreset");
+
+    if (vecQuadBox) {
+        if (state.activeModel === "pss790") {
+            vecQuadBox.classList.remove("hidden");
+            if (selVecPreset && selVecPreset.options.length <= 1) {
+                Object.entries(VECTOR_PRESETS).forEach(([k, p]) => {
+                    const opt = document.createElement("option");
+                    opt.value = k;
+                    opt.textContent = p.name;
+                    selVecPreset.appendChild(opt);
+                });
+            }
+            if (btnVecQuad) {
+                if (state.vectorQuadActive) {
+                    btnVecQuad.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400 transition";
+                    btnVecQuad.textContent = "ON";
+                    selVecPreset?.classList.remove("hidden");
+                    if (state.selectedVectorPresetKey && selVecPreset) {
+                        selVecPreset.value = state.selectedVectorPresetKey;
+                    }
+                } else {
+                    btnVecQuad.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 hover:text-white border border-slate-700 transition";
+                    btnVecQuad.textContent = "OFF";
+                    selVecPreset?.classList.add("hidden");
+                }
+
+                btnVecQuad.onclick = () => {
+                    state.vectorQuadActive = !state.vectorQuadActive;
+                    if (state.vectorQuadActive && !state.selectedVectorPresetKey) {
+                        state.selectedVectorPresetKey = "aha_take_on_me";
+                    }
+                    applyVectorQuadPreset(state.vectorQuadActive ? state.selectedVectorPresetKey : null);
+                    renderMixer();
+                };
+            }
+
+            if (selVecPreset) {
+                selVecPreset.onchange = (e) => {
+                    if (e.target.value) {
+                        state.selectedVectorPresetKey = e.target.value;
+                        applyVectorQuadPreset(state.selectedVectorPresetKey);
+                        renderMixer();
+                    }
+                };
+            }
+        } else {
+            vecQuadBox.classList.add("hidden");
+        }
+    }
+
     state.channels.forEach(ch => {
         const card = document.createElement("div");
         const isDrum = ch.channel === 15;
+        const is680 = state.activeModel === "pss680";
+        const isVectorQuad = !is680 && state.vectorQuadActive && ch.channel < 4;
+        const quadPoleNames = ["A (North)", "B (East)", "C (South)", "D (West)"];
 
         const topAccent = isDrum
             ? 'border-t-2 border-t-amber-400'
-            : (ch.hasNotes ? 'border-t-2 border-t-cyan-400' : 'border-t-2 border-t-slate-800/80');
+            : (isVectorQuad ? 'border-t-2 border-t-indigo-400' : (ch.hasNotes ? 'border-t-2 border-t-cyan-400' : 'border-t-2 border-t-slate-800/80'));
 
-        card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${
-            ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90'
-        }`;
+        const cardBorder = isVectorQuad
+            ? 'border-2 border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30 shadow-md'
+            : (ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90');
+
+        card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${cardBorder}`;
 
         const muteClass = ch.isMuted
             ? 'btn-console-m muted bg-rose-600 text-white shadow-sm shadow-rose-500/50 ring-1 ring-rose-400/80'
@@ -1983,19 +2043,55 @@ function renderMixer() {
             ? 'btn-console-s soloed bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50 ring-1 ring-amber-300'
             : 'btn-console-s bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50';
 
-        const is680 = state.activeModel === "pss680";
         const drumSubtitle = is680 ? "32 Drum Fixed" : "Chart 1 Fixed";
         const drumTooltip = is680 ? "Channel 16 percussion fixed to 32 PSS-680 hand percussion instruments" : "Channel 16 rhythm fixed to Chart 1 drums";
         const chHeaderTitle = isDrum ? (is680 ? "Drums / Percussion (32 Hand Percussion)" : "Drums / Percussion (Chart 1)") : "Melody / Accompaniment";
         const overrideTitle = is680
-            ? `Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-680 2-op FM preset voices`
+            ? `Voice Override: Force Channel ${ch.channelDisplay} to play one of the FM presets (00-99), Digital Synthesizer banks (100-104), or FM library voices`
             : `Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-790 AWM preset voices`;
-        const selectTitle = isDrum ? drumTooltip : `Override Channel ${ch.channelDisplay} preset voice (00-99)`;
+        const selectTitle = isDrum ? drumTooltip : `Override Channel ${ch.channelDisplay} voice`;
+
+        const quadBadgeHtml = isVectorQuad
+            ? `<span class="px-1 py-0.5 rounded text-[8px] font-bold bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 uppercase">Quad ${quadPoleNames[ch.channel]}</span>`
+            : (ch.selectedVoice >= 100 && is680
+                ? `<span class="px-1 py-0.5 rounded text-[8px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60 uppercase">FM Bank ${ch.selectedVoice - 99}</span>`
+                : '');
+
+        let voiceOptionsHtml = `<option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>`;
+        if (is680) {
+            const factoryVoices = state.voices.filter(v => v.number < 100);
+            const userBanks = state.voices.filter(v => v.number >= 100);
+
+            voiceOptionsHtml += `
+                <optgroup label="FM Factory Presets (00-99)">
+                    ${factoryVoices.map(v => `<option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">${v.number.toString().padStart(2, '0')}: ${v.name}</option>`).join('')}
+                </optgroup>
+                <optgroup label="Digital Synthesizer (User Banks)">
+                    ${userBanks.map(v => `<option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-indigo-950 text-indigo-200 font-semibold">${v.number}: ${v.name}</option>`).join('')}
+                </optgroup>
+                <optgroup label="FM Library Presets (Upload & Play)">
+                    ${Object.entries(FM_PRESETS).filter(([k]) => k !== 'init').map(([k, p]) => `
+                        <option value="fm:${k}" ${ch.selectedFmPresetKey === k ? 'selected' : ''} class="bg-cyan-950 text-cyan-200">
+                            ⚡ ${p.name}
+                        </option>
+                    `).join('')}
+                </optgroup>
+            `;
+        } else {
+            voiceOptionsHtml += state.voices.map(v => `
+                <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
+                    ${v.number.toString().padStart(2, '0')}: ${v.name}
+                </option>
+            `).join('');
+        }
 
         card.innerHTML = `
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : 'text-cyan-400'}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
-                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : 'bg-emerald-950'} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
+                <div class="flex items-center space-x-1">
+                    <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : (isVectorQuad ? 'text-indigo-400' : 'text-cyan-400')}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
+                    ${quadBadgeHtml}
+                </div>
+                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : (isVectorQuad ? 'bg-indigo-950' : 'bg-emerald-950')} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
             <div class="space-y-0.5">
@@ -2011,12 +2107,7 @@ function renderMixer() {
             <div class="space-y-0.5">
                 <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight" title="${overrideTitle}">Voice Override</label>
                 <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="${selectTitle}">
-                    <option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>
-                    ${state.voices.map(v => `
-                        <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
-                            ${v.number.toString().padStart(2, '0')}: ${v.name}
-                        </option>
-                    `).join('')}
+                    ${voiceOptionsHtml}
                 </select>
             </div>
 
@@ -2043,9 +2134,27 @@ function renderMixer() {
         const voiceSelect = card.querySelector(`#voice-override-${ch.channel}`);
         if (voiceSelect) {
             voiceSelect.addEventListener("change", (e) => {
-                const val = e.target.value === "" ? null : parseInt(e.target.value);
-                ch.selectedVoice = val;
-                sendToHost("override_voice", { channel: ch.channel, voice: val });
+                const valStr = e.target.value;
+                if (valStr.startsWith("fm:")) {
+                    const presetKey = valStr.substring(3);
+                    const preset = FM_PRESETS[presetKey];
+                    if (preset) {
+                        ch.selectedFmPresetKey = presetKey;
+                        ch.selectedVoice = 100; // Bank 1
+                        sendToHost("override_voice_fm_preset", {
+                            channel: ch.channel,
+                            bank: 0,
+                            voice: preset
+                        });
+                        renderMixer();
+                    }
+                } else {
+                    ch.selectedFmPresetKey = null;
+                    const val = valStr === "" ? null : parseInt(valStr, 10);
+                    ch.selectedVoice = val;
+                    sendToHost("override_voice", { channel: ch.channel, voice: val });
+                    renderMixer();
+                }
             });
         }
 

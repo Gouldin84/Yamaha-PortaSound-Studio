@@ -163,7 +163,16 @@ namespace PSS790Player.Core
             { 96, new(96, "Human Chorus", "Vocal") },
             { 97, new(97, "Kazoo", "Wind") },
             { 98, new(98, "Musical Saw", "Synth") },
-            { 99, new(99, "Sine Wave", "Synth") }
+            { 99, new(99, "Sine Wave", "Synth") },
+            // Digital Synthesizer User Banks (100–104) & Extended Slots (105–107)
+            { 100, new(100, "User FM Synth Bank 1", "Digital Synthesizer") },
+            { 101, new(101, "User FM Synth Bank 2", "Digital Synthesizer") },
+            { 102, new(102, "User FM Synth Bank 3", "Digital Synthesizer") },
+            { 103, new(103, "User FM Synth Bank 4", "Digital Synthesizer") },
+            { 104, new(104, "User FM Synth Bank 5", "Digital Synthesizer") },
+            { 105, new(105, "Extended FM Bank 1", "Digital Synthesizer") },
+            { 106, new(106, "Extended FM Bank 2", "Digital Synthesizer") },
+            { 107, new(107, "Extended FM Bank 3", "Digital Synthesizer") }
         });
 
         // 100 Rhythm Styles (#00 - #99) directly from PSS-680 Owner's Manual p.40
