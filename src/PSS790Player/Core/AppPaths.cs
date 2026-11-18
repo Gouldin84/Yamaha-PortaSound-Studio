@@ -145,8 +145,25 @@ namespace PSS790Player.Core
             {
                 var fullNorm = Path.GetFullPath(filePath);
                 var gmNorm = Path.GetFullPath(customGmDir ?? GmMidiDir);
-                var targetPssNorm = Path.GetFullPath(customPssDir ?? GetModelMidiDir(targetModel));
-                var is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                var pss680Norm = Path.GetFullPath(Pss680MidiDir);
+                var pss790Norm = Path.GetFullPath(Pss790MidiDir);
+
+                // Auto-detect target model if path is clearly inside one of the PSS directories
+                string effectiveModel = targetModel;
+                if (customPssDir == null)
+                {
+                    if (fullNorm.StartsWith(pss680Norm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        effectiveModel = "pss680";
+                    }
+                    else if (fullNorm.StartsWith(pss790Norm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        effectiveModel = "pss790";
+                    }
+                }
+
+                var targetPssNorm = Path.GetFullPath(customPssDir ?? GetModelMidiDir(effectiveModel));
+                var is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
                 var suffix = is680 ? "_PSS680" : "_PSS790";
 
                 if (fullNorm.StartsWith(gmNorm, StringComparison.OrdinalIgnoreCase))
@@ -187,6 +204,53 @@ namespace PSS790Player.Core
             catch { }
 
             return null;
+        }
+
+        public static List<string> FindAllMatchingLinkedFiles(string filePath, string? customGmDir = null)
+        {
+            var results = new List<string>();
+            if (string.IsNullOrWhiteSpace(filePath)) return results;
+
+            try
+            {
+                var fullNorm = Path.GetFullPath(filePath);
+                var gmNorm = Path.GetFullPath(customGmDir ?? GmMidiDir);
+
+                if (fullNorm.StartsWith(gmNorm, StringComparison.OrdinalIgnoreCase))
+                {
+                    var link790 = FindMatchingLinkedFile(fullNorm, "pss790", customGmDir);
+                    if (!string.IsNullOrEmpty(link790) && File.Exists(link790))
+                    {
+                        results.Add(link790);
+                    }
+
+                    var link680 = FindMatchingLinkedFile(fullNorm, "pss680", customGmDir);
+                    if (!string.IsNullOrEmpty(link680) && File.Exists(link680) && !results.Contains(link680, StringComparer.OrdinalIgnoreCase))
+                    {
+                        results.Add(link680);
+                    }
+                }
+                else
+                {
+                    // File is in PSS-790 or PSS-680
+                    var linkGm = FindMatchingLinkedFile(fullNorm, customGmDir: customGmDir);
+                    if (!string.IsNullOrEmpty(linkGm) && File.Exists(linkGm))
+                    {
+                        results.Add(linkGm);
+                        // Also find counterpart in the other PSS folder
+                        var isSource680 = fullNorm.StartsWith(Path.GetFullPath(Pss680MidiDir), StringComparison.OrdinalIgnoreCase);
+                        var otherModel = isSource680 ? "pss790" : "pss680";
+                        var otherLink = FindMatchingLinkedFile(linkGm, otherModel, customGmDir);
+                        if (!string.IsNullOrEmpty(otherLink) && File.Exists(otherLink) && !results.Contains(otherLink, StringComparer.OrdinalIgnoreCase))
+                        {
+                            results.Add(otherLink);
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return results;
         }
 
         public static void OpenFolderInExplorer(string? path = null)

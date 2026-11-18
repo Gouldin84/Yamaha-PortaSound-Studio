@@ -1068,7 +1068,15 @@ function openActionModal(actionType, target) {
         desc.textContent = `Select destination folder for ${target.paths.length} selected songs:`;
         inputContainer.classList.add("hidden");
         moveContainer.classList.remove("hidden");
-        populateMoveFolderSelect("gm", "");
+
+        let batchCategory = "gm";
+        if (target.paths && target.paths.length > 0) {
+            const firstP = target.paths[0].toLowerCase();
+            if (firstP.includes("pss-680 midi")) batchCategory = "pss680";
+            else if (firstP.includes("pss-790 midi")) batchCategory = "pss790";
+        }
+        target.category = batchCategory;
+        populateMoveFolderSelect(batchCategory, "");
 
         const linkedMoveContainer = document.getElementById("actionModalLinkedMoveContainer");
         if (linkedMoveContainer) linkedMoveContainer.classList.add("hidden");
@@ -1267,7 +1275,7 @@ function confirmActionModal() {
         const alsoMove = chkMoveLinked && chkMoveLinked.checked;
         sendToHost("batch_move_files", {
             sourcePaths: target.paths,
-            targetCategory: "gm",
+            targetCategory: target.category || "gm",
             targetSubFolder: selectedSubFolder,
             alsoMoveLinked: alsoMove
         });

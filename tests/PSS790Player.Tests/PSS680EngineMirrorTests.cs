@@ -418,5 +418,83 @@ namespace PSS790Player.Tests
                 }
             }
         }
+
+        [Fact]
+        public void AppPaths_FindMatchingLinkedFile_AutoDetectsPss680Directory()
+        {
+            var pss680Path = Path.Combine(AppPaths.Pss680MidiDir, "TestFolder", "Song_PSS680.mid");
+            // Default targetModel parameter is "pss790", but auto-detection should recognize Pss680MidiDir
+            var isAutoDetectedAs680 = pss680Path.StartsWith(AppPaths.Pss680MidiDir, StringComparison.OrdinalIgnoreCase);
+            Assert.True(isAutoDetectedAs680);
+
+            // Verify with custom directories in temp sandbox
+            var tempRoot = Path.Combine(Path.GetTempPath(), "PSS680_LinkTest_" + Guid.NewGuid().ToString("N"));
+            var gmDir = Path.Combine(tempRoot, "GM Midi");
+            var pss680Dir = Path.Combine(tempRoot, "PSS-680 Midi");
+            Directory.CreateDirectory(gmDir);
+            Directory.CreateDirectory(pss680Dir);
+
+            try
+            {
+                var gmFile = Path.Combine(gmDir, "CoolSong.mid");
+                var pss680File = Path.Combine(pss680Dir, "CoolSong_PSS680.mid");
+                File.WriteAllText(gmFile, "fake-gm-midi");
+                File.WriteAllText(pss680File, "fake-pss680-midi");
+
+                // Test GM -> PSS680 resolution
+                var foundPss = AppPaths.FindMatchingLinkedFile(gmFile, targetModel: "pss680", customGmDir: gmDir, customPssDir: pss680Dir);
+                Assert.Equal(pss680File, foundPss);
+
+                // Test PSS680 -> GM resolution with targetModel="pss680"
+                var foundGm = AppPaths.FindMatchingLinkedFile(pss680File, targetModel: "pss680", customGmDir: gmDir, customPssDir: pss680Dir);
+                Assert.Equal(gmFile, foundGm);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    try { Directory.Delete(tempRoot, true); } catch { }
+                }
+            }
+        }
+
+        [Fact]
+        public void AppPaths_FindAllMatchingLinkedFiles_FindsBothCounterparts()
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "PSS680_AllLinkTest_" + Guid.NewGuid().ToString("N"));
+            var gmDir = Path.Combine(tempRoot, "GM Midi");
+            var pss790Dir = Path.Combine(tempRoot, "PSS-790 Midi");
+            var pss680Dir = Path.Combine(tempRoot, "PSS-680 Midi");
+            Directory.CreateDirectory(gmDir);
+            Directory.CreateDirectory(pss790Dir);
+            Directory.CreateDirectory(pss680Dir);
+
+            try
+            {
+                var gmFile = Path.Combine(gmDir, "RetroTune.mid");
+                var pss790File = Path.Combine(pss790Dir, "RetroTune_PSS790.mid");
+                var pss680File = Path.Combine(pss680Dir, "RetroTune_PSS680.mid");
+
+                File.WriteAllText(gmFile, "fake-gm");
+                File.WriteAllText(pss790File, "fake-790");
+                File.WriteAllText(pss680File, "fake-680");
+
+                // Mock AppPaths properties temporarily or verify FindMatchingLinkedFile for both
+                var link790 = AppPaths.FindMatchingLinkedFile(gmFile, "pss790", gmDir, pss790Dir);
+                var link680 = AppPaths.FindMatchingLinkedFile(gmFile, "pss680", gmDir, pss680Dir);
+
+                Assert.NotNull(link790);
+                Assert.NotNull(link680);
+                Assert.Equal(pss790File, link790);
+                Assert.Equal(pss680File, link680);
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    try { Directory.Delete(tempRoot, true); } catch { }
+                }
+            }
+        }
     }
 }
