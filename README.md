@@ -211,7 +211,7 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 
 ## Installation & Download
 
-### Latest Release: v2.1.0 (Yamaha PortaSound Studio)
+### Latest Release: v2.2.0 (Yamaha PortaSound Studio)
 
 | Download Asset | File Type | Size | Description |
 | :--- | :--- | :--- | :--- |

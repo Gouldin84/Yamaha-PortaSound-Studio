@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yamaha PSS-790 Studio</title>
+    <title>Yamaha PortaSound Studio</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.1.0">
+    <link rel="stylesheet" href="styles.css?v=2.2.0">
     <script>
         tailwind.config = {
             theme: {
@@ -185,7 +185,7 @@
             </button>
 
             <!-- Batch Remapper Button -->
-            <button id="btnOpenBatch" title="Batch Remapper: Convert entire folders of General MIDI files to PSS-790 format with polyphony guard and pitch tuning" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <button id="btnOpenBatch" title="Batch Remapper: Convert entire folders of General MIDI files to PSS-790 and PSS-680 formats with model-tailored safeguards" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <svg class="w-3.5 h-3.5 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                 </svg>
@@ -280,7 +280,7 @@
                             <span>Refresh</span>
                         </button>
                         <span class="text-slate-600">|</span>
-                        <button id="btnSidebarSync" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Sync &amp; Align: Inspect parity between General MIDI source songs and PSS-790 converted songs">
+                        <button id="btnSidebarSync" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Sync &amp; Align: Inspect parity between General MIDI source songs and PSS-790 / PSS-680 converted songs">
                             <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
@@ -1214,7 +1214,7 @@
                     </div>
                     <div>
                         <h3 class="text-sm font-bold text-white tracking-wide">Sync & Align MIDI Folders</h3>
-                        <p class="text-[11px] text-slate-400">Keep GM Midi and PSS-790 Midi libraries 100% in parity</p>
+                        <p class="text-[11px] text-slate-400">Keep GM Midi, PSS-790 Midi, and PSS-680 Midi libraries 100% in parity</p>
                     </div>
                 </div>
                 <button id="btnCloseSyncModal" title="Close library sync dialog" class="text-slate-400 hover:text-white transition">
@@ -1365,23 +1365,23 @@
                     </select>
                 </div>
                 <div id="actionModalLinkedMoveContainer" class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 hidden">
-                    <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also move the corresponding version in the mirrored library folder (GM <-> PSS-790)">
-                        <input type="checkbox" id="chkAlsoMoveLinked" title="Also move the corresponding version in the mirrored library folder (GM <-> PSS-790)" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-cyan-500" checked>
+                    <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also move the corresponding versions across mirrored library folders">
+                        <input type="checkbox" id="chkAlsoMoveLinked" title="Also move the corresponding versions across mirrored library folders" class="w-4 h-4 mt-0.5 rounded text-cyan-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-cyan-500" checked>
                         <div class="space-y-0.5 min-w-0">
-                            <span class="font-semibold text-cyan-300">Also move matching linked version to mirrored folder</span>
-                            <div id="actionModalLinkedMovePathLabel" class="text-[11px] font-mono text-slate-400 truncate">PSS-790 Midi\...</div>
+                            <span class="font-semibold text-cyan-300">Also move matching linked versions to mirrored folders</span>
+                            <div id="actionModalLinkedMovePathLabel" class="text-[11px] font-mono text-slate-400 truncate">Mirrored libraries\...</div>
                         </div>
                     </label>
                 </div>
             </div>
 
-            <!-- Dynamic Linked Deletion Checkbox (for GM Delete with matching PSS-790) -->
+            <!-- Dynamic Linked Deletion Checkbox (for Delete with matching counterparts) -->
             <div id="actionModalLinkedDeleteContainer" class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 hidden">
-                <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also delete the corresponding converted PSS-790 file">
-                    <input type="checkbox" id="chkAlsoDeleteLinked" title="Also delete the corresponding converted PSS-790 file" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-rose-500">
+                <label class="flex items-start space-x-2.5 text-xs text-slate-200 cursor-pointer select-none" title="Also delete the corresponding converted versions across mirrored libraries">
+                    <input type="checkbox" id="chkAlsoDeleteLinked" title="Also delete the corresponding converted versions across mirrored libraries" class="w-4 h-4 mt-0.5 rounded text-rose-500 bg-slate-800 border-slate-700 focus:ring-0 cursor-pointer accent-rose-500">
                     <div class="space-y-0.5 min-w-0">
-                        <span class="font-semibold text-rose-300">Also delete matching PSS-790 version</span>
-                        <div id="actionModalLinkedPathLabel" class="text-[11px] font-mono text-slate-400 truncate">PSS-790 Midi\...</div>
+                        <span class="font-semibold text-rose-300">Also delete matching linked versions across mirrored libraries</span>
+                        <div id="actionModalLinkedPathLabel" class="text-[11px] font-mono text-slate-400 truncate">Mirrored libraries\...</div>
                     </div>
                 </label>
             </div>
@@ -1400,10 +1400,10 @@
             <!-- Modal Header -->
             <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
                 <div class="flex items-center space-x-2.5">
-                    <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
+                    <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.1.0</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.2.0</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -1426,7 +1426,7 @@
                     </div>
                     <div class="flex items-center justify-between">
                         <span class="font-semibold text-white">Target Hardware</span>
-                        <span class="text-slate-300">Yamaha PortaSound PSS-790 (1990)</span>
+                        <span class="text-slate-300">Yamaha PortaSound PSS-790 (AWM) &amp; PSS-680 (2-Op FM)</span>
                     </div>
                 </div>
 
@@ -1438,7 +1438,7 @@
                         <span>Trademark Disclaimer</span>
                     </h4>
                     <p class="text-[11px] leading-relaxed text-slate-400 bg-slate-900/50 p-2.5 rounded-lg border border-slate-800">
-                        <strong>Yamaha</strong>, <strong>PortaSound</strong>, <strong>PSS-790</strong>, and <strong>AWM</strong> are registered trademarks of Yamaha Corporation. This software is an independent open-source enthusiast utility developed by Gouldin84 for hardware interoperability, preservation, and non-commercial educational study. It is not affiliated with, sponsored by, endorsed by, or certified by Yamaha Corporation.
+                        <strong>Yamaha</strong>, <strong>PortaSound</strong>, <strong>PSS-790</strong>, <strong>PSS-680</strong>, and <strong>AWM</strong> are registered trademarks of Yamaha Corporation. This software is an independent open-source enthusiast utility developed by Gouldin84 for hardware interoperability, preservation, and non-commercial educational study. It is not affiliated with, sponsored by, endorsed by, or certified by Yamaha Corporation.
                     </p>
                 </div>
 
