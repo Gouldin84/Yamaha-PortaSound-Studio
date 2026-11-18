@@ -17,7 +17,6 @@ TestResults/
 
 # Temporary / Scratch Files
 scratch/
-temp_video_build/
 *.tmp
 
 # User Output Directories & Third-Party Assets
