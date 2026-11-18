@@ -315,6 +315,27 @@ namespace PSS790Player.Tests
             Assert.False(player.VectorQuadPlaybackEnabled);
         }
 
+        [Fact]
+        public void MidiPlayer_SendSysEx_StripsF0AndF7_WithoutThrowingArgumentException()
+        {
+            using var player = new MidiPlayer();
+            var voice = new PSS680Voice { BankNumber = 0 };
+            byte[] raw72Bytes = voice.ToSysExMessage();
+
+            // Verify raw message starts with 0xF0 and ends with 0xF7
+            Assert.Equal(0xF0, raw72Bytes[0]);
+            Assert.Equal(0xF7, raw72Bytes[^1]);
+
+            // When device is not open, SendSysEx must process and strip F0/F7 cleanly without throwing ArgumentException
+            var ex = Record.Exception(() => player.SendSysEx(raw72Bytes));
+            Assert.Null(ex);
+
+            // Also test payload without F0/F7
+            byte[] payloadOnly = new byte[] { 0x43, 0x76, 0x00, 0x05, 0x99 };
+            var ex2 = Record.Exception(() => player.SendSysEx(payloadOnly));
+            Assert.Null(ex2);
+        }
+
         private static (double wA, double wB, double wC, double wD) CalculateWeights(double x, double y)
         {
             double rawA = Math.Max(0, y);

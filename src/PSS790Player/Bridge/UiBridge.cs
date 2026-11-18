@@ -405,7 +405,7 @@ namespace PSS790Player.Bridge
                             var fmVoice = ParseVoiceFromJson(root);
                             fmVoice.BankNumber = bank;
                             byte[] sysex = fmVoice.ToSysExMessage();
-                            _player.SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(sysex));
+                            _player.SendSysEx(sysex);
 
                             int voiceNumber = 100 + bank;
                             _options.ChannelVoiceOverrides[fmCh] = voiceNumber;
@@ -781,7 +781,7 @@ namespace PSS790Player.Bridge
                         {
                             var fmVoice = ParseVoiceFromJson(root);
                             byte[] sysex = fmVoice.ToSysExMessage();
-                            _player.SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(sysex));
+                            _player.SendSysEx(sysex);
                             var isSilent = root.TryGetProperty("silent", out var s) && s.GetBoolean();
                             if (!isSilent)
                             {
@@ -792,10 +792,12 @@ namespace PSS790Player.Bridge
                     case "audition_fm_voice_note":
                         {
                             var note = root.TryGetProperty("note", out var nP) ? Math.Clamp(nP.GetInt32(), 24, 108) : 60;
+                            var bank = root.TryGetProperty("bank", out var bP) ? Math.Clamp(bP.GetInt32(), 0, 4) : 0;
                             _ = Task.Run(async () =>
                             {
                                 try
                                 {
+                                    _player.SendVoiceOverride(0, 100 + bank, "pss680");
                                     _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
                                     await Task.Delay(800);
                                     _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
@@ -832,8 +834,9 @@ namespace PSS790Player.Bridge
                                 byte[] bytes = File.ReadAllBytes(vPath);
                                 var fmVoice = PSS680Voice.FromSysExMessage(bytes);
                                 fmVoice.Name = Path.GetFileNameWithoutExtension(vPath);
+                                _player.SendSysEx(bytes);
                                 SendToJs("fm_voice_loaded", VoiceToObject(fmVoice));
-                                SendToJs("notification", new { message = $"Loaded FM Voice: {fmVoice.Name}" });
+                                SendToJs("notification", new { message = $"Loaded & Transmitted FM Voice: {fmVoice.Name} (Bank {fmVoice.BankNumber + 1})" });
                             }
                         }
                         break;

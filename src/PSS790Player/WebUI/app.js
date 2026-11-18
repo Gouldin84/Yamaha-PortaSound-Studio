@@ -5644,7 +5644,7 @@ function initFmSynthEditor() {
     const btnAud = document.getElementById("btnFmAudition");
     if (btnAud) {
         btnAud.addEventListener("click", () => {
-            sendToHost("audition_fm_voice_note", { note: 60 });
+            sendToHost("audition_fm_voice_note", { note: 60, bank: selectedFmBank });
         });
     }
 

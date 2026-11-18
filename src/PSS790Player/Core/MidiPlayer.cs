@@ -458,6 +458,29 @@ namespace PSS790Player.Core
             }
         }
 
+        public void SendSysEx(byte[] rawSysEx)
+        {
+            if (rawSysEx == null || rawSysEx.Length == 0) return;
+
+            byte[] dataPayload;
+            if (rawSysEx.Length >= 2 && rawSysEx[0] == 0xF0 && rawSysEx[^1] == 0xF7)
+            {
+                dataPayload = new byte[rawSysEx.Length - 2];
+                Buffer.BlockCopy(rawSysEx, 1, dataPayload, 0, dataPayload.Length);
+            }
+            else if (rawSysEx.Length >= 1 && rawSysEx[0] == 0xF0)
+            {
+                dataPayload = new byte[rawSysEx.Length - 1];
+                Buffer.BlockCopy(rawSysEx, 1, dataPayload, 0, dataPayload.Length);
+            }
+            else
+            {
+                dataPayload = rawSysEx;
+            }
+
+            SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(dataPayload));
+        }
+
         public void SendVoiceOverride(int channel, int voiceNumber, string? model = null)
         {
             lock (_lock)
