@@ -11,13 +11,24 @@ namespace PSS790Player.Tests
     public class FileManagementTests : IDisposable
     {
         private readonly string _tempDir;
+        private readonly string _gmDir;
+        private readonly string _pss790Dir;
+        private readonly string _pss680Dir;
         private readonly string _overridesFile;
         private readonly VoiceOverrideStore _store;
 
         public FileManagementTests()
         {
             _tempDir = Path.Combine(Path.GetTempPath(), "PSS790_FileMgmt_Tests_" + Guid.NewGuid().ToString("N"));
+            _gmDir = Path.Combine(_tempDir, "GM Midi");
+            _pss790Dir = Path.Combine(_tempDir, "PSS-790 Midi");
+            _pss680Dir = Path.Combine(_tempDir, "PSS-680 Midi");
+
             Directory.CreateDirectory(_tempDir);
+            Directory.CreateDirectory(_gmDir);
+            Directory.CreateDirectory(_pss790Dir);
+            Directory.CreateDirectory(_pss680Dir);
+
             _overridesFile = Path.Combine(_tempDir, "overrides.json");
             _store = new VoiceOverrideStore(_overridesFile);
         }
@@ -37,19 +48,19 @@ namespace PSS790Player.Tests
         [Fact]
         public void IsPathInsideLibrary_ValidatesLibraryBoundaries()
         {
-            var gmSub = Path.Combine(AppPaths.GmMidiDir, "Doom", "E1M1.mid");
-            var pssSub = Path.Combine(AppPaths.Pss790MidiDir, "Monkey Island", "Theme.mid");
-            var rootGm = AppPaths.GmMidiDir;
+            var gmSub = Path.Combine(_gmDir, "Doom", "E1M1.mid");
+            var pssSub = Path.Combine(_pss790Dir, "Monkey Island", "Theme.mid");
+            var rootGm = _gmDir;
             var outside = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
-            var traversal = Path.Combine(AppPaths.GmMidiDir, "..", "..", "Windows", "System32");
+            var traversal = Path.Combine(_gmDir, "..", "..", "Windows", "System32");
 
-            Assert.True(AppPaths.IsPathInsideLibrary(gmSub));
-            Assert.True(AppPaths.IsPathInsideLibrary(pssSub));
-            Assert.False(AppPaths.IsPathInsideLibrary(rootGm));
-            Assert.False(AppPaths.IsPathInsideLibrary(outside));
-            Assert.False(AppPaths.IsPathInsideLibrary(traversal));
-            Assert.False(AppPaths.IsPathInsideLibrary(null!));
-            Assert.False(AppPaths.IsPathInsideLibrary(""));
+            Assert.True(AppPaths.IsPathInsideLibrary(gmSub, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.True(AppPaths.IsPathInsideLibrary(pssSub, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.False(AppPaths.IsPathInsideLibrary(rootGm, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.False(AppPaths.IsPathInsideLibrary(outside, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.False(AppPaths.IsPathInsideLibrary(traversal, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.False(AppPaths.IsPathInsideLibrary(null!, _gmDir, _pss790Dir, _pss680Dir));
+            Assert.False(AppPaths.IsPathInsideLibrary("", _gmDir, _pss790Dir, _pss680Dir));
         }
 
         [Fact]
@@ -111,55 +122,44 @@ namespace PSS790Player.Tests
         [Fact]
         public void FindMatchingOptimizedFile_DetectsExactAndSuffixMatches()
         {
-            // Create test hierarchy in temp location
-            AppPaths.EnsureDirectoriesExist();
-
             var testSub = "UnitTesting_" + Guid.NewGuid().ToString("N");
-            var gmDir = Path.Combine(AppPaths.GmMidiDir, testSub);
-            var pssDir = Path.Combine(AppPaths.Pss790MidiDir, testSub);
+            var gmSubDir = Path.Combine(_gmDir, testSub);
+            var pssSubDir = Path.Combine(_pss790Dir, testSub);
 
-            Directory.CreateDirectory(gmDir);
-            Directory.CreateDirectory(pssDir);
+            Directory.CreateDirectory(gmSubDir);
+            Directory.CreateDirectory(pssSubDir);
 
-            try
-            {
-                var gmSong1 = Path.Combine(gmDir, "Song1.mid");
-                var pssSong1 = Path.Combine(pssDir, "Song1.mid"); // Exact match
-                File.WriteAllText(gmSong1, "dummy");
-                File.WriteAllText(pssSong1, "dummy");
+            var gmSong1 = Path.Combine(gmSubDir, "Song1.mid");
+            var pssSong1 = Path.Combine(pssSubDir, "Song1.mid"); // Exact match
+            File.WriteAllText(gmSong1, "dummy");
+            File.WriteAllText(pssSong1, "dummy");
 
-                var match1 = AppPaths.FindMatchingOptimizedFile(gmSong1);
-                Assert.NotNull(match1);
-                Assert.Equal(pssSong1, match1);
+            var match1 = AppPaths.FindMatchingOptimizedFile(gmSong1, "pss790", _gmDir, _pss790Dir);
+            Assert.NotNull(match1);
+            Assert.Equal(pssSong1, match1);
 
-                var gmSong2 = Path.Combine(gmDir, "Song2.mid");
-                var pssSong2 = Path.Combine(pssDir, "Song2_PSS790.mid"); // Suffix match
-                File.WriteAllText(gmSong2, "dummy");
-                File.WriteAllText(pssSong2, "dummy");
+            var gmSong2 = Path.Combine(gmSubDir, "Song2.mid");
+            var pssSong2 = Path.Combine(pssSubDir, "Song2_PSS790.mid"); // Suffix match
+            File.WriteAllText(gmSong2, "dummy");
+            File.WriteAllText(pssSong2, "dummy");
 
-                var match2 = AppPaths.FindMatchingOptimizedFile(gmSong2);
-                Assert.NotNull(match2);
-                Assert.Equal(pssSong2, match2);
+            var match2 = AppPaths.FindMatchingOptimizedFile(gmSong2, "pss790", _gmDir, _pss790Dir);
+            Assert.NotNull(match2);
+            Assert.Equal(pssSong2, match2);
 
-                var gmSong3 = Path.Combine(gmDir, "Song3.mid");
-                File.WriteAllText(gmSong3, "dummy");
-                var match3 = AppPaths.FindMatchingOptimizedFile(gmSong3);
-                Assert.Null(match3);
+            var gmSong3 = Path.Combine(gmSubDir, "Song3.mid");
+            File.WriteAllText(gmSong3, "dummy");
+            var match3 = AppPaths.FindMatchingOptimizedFile(gmSong3, "pss790", _gmDir, _pss790Dir);
+            Assert.Null(match3);
 
-                // Reverse check: From PSS-790 to GM
-                var revMatch1 = AppPaths.FindMatchingLinkedFile(pssSong1);
-                Assert.NotNull(revMatch1);
-                Assert.Equal(gmSong1, revMatch1);
+            // Reverse check: From PSS-790 to GM
+            var revMatch1 = AppPaths.FindMatchingLinkedFile(pssSong1, "pss790", _gmDir, _pss790Dir);
+            Assert.NotNull(revMatch1);
+            Assert.Equal(gmSong1, revMatch1);
 
-                var revMatch2 = AppPaths.FindMatchingLinkedFile(pssSong2);
-                Assert.NotNull(revMatch2);
-                Assert.Equal(gmSong2, revMatch2);
-            }
-            finally
-            {
-                try { if (Directory.Exists(gmDir)) Directory.Delete(gmDir, true); } catch { }
-                try { if (Directory.Exists(pssDir)) Directory.Delete(pssDir, true); } catch { }
-            }
+            var revMatch2 = AppPaths.FindMatchingLinkedFile(pssSong2, "pss790", _gmDir, _pss790Dir);
+            Assert.NotNull(revMatch2);
+            Assert.Equal(gmSong2, revMatch2);
         }
 
         [Fact]
@@ -236,34 +236,24 @@ namespace PSS790Player.Tests
         [Fact]
         public void SyncMirroredDirectories_EnsuresFolderParityBothWays()
         {
-            AppPaths.EnsureDirectoriesExist();
-
             var uniqueId = Guid.NewGuid().ToString("N");
-            var gmUniqueDir = Path.Combine(AppPaths.GmMidiDir, "TestMirrorGM_" + uniqueId, "SubFolder");
-            var pssUniqueDir = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
+            var gmUniqueDir = Path.Combine(_gmDir, "TestMirrorGM_" + uniqueId, "SubFolder");
+            var pssUniqueDir = Path.Combine(_pss790Dir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
 
             Directory.CreateDirectory(gmUniqueDir);
             Directory.CreateDirectory(pssUniqueDir);
 
-            try
-            {
-                // Run sync
-                AppPaths.SyncMirroredDirectories();
+            // Run sync on sandboxed test directories
+            AppPaths.SyncMirroredDirectories(_gmDir, _pss790Dir, _pss680Dir);
 
-                // Target mirrored directories should now exist
-                var expectedPssCounterpart = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorGM_" + uniqueId, "SubFolder");
-                var expectedGmCounterpart = Path.Combine(AppPaths.GmMidiDir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
+            // Target mirrored directories should now exist across all 3 libraries
+            var expectedPssCounterpart = Path.Combine(_pss790Dir, "TestMirrorGM_" + uniqueId, "SubFolder");
+            var expectedGmCounterpart = Path.Combine(_gmDir, "TestMirrorPSS_" + uniqueId, "ChildFolder");
+            var expected680Counterpart = Path.Combine(_pss680Dir, "TestMirrorGM_" + uniqueId, "SubFolder");
 
-                Assert.True(Directory.Exists(expectedPssCounterpart));
-                Assert.True(Directory.Exists(expectedGmCounterpart));
-            }
-            finally
-            {
-                try { var d = Path.Combine(AppPaths.GmMidiDir, "TestMirrorGM_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
-                try { var d = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorGM_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
-                try { var d = Path.Combine(AppPaths.GmMidiDir, "TestMirrorPSS_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
-                try { var d = Path.Combine(AppPaths.Pss790MidiDir, "TestMirrorPSS_" + uniqueId); if (Directory.Exists(d)) Directory.Delete(d, true); } catch { }
-            }
+            Assert.True(Directory.Exists(expectedPssCounterpart));
+            Assert.True(Directory.Exists(expectedGmCounterpart));
+            Assert.True(Directory.Exists(expected680Counterpart));
         }
 
         [Fact]
@@ -336,56 +326,47 @@ namespace PSS790Player.Tests
         [Fact]
         public void BatchDelete_RemovesOverridesAndLinkedFiles()
         {
-            AppPaths.EnsureDirectoriesExist();
             var testSub = "BatchDeleteTest_" + Guid.NewGuid().ToString("N");
-            var gmDir = Path.Combine(AppPaths.GmMidiDir, testSub);
-            var pssDir = Path.Combine(AppPaths.Pss790MidiDir, testSub);
+            var gmSubDir = Path.Combine(_gmDir, testSub);
+            var pssSubDir = Path.Combine(_pss790Dir, testSub);
 
-            Directory.CreateDirectory(gmDir);
-            Directory.CreateDirectory(pssDir);
+            Directory.CreateDirectory(gmSubDir);
+            Directory.CreateDirectory(pssSubDir);
 
-            try
+            var gm1 = Path.Combine(gmSubDir, "Track1.mid");
+            var pss1 = Path.Combine(pssSubDir, "Track1.mid");
+            var gm2 = Path.Combine(gmSubDir, "Track2.mid");
+            var pss2 = Path.Combine(pssSubDir, "Track2.mid");
+
+            File.WriteAllText(gm1, "dummy");
+            File.WriteAllText(pss1, "dummy");
+            File.WriteAllText(gm2, "dummy");
+            File.WriteAllText(pss2, "dummy");
+
+            _store.SetOverride(gm1, 0, 12);
+            _store.SetOverride(pss1, 0, 15);
+
+            var filesToDelete = new[] { gm1, gm2 };
+            foreach (var file in filesToDelete)
             {
-                var gm1 = Path.Combine(gmDir, "Track1.mid");
-                var pss1 = Path.Combine(pssDir, "Track1.mid");
-                var gm2 = Path.Combine(gmDir, "Track2.mid");
-                var pss2 = Path.Combine(pssDir, "Track2.mid");
+                _store.RemoveOverrides(file);
+                File.Delete(file);
 
-                File.WriteAllText(gm1, "dummy");
-                File.WriteAllText(pss1, "dummy");
-                File.WriteAllText(gm2, "dummy");
-                File.WriteAllText(pss2, "dummy");
-
-                _store.SetOverride(gm1, 0, 12);
-                _store.SetOverride(pss1, 0, 15);
-
-                var filesToDelete = new[] { gm1, gm2 };
-                foreach (var file in filesToDelete)
+                var linked = AppPaths.FindMatchingLinkedFile(file, "pss790", _gmDir, _pss790Dir);
+                if (!string.IsNullOrEmpty(linked) && File.Exists(linked))
                 {
-                    _store.RemoveOverrides(file);
-                    File.Delete(file);
-
-                    var linked = AppPaths.FindMatchingLinkedFile(file);
-                    if (!string.IsNullOrEmpty(linked) && File.Exists(linked))
-                    {
-                        _store.RemoveOverrides(linked);
-                        File.Delete(linked);
-                    }
+                    _store.RemoveOverrides(linked);
+                    File.Delete(linked);
                 }
-
-                Assert.False(File.Exists(gm1));
-                Assert.False(File.Exists(pss1));
-                Assert.False(File.Exists(gm2));
-                Assert.False(File.Exists(pss2));
-
-                Assert.False(_store.HasOverrides(gm1));
-                Assert.False(_store.HasOverrides(pss1));
             }
-            finally
-            {
-                try { if (Directory.Exists(gmDir)) Directory.Delete(gmDir, true); } catch { }
-                try { if (Directory.Exists(pssDir)) Directory.Delete(pssDir, true); } catch { }
-            }
+
+            Assert.False(File.Exists(gm1));
+            Assert.False(File.Exists(pss1));
+            Assert.False(File.Exists(gm2));
+            Assert.False(File.Exists(pss2));
+
+            Assert.False(_store.HasOverrides(gm1));
+            Assert.False(_store.HasOverrides(pss1));
         }
     }
 }
