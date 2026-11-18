@@ -35,6 +35,7 @@ jobs:
         run: dotnet test -c Release --no-build --verbosity normal
 
       - name: Publish Standalone Executable
+        shell: pwsh
         run: |
           dotnet publish src/PSS790Player/PSS790Player.csproj `
             -c Release `
@@ -61,50 +62,7 @@ jobs:
       - name: Generate Release Notes Summary
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}".TrimStart('v')
-          $summary = @"
-# Yamaha PortaSound Studio v${tag}
-
-A high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio designed for the **Yamaha PortaSound PSS-790** (AWM) and **PSS-680 / PSS-480 / PSS-780** (2-Operator FM) keyboard synthesizers.
-
-## Key Features & New Functionality in v${tag}
-* **Yamaha PSS-680 Full Engine Mirror & Complete Separation**:
-  - **Dynamic Jukebox Library**: Selecting "PSS-680 Studio" immediately re-renders the library sidebar to display `⚡ PSS-680 Ready (N)` reading from `Music\Midi\PSS-680 Midi` alongside `GM Midi`.
-  - **16-Channel Mixer Tailoring**: Channels 1–15 support live voice overrides across all 100 2-Operator FM presets (#00–#99) for PSS-680. Channel 16 is fixed to 32 Hand Percussion Instruments with full Note-On velocity sensitivity.
-  - **Smart Polyphony Guard Calibration**: Enforces the 12-voice hardware polyphony limit for PSS-680 (Sound Source Mode 99) while maintaining the 28-voice limit for PSS-790, dynamically culling incidental percussion during note bursts while strictly shielding lead melody and basslines.
-  - **Studio Recorder Native Separation**: Records live takes directly into model-specific native formats (`PSS680_RECORDING:v1` to `Music\Midi\PSS-680 Midi` or `PSS790_RECORDING:v1` to `Music\Midi\PSS-790 Midi`) with 100% passthrough playback.
-  - **Dedicated SysEx Workstations**: Tailored hardware command bars for each model—PSS-680 features 1-click Mode 99 initiation (`F0 43 76 00 05 99 F7`), FM Voice Bank Dump (`00H`), Melody Memory Dump (`01H`), Chord Memory Dump (`02H`), and Custom Drummer Dump (`03H`), alongside master volume and panic resets.
-* **Simultaneous Dual-Keyboard Library Alignment & Synchronization**:
-  - The **Sync Folders** button and **Batch Remapper** analyze, convert, and synchronize **both** `PSS-790 Midi` and `PSS-680 Midi` libraries simultaneously against `GM Midi`.
-  - Adding or modifying General MIDI files keeps both hardware formats in 100% parity, ensuring immediate physical playback regardless of which keyboard synthesizer is currently connected.
-* **Interactive Synthesizer Model Selector**:
-  - Header dropdown with custom photorealistic 3D isometric icons allowing on-the-fly switching between PSS-790 (AWM) and PSS-680 (FM).
-  - Mixer strips dynamically adapt voice overrides to the active model's 100 preset voices.
-* **Complete Preset & Drum Engine Mappings**:
-  - 100 PSS-680 FM Preset Voices (#00-#99) and 100 Rhythm Styles (#00-#99).
-  - 32-Drum Hand Percussion & Custom Drummer translation on MIDI Channel 16.
-* **Full System Exclusive (SysEx) Engine**:
-  - Format 00H (FM 2-Operator Voice Data single bank dumps) exposing deep synthesizer parameters.
-  - Format 01H (Melody Memory 5 Banks), Format 02H (Chord Memory), and Format 03H (Rhythm Pattern / Custom Drummer).
-  - Verified 7-bit two's complement checksum calculation and high-nibble-first transmission.
-* **Renamed Standalone Executable to PSS-Studio.exe**:
-  - Fully self-contained standalone executable ready for Windows 10/11 x64 with zero runtime dependencies.
-  - Added 1-click `build.bat` and `Launch-Studio.bat`.
-  - Packaged releases directly in `dist/` directory.
-
-## Downloads
-| Asset | Description |
-| :--- | :--- |
-| **PSS-Studio.exe** | Standalone single-file executable (no installation or .NET runtime required) |
-| **PSS-Studio-win-x64.zip** | Complete package archive with executable, launcher, and Asus ROG Ally setup guide |
-| **Launch-Studio.bat** | Windows launch script |
-
-## Quick Start Guide
-1. Download **`PSS-Studio.exe`** (or extract **`PSS-Studio-win-x64.zip`**).
-2. Connect your PC's USB-MIDI Interface to your Yamaha PortaSound keyboard (`OUT` to `MIDI IN`, `IN` to `MIDI OUT`).
-3. Run `PSS-Studio.exe`, select your keyboard model (**PSS-790** or **PSS-680**) from the top header dropdown, and choose your MIDI port.
-"@
-          [System.IO.File]::WriteAllText("release_notes.md", $summary, [System.Text.Encoding]::UTF8)
+          & .github/scripts/generate_release_notes.ps1 -RefName "${{ github.ref_name }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -114,7 +72,7 @@ A high-performance standalone MIDI workstation, real-time voice remapper, and mu
           body_path: release_notes.md
           draft: false
           prerelease: false
-          generate_release_notes: false
+          generate_release_notes: true
           files: |
             release_assets/PSS-Studio.exe
             release_assets/Launch-Studio.bat
