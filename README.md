@@ -22,6 +22,24 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 
 ---
 
+## Video Walkthrough & Feature Tutorial
+
+A full 1080p narrated video tutorial walking through all capabilities of Yamaha PortaSound Studio is included in the release artifacts (`dist/Yamaha-PortaSound-Studio-Tutorial.mp4`):
+
+<!-- YouTube Video Embed / Thumbnail Link Placeholder -->
+> **📺 Video Tutorial**: [Watch on YouTube](https://www.youtube.com/watch?v=YOUR_VIDEO_ID) *(Upload `dist/Yamaha-PortaSound-Studio-Tutorial.mp4` and replace `YOUR_VIDEO_ID`)*
+
+### ⏱️ Video Chapters & Timestamps
+- **`0:00`** – **Welcome & Dual-Engine Overview**: Vintage synth architecture, PSS-790 AWM vs PSS-680 2-Operator FM, and the dynamic model selector.
+- **`0:58`** – **Tab 1: Real-Time Player & 16-Channel Mixer**: Live MIDI playback, real-time voice overrides, mute/solo, Hand Percussion mapping, and drum choke emulation.
+- **`1:47`** – **Side-by-Side Dual-Model Batch Remapper**: Automated batch translation of General MIDI collections into native PSS-790 and PSS-680 formats simultaneously.
+- **`2:31`** – **3-Way Mirrored Library Management**: File sync, dedicated subfolders (`PSS-790 Midi/`, `PSS-680 Midi/`, `General Midi/`), and linked file actions.
+- **`3:11`** – **Tab 2: Live MIDI Recording Studio & Take Vault**: Direct capture from keyboard performance, styles, and vector pads with native format tagging and GM export.
+- **`3:49`** – **Tab 3: SysEx Vault & Preset Librarian**: Bidirectional memory dumps, Format 00H–03H FM patches, vector styles, checksum verification, and 1-click restore.
+- **`4:25`** – **Getting Started & Standalone Release**: Single-file executable (`dist/PSS-Studio.exe`), plug-and-play USB MIDI setup, and release links.
+
+---
+
 ## Key Features
 
 ### 🎛️ Dual-Engine Architecture & Model Dropdown Selector
