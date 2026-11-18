@@ -115,7 +115,15 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 - **Real-Hardware Serial DIN Buffer & Voice Protections**:
   - **Foreign SysEx Stripping**: Filters Roland GS and Yamaha XG System Exclusive reset dumps (which can burst 250+ messages at once), preventing receive FIFO buffer overruns (`bu full` lockups) across 31,250 baud serial cables.
   - **Active Channel Missing Program Change Auto-Initialization**: Injects `ProgramChangeEvent(3)` (Voice 00: `PIANO`) at Tick 0 on active channels lacking an initial voice assignment, preventing voice bleeding from prior songs.
-- **Recursive Batch Converter**: 1-click batch converter for folders and nested subdirectories of MIDI files with relaxed vintage MIDI chunk parsing and real-time progress tracking.
+- **Dual-Model Batch Remapper & Exporter**:
+  - **Side-by-Side Device Architecture**: Independent option panels tailored specifically to each synthesizer's hardware profile:
+    - **Yamaha PSS-790 (AWM Sound Engine)**: 28-voice polyphony guard, onboard Yamaha DSP reverb boost (CC 91), AWM dynamic velocity sweet spot (36–118), sustain emulation (CC 64), expression swell folding (CC 11 → CC 7), acoustic auto-tune, and pre-roll sync.
+    - **Yamaha PSS-680 (2-Operator FM Engine)**: Sound Source Mode 99 12-voice ceiling protection (culls low-priority incidental percussion to shield lead melody and bass), CC 91 reverb send stripping & foreign SysEx purge to protect 31,250 baud serial bandwidth, linear 1–127 FM dynamic velocity, 32 Hand Percussion remap (Channel 16, Notes 38–79 with Open/Closed Hi-Hat choking), and 7-octave boundary protection ($C_0=24$ to $C_7=108$).
+  - **Dual Target Directory Display**: Explicit separate inputs displaying both destination libraries (`Music\Midi\PSS-790 Midi` and `Music\Midi\PSS-680 Midi`), alongside the General MIDI source directory.
+  - **Selective & Simultaneous Export**: Independent export checkboxes allow converting for either keyboard individually or keeping both libraries 100% in parity simultaneously.
+- **Exhaustive Multi-Agent Library Audit (115 Songs)**:
+  - Validated across all 115 General MIDI library songs (73,554+ musical notes) spanning Anime, Movie Soundtracks, Pop Music, and Video Games.
+  - 100% note retention, zero voice dropouts on melody leads, automatic hi-hat choking, and 152 automated regression tests passing (`tests/PSS790Player.Tests/PSS680MidiLibraryAuditTests.cs`).
 
 ---
 
@@ -207,27 +215,26 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 
 | Download Asset | File Type | Size | Description |
 | :--- | :--- | :--- | :--- |
-| **[`PSS-Studio.exe`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.1.0/PSS-Studio.exe)** | Windows Executable | ~73 MB | **Recommended**: Standalone single-file executable with zero runtime dependencies. |
-| **[`PSS-Studio-win-x64.zip`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.1.0/PSS-Studio-win-x64.zip)** | ZIP Archive | ~68 MB | Complete distribution archive with `PSS-Studio.exe`, `Launch-Studio.bat`, and ROG Ally guide. |
-| **[`Launch-Studio.bat`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.1.0/Launch-Studio.bat)** | Batch Script | <1 KB | Convenience launcher script. |
+| **[`PSS-Studio.exe`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.2.0/PSS-Studio.exe)** | Windows Executable | ~73 MB | **Recommended**: Standalone single-file executable with zero runtime dependencies. |
+| **[`PSS-Studio-win-x64.zip`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.2.0/PSS-Studio-win-x64.zip)** | ZIP Archive | ~68 MB | Complete distribution archive with `PSS-Studio.exe`, `Launch-Studio.bat`, and ROG Ally guide. |
+| **[`Launch-Studio.bat`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.2.0/Launch-Studio.bat)** | Batch Script | <1 KB | Convenience launcher script. |
 
 > All official standalone binaries are published on the **[GitHub Releases Page](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)**.
 
-#### Summary of Functionality in v2.1.0
-- **Multi-Model Yamaha FM & AWM Support**: Seamlessly switch between the **PSS-790** (Advanced Wave Memory) and the **PSS-680 / PSS-480 / PSS-780** (2-Operator FM Synthesizer) engines directly from the top navigation dropdown.
-- **Full Engine Mirror Image & Complete Separation**:
-  - **Dynamic Jukebox Library**: Switching models immediately re-renders the library sidebar to display `⚡ PSS-680 Ready` (reading from `Music\Midi\PSS-680 Midi`) or `⚡ PSS-790 Ready` (reading from `Music\Midi\PSS-790 Midi`), maintaining tailored conversions for each keyboard.
-  - **16-Channel Mixer Tailoring**: Channels 1–15 support live voice overrides across all 100 FM presets (#00–#99) for PSS-680 or 100 AWM presets for PSS-790. Channel 16 is fixed to 32 Hand Percussion Instruments for PSS-680 or Chart 1 Rhythm for PSS-790.
-  - **Smart Polyphony Guard Calibration**: Automatically enforces the 12-voice hardware polyphony limit for PSS-680 (Sound Source Mode 99) while maintaining the 28-voice limit for PSS-790, dynamically culling incidental percussion during note bursts while strictly shielding lead melody and basslines.
-  - **Studio Recorder Native Separation**: Records live takes directly into model-specific native formats (`PSS680_RECORDING:v1` to `Music\Midi\PSS-680 Midi` or `PSS790_RECORDING:v1` to `Music\Midi\PSS-790 Midi`) with 100% passthrough playback.
-  - **Dedicated SysEx Workstations**: Tailored hardware command bars for each model—PSS-680 features 1-click Mode 99 initiation (`F0 43 76 00 05 99 F7`), FM Voice Bank Dump (`00H`), Melody Memory Dump (`01H`), Chord Memory Dump (`02H`), and Custom Drummer Dump (`03H`), alongside master volume and panic resets.
-- **Simultaneous Dual-Keyboard Library Alignment & Synchronization**:
-  - The **Sync Folders** button and **Batch Remapper** now analyze, convert, and synchronize **both** `PSS-790 Midi` and `PSS-680 Midi` libraries simultaneously against `GM Midi`.
-  - Adding or modifying General MIDI files keeps both hardware formats in 100% parity, ensuring immediate physical playback regardless of which keyboard synthesizer is currently connected.
-- **Dedicated 3D Isometric Hardware Icons**: Hand-crafted 3D isometric squircle icons rendered to faithfully depict each hardware synthesizer's physical front panel, louvered/domed speaker styling, display, and pad layouts.
-- **100 FM Voices & 100 Rhythm Styles**: Complete native preset tables for PSS-680 (#00–#99) integrated into the 16-channel mixer and auto-accompaniment monitors.
-- **32-Drum Hand Percussion Translation**: Channel 16 percussion remapping supporting all 4 pad banks (Sets A, B, C, D) with full dynamic Note-On velocity sensitivity.
-- **Standalone `dist\` & `bin\Publish\` Distributions**: Packaged as `PSS-Studio.exe` with 1-click `build.bat` and `Launch-Studio.bat` scripts.
+#### Summary of Functionality in v2.2.0
+- **Dual-Model Side-by-Side Batch Remapper**:
+  - Expanded 2-column modal (`max-w-3xl`) with dedicated option panels for **Yamaha PSS-790** (AWM) and **Yamaha PSS-680** (2-OP FM).
+  - Explicit dual target directory inputs (`Music\Midi\PSS-790 Midi` and `Music\Midi\PSS-680 Midi`), making output destinations crystal clear.
+  - Model-tailored safeguards: 28 vs 12 voices, onboard Yamaha DSP reverb boost (CC 91) vs CC 91 stripping, AWM dynamic velocity compression (36–118) vs pure linear FM dynamics (1–127), and Chart 1 AWM drums vs 32-pad Hand Percussion (38–79).
+  - Independent export toggles for selective or simultaneous dual conversion.
+- **115-Song Multi-Agent Swarm Audit & Validation**:
+  - Multi-agent swarm audit across all 115 General MIDI library songs (73,554+ notes) spanning Anime, Movie Soundtracks, Pop Music, and Video Games.
+  - 100% note retention, zero voice dropouts on melody leads, automatic hi-hat choking, and 152 automated regression tests passing (`PSS680MidiLibraryAuditTests.cs`).
+  - Strict enforcement of the PSS-680 7-octave boundary ($C_0=24$ to $C_7=108$), auto-centering of dangling pitch bends, and stripping of foreign SysEx.
+- **Engine Relocation & Controller Hardening**:
+  - PSS-680 mode strictly purges CC 91 reverb sends, preserving precious 31,250 baud serial bandwidth for vintage microprocessors.
+  - Enhanced Channel 16 relocation logic filters for active `NoteOnEvent` instances, preventing phantom channel occupation from dummy CC resets.
+- **Standalone `dist\` & `bin\Publish\` Distributions**: Packaged as `PSS-Studio.exe` with updated distribution archives.
 
 ### Running from Project Clone / Local Build
 If you have cloned the repository, standalone executables are ready in either the `dist\` or `bin\Publish\` folders:

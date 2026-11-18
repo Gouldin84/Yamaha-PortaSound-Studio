@@ -286,9 +286,13 @@ function handleHostMessage(msg) {
                 const bSrc = document.getElementById("batchSourceDir");
                 if (bSrc) bSrc.value = msg.data.defaultBatchSource;
             }
-            if (msg.data.defaultBatchTarget) {
-                const bTgt = document.getElementById("batchTargetDir");
-                if (bTgt) bTgt.value = msg.data.defaultBatchTarget;
+            if (msg.data.defaultBatchTarget790 || msg.data.defaultBatchTarget) {
+                const bTgt790 = document.getElementById("batchTarget790Dir");
+                if (bTgt790) bTgt790.value = msg.data.defaultBatchTarget790 || msg.data.defaultBatchTarget;
+            }
+            if (msg.data.defaultBatchTarget680 || msg.data.defaultBatchTarget) {
+                const bTgt680 = document.getElementById("batchTarget680Dir");
+                if (bTgt680) bTgt680.value = msg.data.defaultBatchTarget680 || msg.data.defaultBatchTarget;
             }
             if (msg.data.sysexLibrary) {
                 state.sysexLibrary = msg.data.sysexLibrary;
@@ -3015,24 +3019,57 @@ document.getElementById("btnCancelBatch").addEventListener("click", () => {
 });
 
 document.getElementById("btnStartBatch").addEventListener("click", () => {
-    const src = document.getElementById("batchSourceDir").value;
-    const tgt = document.getElementById("batchTargetDir").value;
-    const emulateSustain = document.getElementById("chkBatchSustain")?.checked ?? true;
-    const neutralizePitch = document.getElementById("chkBatchPitchTune")?.checked ?? true;
-    const polyphonyGuard = document.getElementById("chkBatchPolyphony")?.checked ?? true;
-    const reverbBoost = document.getElementById("chkBatchReverb")?.checked ?? true;
-    const foldExpression = document.getElementById("chkBatchExpressionFold")?.checked ?? true;
-    const normalizeVelocities = document.getElementById("chkBatchVelocityNorm")?.checked ?? true;
+    const src = document.getElementById("batchSourceDir")?.value || "";
+    const target790Dir = document.getElementById("batchTarget790Dir")?.value || "";
+    const target680Dir = document.getElementById("batchTarget680Dir")?.value || "";
+
+    const convert790 = document.getElementById("chkBatchEnable790")?.checked ?? true;
+    const convert680 = document.getElementById("chkBatchEnable680")?.checked ?? true;
+
+    // PSS-790 Safeguards
+    const polyphonyGuard790 = document.getElementById("chkBatchPolyphony790")?.checked ?? true;
+    const reverbBoost790 = document.getElementById("chkBatchReverb790")?.checked ?? true;
+    const velocityNorm790 = document.getElementById("chkBatchVelocityNorm790")?.checked ?? true;
+    const sustain790 = document.getElementById("chkBatchSustain790")?.checked ?? true;
+    const expressionFold790 = document.getElementById("chkBatchExpressionFold790")?.checked ?? true;
+    const pitchTune790 = document.getElementById("chkBatchPitchTune790")?.checked ?? true;
+    const preRoll790 = document.getElementById("chkBatchPreRoll790")?.checked ?? true;
+
+    // PSS-680 Safeguards
+    const polyphonyGuard680 = document.getElementById("chkBatchPolyphony680")?.checked ?? true;
+    const cleanControllers680 = document.getElementById("chkBatchCleanControllers680")?.checked ?? true;
+    const fmVelocity680 = document.getElementById("chkBatchFmVelocity680")?.checked ?? true;
+    const drums680 = document.getElementById("chkBatchDrums680")?.checked ?? true;
+    const sustain680 = document.getElementById("chkBatchSustain680")?.checked ?? true;
+    const expressionFold680 = document.getElementById("chkBatchExpressionFold680")?.checked ?? true;
+    const pitchTune680 = document.getElementById("chkBatchPitchTune680")?.checked ?? true;
+
+    if (!convert790 && !convert680) {
+        showToast("Please enable at least one target keyboard (PSS-790 or PSS-680).");
+        return;
+    }
+
     document.getElementById("btnStartBatch").disabled = true;
     sendToHost("start_batch", {
         sourceDir: src,
-        targetDir: tgt,
-        emulateSustain,
-        neutralizePitch,
-        polyphonyGuard,
-        reverbBoost,
-        foldExpression,
-        normalizeVelocities
+        target790Dir,
+        target680Dir,
+        convert790,
+        convert680,
+        polyphonyGuard790,
+        reverbBoost790,
+        velocityNorm790,
+        sustain790,
+        expressionFold790,
+        pitchTune790,
+        preRoll790,
+        polyphonyGuard680,
+        cleanControllers680,
+        fmVelocity680,
+        drums680,
+        sustain680,
+        expressionFold680,
+        pitchTune680
     });
 });
 

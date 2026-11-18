@@ -120,17 +120,23 @@ namespace PSS790Player.Core
             string sourceDirectory,
             string target790Dir,
             string target680Dir,
-            RemapperOptions? baseOptions = null,
+            RemapperOptions? options790 = null,
+            RemapperOptions? options680 = null,
+            bool convert790 = true,
+            bool convert680 = true,
             IProgress<(int Current, int Total, string FileName)>? progress = null,
             CancellationToken cancellationToken = default)
         {
             if (!Directory.Exists(sourceDirectory))
                 throw new DirectoryNotFoundException($"Source directory '{sourceDirectory}' does not exist.");
 
-            if (!Directory.Exists(target790Dir))
+            if (!convert790 && !convert680)
+                return 0;
+
+            if (convert790 && !Directory.Exists(target790Dir))
                 Directory.CreateDirectory(target790Dir);
 
-            if (!Directory.Exists(target680Dir))
+            if (convert680 && !Directory.Exists(target680Dir))
                 Directory.CreateDirectory(target680Dir);
 
             var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories)
@@ -138,24 +144,16 @@ namespace PSS790Player.Core
                             f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            int total = files.Count * 2;
+            int targetMultiplier = (convert790 ? 1 : 0) + (convert680 ? 1 : 0);
+            int total = files.Count * targetMultiplier;
             int completed = 0;
 
-            var opt790 = new RemapperOptions
-            {
-                TargetModel = "pss790",
-                EnablePolyphonyGuard = baseOptions?.EnablePolyphonyGuard ?? true,
-                DefaultReverbBoost = baseOptions?.DefaultReverbBoost ?? true,
-                EmulateSustainPedal = baseOptions?.EmulateSustainPedal ?? true
-            };
+            var opt790 = options790 != null ? options790 : new RemapperOptions();
+            opt790.TargetModel = "pss790";
 
-            var opt680 = new RemapperOptions
-            {
-                TargetModel = "pss680",
-                EnablePolyphonyGuard = baseOptions?.EnablePolyphonyGuard ?? true,
-                DefaultReverbBoost = baseOptions?.DefaultReverbBoost ?? true,
-                EmulateSustainPedal = baseOptions?.EmulateSustainPedal ?? true
-            };
+            var opt680 = options680 != null ? options680 : new RemapperOptions();
+            opt680.TargetModel = "pss680";
+            opt680.DefaultReverbBoost = false; // PSS-680 has no DSP reverb
 
             await Task.Run(() =>
             {
@@ -166,39 +164,83 @@ namespace PSS790Player.Core
 
                     var relPath = Path.GetRelativePath(sourceDirectory, file);
 
-                    // 1. Convert for PSS-790
-                    var dest790 = Path.Combine(target790Dir, relPath);
-                    var dir790 = Path.GetDirectoryName(dest790);
-                    if (!string.IsNullOrEmpty(dir790) && !Directory.Exists(dir790)) Directory.CreateDirectory(dir790);
-
-                    // 2. Convert for PSS-680
-                    var dest680 = Path.Combine(target680Dir, relPath);
-                    var dir680 = Path.GetDirectoryName(dest680);
-                    if (!string.IsNullOrEmpty(dir680) && !Directory.Exists(dir680)) Directory.CreateDirectory(dir680);
-
+                    MidiFile? sourceMidi = null;
                     try
                     {
-                        var sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
-
-                        var remap790 = Remapper.Remap(sourceMidi, opt790);
-                        Remapper.SaveRemapped(remap790, dest790, "pss790");
-                        completed++;
-                        progress?.Report((completed, total, $"{relPath} (PSS-790)"));
-
-                        var remap680 = Remapper.Remap(sourceMidi, opt680);
-                        Remapper.SaveRemapped(remap680, dest680, "pss680");
-                        completed++;
-                        progress?.Report((completed, total, $"{relPath} (PSS-680)"));
+                        sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
                     }
                     catch (Exception)
                     {
-                        completed += 2;
+                        completed += targetMultiplier;
                         progress?.Report((completed, total, relPath));
+                        continue;
+                    }
+
+                    // 1. Convert for PSS-790
+                    if (convert790)
+                    {
+                        var dest790 = Path.Combine(target790Dir, relPath);
+                        var dir790 = Path.GetDirectoryName(dest790);
+                        if (!string.IsNullOrEmpty(dir790) && !Directory.Exists(dir790)) Directory.CreateDirectory(dir790);
+
+                        try
+                        {
+                            var remap790 = Remapper.Remap(sourceMidi.Clone(), opt790);
+                            Remapper.SaveRemapped(remap790, dest790, "pss790");
+                            completed++;
+                            progress?.Report((completed, total, $"{relPath} (PSS-790)"));
+                        }
+                        catch (Exception)
+                        {
+                            completed++;
+                            progress?.Report((completed, total, $"{relPath} (PSS-790 failed)"));
+                        }
+                    }
+
+                    // 2. Convert for PSS-680
+                    if (convert680)
+                    {
+                        var dest680 = Path.Combine(target680Dir, relPath);
+                        var dir680 = Path.GetDirectoryName(dest680);
+                        if (!string.IsNullOrEmpty(dir680) && !Directory.Exists(dir680)) Directory.CreateDirectory(dir680);
+
+                        try
+                        {
+                            var remap680 = Remapper.Remap(sourceMidi.Clone(), opt680);
+                            Remapper.SaveRemapped(remap680, dest680, "pss680");
+                            completed++;
+                            progress?.Report((completed, total, $"{relPath} (PSS-680)"));
+                        }
+                        catch (Exception)
+                        {
+                            completed++;
+                            progress?.Report((completed, total, $"{relPath} (PSS-680 failed)"));
+                        }
                     }
                 }
             }, cancellationToken);
 
-            return completed / 2;
+            return targetMultiplier > 0 ? completed / targetMultiplier : 0;
+        }
+
+        public static Task<int> ConvertDirectoryDualAsync(
+            string sourceDirectory,
+            string target790Dir,
+            string target680Dir,
+            RemapperOptions? baseOptions,
+            IProgress<(int Current, int Total, string FileName)>? progress = null,
+            CancellationToken cancellationToken = default)
+        {
+            return ConvertDirectoryDualAsync(
+                sourceDirectory,
+                target790Dir,
+                target680Dir,
+                baseOptions,
+                baseOptions,
+                true,
+                true,
+                progress,
+                cancellationToken);
         }
 
         public static LibrarySyncAnalysis AnalyzeSync(string sourceDir, string targetDir)

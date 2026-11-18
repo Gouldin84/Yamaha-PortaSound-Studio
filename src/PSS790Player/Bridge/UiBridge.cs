@@ -416,22 +416,68 @@ namespace PSS790Player.Bridge
                     case "start_batch":
                         var sourceDir = root.TryGetProperty("sourceDir", out var sProp) && !string.IsNullOrEmpty(sProp.GetString())
                             ? sProp.GetString()! : AppPaths.GmMidiDir;
-                        var targetDir = root.TryGetProperty("targetDir", out var tProp) && !string.IsNullOrEmpty(tProp.GetString())
-                            ? tProp.GetString()! : AppPaths.Pss790MidiDir;
+                        var target790 = root.TryGetProperty("target790Dir", out var t790Prop) && !string.IsNullOrEmpty(t790Prop.GetString())
+                            ? t790Prop.GetString()! : (root.TryGetProperty("targetDir", out var legacyTgt) && !string.IsNullOrEmpty(legacyTgt.GetString()) ? legacyTgt.GetString()! : AppPaths.Pss790MidiDir);
+                        var target680 = root.TryGetProperty("target680Dir", out var t680Prop) && !string.IsNullOrEmpty(t680Prop.GetString())
+                            ? t680Prop.GetString()! : AppPaths.Pss680MidiDir;
 
-                        var batchOptions = new RemapperOptions
+                        bool convert790 = !root.TryGetProperty("convert790", out var c790Prop) || c790Prop.GetBoolean();
+                        bool convert680 = !root.TryGetProperty("convert680", out var c680Prop) || c680Prop.GetBoolean();
+
+                        // PSS-790 Remapper Options
+                        var opt790 = new RemapperOptions
                         {
-                            EmulateSustainPedal = !root.TryGetProperty("emulateSustain", out var susProp) || susProp.GetBoolean(),
-                            NeutralizeAcousticPitchBends = !root.TryGetProperty("neutralizePitch", out var pitProp) || pitProp.GetBoolean(),
-                            AutoCenterDanglingPitchBends = true,
-                            EnablePolyphonyGuard = !root.TryGetProperty("polyphonyGuard", out var polProp) || polProp.GetBoolean(),
-                            DefaultReverbBoost = !root.TryGetProperty("reverbBoost", out var revProp) || revProp.GetBoolean(),
-                            FoldExpressionPedal = !root.TryGetProperty("foldExpression", out var expProp) || expProp.GetBoolean(),
-                            NormalizeAwmVelocities = !root.TryGetProperty("normalizeVelocities", out var velProp) || velProp.GetBoolean(),
-                            EnsureSetupPreRoll = !root.TryGetProperty("setupPreRoll", out var preProp) || preProp.GetBoolean()
+                            TargetModel = "pss790",
+                            EnablePolyphonyGuard = !root.TryGetProperty("polyphonyGuard790", out var pol790Prop) 
+                                ? (!root.TryGetProperty("polyphonyGuard", out var polProp) || polProp.GetBoolean()) 
+                                : pol790Prop.GetBoolean(),
+                            DefaultReverbBoost = !root.TryGetProperty("reverbBoost790", out var rev790Prop) 
+                                ? (!root.TryGetProperty("reverbBoost", out var revProp) || revProp.GetBoolean()) 
+                                : rev790Prop.GetBoolean(),
+                            NormalizeAwmVelocities = !root.TryGetProperty("velocityNorm790", out var vel790Prop) 
+                                ? (!root.TryGetProperty("normalizeVelocities", out var velProp) || velProp.GetBoolean()) 
+                                : vel790Prop.GetBoolean(),
+                            EmulateSustainPedal = !root.TryGetProperty("sustain790", out var sus790Prop) 
+                                ? (!root.TryGetProperty("emulateSustain", out var susProp) || susProp.GetBoolean()) 
+                                : sus790Prop.GetBoolean(),
+                            FoldExpressionPedal = !root.TryGetProperty("expressionFold790", out var exp790Prop) 
+                                ? (!root.TryGetProperty("foldExpression", out var expProp) || expProp.GetBoolean()) 
+                                : exp790Prop.GetBoolean(),
+                            NeutralizeAcousticPitchBends = !root.TryGetProperty("pitchTune790", out var pit790Prop) 
+                                ? (!root.TryGetProperty("neutralizePitch", out var pitProp) || pitProp.GetBoolean()) 
+                                : pit790Prop.GetBoolean(),
+                            EnsureSetupPreRoll = !root.TryGetProperty("preRoll790", out var pre790Prop) 
+                                ? (!root.TryGetProperty("setupPreRoll", out var preProp) || preProp.GetBoolean()) 
+                                : pre790Prop.GetBoolean(),
+                            AutoCenterDanglingPitchBends = true
                         };
 
-                        StartBatchConversion(sourceDir, targetDir, batchOptions);
+                        // PSS-680 Remapper Options
+                        var opt680 = new RemapperOptions
+                        {
+                            TargetModel = "pss680",
+                            EnablePolyphonyGuard = !root.TryGetProperty("polyphonyGuard680", out var pol680Prop) 
+                                ? (!root.TryGetProperty("polyphonyGuard", out var polProp2) || polProp2.GetBoolean()) 
+                                : pol680Prop.GetBoolean(),
+                            DefaultReverbBoost = false, // PSS-680 has no onboard DSP reverb
+                            FilterUnsupportedControllers = !root.TryGetProperty("cleanControllers680", out var cleanProp) || cleanProp.GetBoolean(),
+                            NormalizeAwmVelocities = false, // FM engine uses natural 1-127 linear velocity
+                            EmulateSustainPedal = !root.TryGetProperty("sustain680", out var sus680Prop) 
+                                ? (!root.TryGetProperty("emulateSustain", out var susProp2) || susProp2.GetBoolean()) 
+                                : sus680Prop.GetBoolean(),
+                            FoldExpressionPedal = !root.TryGetProperty("expressionFold680", out var exp680Prop) 
+                                ? (!root.TryGetProperty("foldExpression", out var expProp2) || expProp2.GetBoolean()) 
+                                : exp680Prop.GetBoolean(),
+                            NeutralizeAcousticPitchBends = !root.TryGetProperty("pitchTune680", out var pit680Prop) 
+                                ? (!root.TryGetProperty("neutralizePitch", out var pitProp2) || pitProp2.GetBoolean()) 
+                                : pit680Prop.GetBoolean(),
+                            EnsureSetupPreRoll = !root.TryGetProperty("preRoll680", out var pre680Prop) 
+                                ? (!root.TryGetProperty("setupPreRoll", out var preProp2) || preProp2.GetBoolean()) 
+                                : pre680Prop.GetBoolean(),
+                            AutoCenterDanglingPitchBends = true
+                        };
+
+                        StartBatchConversion(sourceDir, target790, target680, opt790, opt680, convert790, convert680);
                         break;
                     case "cancel_batch":
                         _batchCts?.Cancel();
@@ -764,6 +810,8 @@ namespace PSS790Player.Bridge
                     defaultInputDevice = inputDevices.FirstOrDefault(),
                     defaultBatchSource = AppPaths.GmMidiDir,
                     defaultBatchTarget = AppPaths.Pss790MidiDir,
+                    defaultBatchTarget790 = AppPaths.Pss790MidiDir,
+                    defaultBatchTarget680 = AppPaths.Pss680MidiDir,
                     midiThru = _recorder.MidiThruEnabled,
                     recorderBpm = _recorder.Bpm,
                     sysexLibrary = _sysexManager.GetSysExLibrary(),
@@ -2253,13 +2301,21 @@ namespace PSS790Player.Bridge
             });
         }
 
-        private void StartBatchConversion(string sourceDir, string targetDir, RemapperOptions? options = null)
+        private void StartBatchConversion(
+            string sourceDir,
+            string target790Dir,
+            string target680Dir,
+            RemapperOptions? options790 = null,
+            RemapperOptions? options680 = null,
+            bool convert790 = true,
+            bool convert680 = true)
         {
-            options ??= _options;
             _batchCts?.Cancel();
             _batchCts = new CancellationTokenSource();
 
             var resolvedSource = Directory.Exists(sourceDir) ? sourceDir : AppPaths.GmMidiDir;
+            var resolvedTarget790 = !string.IsNullOrEmpty(target790Dir) ? target790Dir : AppPaths.Pss790MidiDir;
+            var resolvedTarget680 = !string.IsNullOrEmpty(target680Dir) ? target680Dir : AppPaths.Pss680MidiDir;
 
             Task.Run(async () =>
             {
@@ -2276,19 +2332,25 @@ namespace PSS790Player.Bridge
 
                 try
                 {
-                    // Convert for both PSS-790 and PSS-680 to keep both libraries synchronized
                     int count = await BatchConverter.ConvertDirectoryDualAsync(
                         resolvedSource,
-                        AppPaths.Pss790MidiDir,
-                        AppPaths.Pss680MidiDir,
-                        options,
+                        resolvedTarget790,
+                        resolvedTarget680,
+                        options790,
+                        options680,
+                        convert790,
+                        convert680,
                         progress,
                         _batchCts.Token);
+
+                    var targetsSummary = (convert790 && convert680)
+                        ? $"{resolvedTarget790} & {resolvedTarget680}"
+                        : (convert790 ? resolvedTarget790 : resolvedTarget680);
 
                     SendToJs("batch_complete", new
                     {
                         convertedCount = count,
-                        targetDirectory = $"{AppPaths.Pss790MidiDir} & {AppPaths.Pss680MidiDir}"
+                        targetDirectory = targetsSummary
                     });
                     SendLibraryUpdate();
                 }
@@ -2297,6 +2359,11 @@ namespace PSS790Player.Bridge
                     SendToJs("error", new { message = $"Batch error: {ex.Message}" });
                 }
             });
+        }
+
+        private void StartBatchConversion(string sourceDir, string targetDir, RemapperOptions? options = null)
+        {
+            StartBatchConversion(sourceDir, targetDir, AppPaths.Pss680MidiDir, options, options, true, true);
         }
 
         private void HandleAnalyzeLibrarySync()

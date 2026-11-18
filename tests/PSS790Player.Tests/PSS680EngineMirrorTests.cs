@@ -311,5 +311,112 @@ namespace PSS790Player.Tests
             Assert.Equal("Optimal", health790.VoiceStressRating);
             Assert.Contains("PSS-790", health790.BadgeTooltip);
         }
+
+        [Fact]
+        public void Pss680_Remapper_StripsReverbCC91_AndDoesNotInjectBoost()
+        {
+            var midi = new MidiFile();
+            var trk = new TrackChunk();
+            trk.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            trk.Events.Add(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)64) { Channel = (FourBitNumber)0 }); // Reverb event
+            trk.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80) { Channel = (FourBitNumber)0 });
+            trk.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(trk);
+
+            // Remap for PSS-680 (pure FM synth, no DSP reverb)
+            var opt680 = new RemapperOptions
+            {
+                TargetModel = "pss680",
+                DefaultReverbBoost = true,
+                FilterUnsupportedControllers = true
+            };
+            var remapped680 = Remapper.Remap(midi, opt680);
+
+            var ccEvents680 = remapped680.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<ControlChangeEvent>()
+                .Where(cc => cc.ControlNumber == 91)
+                .ToList();
+
+            // CC 91 should be completely stripped for PSS-680
+            Assert.Empty(ccEvents680);
+
+            // In contrast, PSS-790 should retain CC 91 reverb for its onboard DSP processor
+            var opt790 = new RemapperOptions
+            {
+                TargetModel = "pss790",
+                DefaultReverbBoost = true,
+                FilterUnsupportedControllers = true
+            };
+            var remapped790 = Remapper.Remap(midi, opt790);
+            var ccEvents790 = remapped790.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<ControlChangeEvent>()
+                .Where(cc => cc.ControlNumber == 91)
+                .ToList();
+
+            Assert.NotEmpty(ccEvents790);
+        }
+
+        [Fact]
+        public async Task BatchConverter_ConvertDirectoryDualAsync_SupportsIndependentModelOptionsAndSelectiveExport()
+        {
+            string tempRoot = Path.Combine(Path.GetTempPath(), "PSSStudio_DualBatch_" + Guid.NewGuid().ToString("N"));
+            string gmDir = Path.Combine(tempRoot, "GM");
+            string pss790Dir = Path.Combine(tempRoot, "PSS790");
+            string pss680Dir = Path.Combine(tempRoot, "PSS680");
+
+            Directory.CreateDirectory(gmDir);
+            Directory.CreateDirectory(pss790Dir);
+            Directory.CreateDirectory(pss680Dir);
+
+            try
+            {
+                var midi = new MidiFile();
+                var trk = new TrackChunk();
+                trk.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+                trk.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0 });
+                trk.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { DeltaTime = 480, Channel = (FourBitNumber)0 });
+                midi.Chunks.Add(trk);
+                midi.Write(Path.Combine(gmDir, "SongA.mid"), true);
+
+                // Test selective conversion: only PSS-680
+                int count680Only = await BatchConverter.ConvertDirectoryDualAsync(
+                    gmDir,
+                    pss790Dir,
+                    pss680Dir,
+                    options790: new RemapperOptions { TargetModel = "pss790" },
+                    options680: new RemapperOptions { TargetModel = "pss680" },
+                    convert790: false,
+                    convert680: true
+                );
+
+                Assert.Equal(1, count680Only);
+                Assert.False(File.Exists(Path.Combine(pss790Dir, "SongA.mid")));
+                Assert.True(File.Exists(Path.Combine(pss680Dir, "SongA.mid")));
+
+                // Test dual conversion: both PSS-790 and PSS-680
+                int countBoth = await BatchConverter.ConvertDirectoryDualAsync(
+                    gmDir,
+                    pss790Dir,
+                    pss680Dir,
+                    options790: new RemapperOptions { TargetModel = "pss790" },
+                    options680: new RemapperOptions { TargetModel = "pss680" },
+                    convert790: true,
+                    convert680: true
+                );
+
+                Assert.Equal(1, countBoth);
+                Assert.True(File.Exists(Path.Combine(pss790Dir, "SongA.mid")));
+                Assert.True(File.Exists(Path.Combine(pss680Dir, "SongA.mid")));
+            }
+            finally
+            {
+                if (Directory.Exists(tempRoot))
+                {
+                    try { Directory.Delete(tempRoot, true); } catch { }
+                }
+            }
+        }
     }
 }

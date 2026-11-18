@@ -929,7 +929,7 @@
 
     <!-- Batch Converter Modal Drawer -->
     <div id="batchModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 hidden">
-        <div class="glass-panel max-w-lg w-full p-5 sm:p-6 rounded-2xl border border-slate-700/80 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div class="glass-panel max-w-3xl w-full p-5 sm:p-6 rounded-2xl border border-slate-700/80 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto custom-scrollbar">
             <div class="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div class="flex items-center space-x-2">
                     <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -937,7 +937,10 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                         </svg>
                     </div>
-                    <h3 class="text-base font-bold text-white">Batch Remapper & Exporter</h3>
+                    <div>
+                        <h3 class="text-base font-bold text-white">Batch Remapper & Exporter</h3>
+                        <p class="text-[11px] text-slate-400">Convert General MIDI files with device-tailored engine safeguards</p>
+                    </div>
                 </div>
                 <button id="btnCloseBatch" title="Close batch remapper dialog" class="text-slate-400 hover:text-white transition">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -946,48 +949,123 @@
                 </button>
             </div>
 
-            <p class="text-xs text-slate-300">
-                Batch convert all standard General MIDI files into PSS-790 and PSS-680 compatible MIDI files. All drum tracks will be remapped to Channel 16 with native hardware percussion notes, and melodic programs translated to keyboard presets for both models.
-            </p>
-
-            <div class="space-y-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
+            <!-- Directories Configuration -->
+            <div class="space-y-2.5 bg-slate-900/80 p-3.5 rounded-xl border border-slate-800 text-xs">
                 <div>
-                    <label class="block text-slate-400 font-medium mb-1">Source Directory:</label>
-                    <input type="text" id="batchSourceDir" value="General MIDI" title="Source Folder: Subdirectory within Music\Midi containing General MIDI files to convert" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
+                    <label class="block text-slate-400 font-semibold mb-1">Source Directory (General MIDI):</label>
+                    <input type="text" id="batchSourceDir" value="General MIDI" title="Source Folder: Subdirectory within Music\Midi containing General MIDI files to convert" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono text-[11px] focus:outline-none focus:border-cyan-500">
                 </div>
-                <div>
-                    <label class="block text-slate-400 font-medium mb-1">Target Directory:</label>
-                    <input type="text" id="batchTargetDir" value="Remapped" title="Target Folder: Subdirectory within Music\Midi where converted PSS-790 files will be written" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-white font-mono focus:outline-none focus:border-cyan-500">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-slate-300 font-semibold flex items-center space-x-1.5">
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">PSS-790</span>
+                                <span>Target Directory:</span>
+                            </label>
+                        </div>
+                        <input type="text" id="batchTarget790Dir" value="PSS-790 Midi" title="Target Folder for PSS-790 remapped files" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-cyan-800/50 text-cyan-200 font-mono text-[11px] focus:outline-none focus:border-cyan-500">
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-slate-300 font-semibold flex items-center space-x-1.5">
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">PSS-680</span>
+                                <span>Target Directory:</span>
+                            </label>
+                        </div>
+                        <input type="text" id="batchTarget680Dir" value="PSS-680 Midi" title="Target Folder for PSS-680 remapped files" class="w-full px-3 py-1.5 rounded-lg bg-slate-800 border border-amber-800/50 text-amber-200 font-mono text-[11px] focus:outline-none focus:border-amber-500">
+                    </div>
                 </div>
             </div>
 
-            <!-- Intelligent Remapping Safeguards -->
-            <div class="space-y-2 bg-slate-900/80 p-3 rounded-xl border border-slate-800 text-xs">
-                <span class="block text-slate-300 font-bold mb-1 text-[11px] uppercase tracking-wider text-cyan-400">Automated Remapping Engine</span>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Sustain Emulation: Extends staccato piano notes naturally for PSS-790 envelope reproduction">
-                    <input type="checkbox" id="chkBatchSustain" title="Sustain Emulation: Extends staccato piano notes naturally for PSS-790 envelope reproduction" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>Sustain Pedal Emulation (CC 64):</strong> Extends staccato piano notes naturally</span>
-                </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings">
-                    <input type="checkbox" id="chkBatchPitchTune" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>Acoustic Auto-Tune:</strong> Neutralizes micro-pitch bends & detune drift on piano/strings</span>
-                </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Smart Polyphony Guard: Protects lead melody from voice stealing (28-voice limit for PSS-790, 12-voice limit for PSS-680)">
-                    <input type="checkbox" id="chkBatchPolyphony" title="Smart Polyphony Guard: Protects lead melody from voice stealing" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>Smart Polyphony Guard:</strong> Protects lead melody from voice stealing (28/12 voices)</span>
-                </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)">
-                    <input type="checkbox" id="chkBatchReverb" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>Yamaha DSP Reverb Boost:</strong> Engages PSS-790 digital reverb (CC 91)</span>
-                </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="Expression Swell Folding: Maps CC 11 expression curves into CC 7 volume to preserve dynamics">
-                    <input type="checkbox" id="chkBatchExpressionFold" title="Expression Swell Folding: Maps CC 11 expression curves into CC 7 volume to preserve dynamics" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>Expression Swell Folding (CC 11 &rarr; CC 7):</strong> Enables dynamic swells and fadeouts</span>
-                </label>
-                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer hover:text-white" title="AWM Dynamic Velocity Sweet Spot: Lifts quiet notes and prevents harsh sample clipping">
-                    <input type="checkbox" id="chkBatchVelocityNorm" title="AWM Dynamic Velocity Sweet Spot: Lifts quiet notes and prevents harsh sample clipping" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
-                    <span><strong>AWM Dynamic Velocity Sweet Spot:</strong> Lifts quiet notes and prevents harsh sample clipping</span>
-                </label>
+            <!-- Side-by-Side Model Safeguards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+                <!-- PSS-790 Panel -->
+                <div class="bg-slate-900/90 p-3.5 rounded-xl border border-cyan-800/40 space-y-2.5">
+                    <div class="flex items-center justify-between pb-1.5 border-b border-cyan-900/40">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="text-sm">🎹</span>
+                            <span class="font-bold text-white text-[11px] uppercase tracking-wider text-cyan-400">PSS-790 (AWM Engine)</span>
+                        </div>
+                        <label class="flex items-center space-x-1 text-[11px] text-cyan-300 font-semibold cursor-pointer">
+                            <input type="checkbox" id="chkBatchEnable790" checked class="w-3.5 h-3.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                            <span>Export</span>
+                        </label>
+                    </div>
+                    <div class="space-y-1.5 text-slate-300">
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="28-Voice Polyphony Guard: Protects lead melody from voice stealing">
+                            <input type="checkbox" id="chkBatchPolyphony790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Smart Polyphony Guard:</strong> 28-voice limit protection, prioritizes lead melodies</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Yamaha DSP Reverb Boost: Engages PSS-790 built-in digital reverb (CC 91)">
+                            <input type="checkbox" id="chkBatchReverb790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Yamaha DSP Reverb Boost:</strong> Engages PSS-790 onboard reverb chip (CC 91)</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="AWM Dynamic Velocity Sweet Spot: Lifts quiet notes and prevents harsh sample clipping">
+                            <input type="checkbox" id="chkBatchVelocityNorm790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>AWM Velocity Sweet Spot:</strong> Scales velocities (36-118) to avoid sample clipping</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Sustain Emulation: Extends staccato piano notes naturally for PSS-790 envelope reproduction">
+                            <input type="checkbox" id="chkBatchSustain790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Sustain Emulation (CC 64):</strong> Extends staccato notes before CC 64 filter</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Expression Swell Folding: Maps CC 11 into CC 7 volume to preserve dynamics">
+                            <input type="checkbox" id="chkBatchExpressionFold790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Expression Swell Folding:</strong> Folds CC 11 into CC 7 volume curves</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Acoustic Auto-Tune: Neutralizes micro-pitch bends and detune drift on piano/strings">
+                            <input type="checkbox" id="chkBatchPitchTune790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Acoustic Auto-Tune:</strong> Centers pitch and fixes multisample detuning</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Setup Pre-Roll Window: Inserts setup ticks before Note 1 so tone generator registers voices cleanly">
+                            <input type="checkbox" id="chkBatchPreRoll790" checked class="w-3.5 h-3.5 mt-0.5 text-cyan-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Setup Pre-Roll:</strong> Inserts initialization window before Note 1</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- PSS-680 Panel -->
+                <div class="bg-slate-900/90 p-3.5 rounded-xl border border-amber-800/40 space-y-2.5">
+                    <div class="flex items-center justify-between pb-1.5 border-b border-amber-900/40">
+                        <div class="flex items-center space-x-1.5">
+                            <span class="text-sm">⚡</span>
+                            <span class="font-bold text-white text-[11px] uppercase tracking-wider text-amber-400">PSS-680 (2-OP FM Engine)</span>
+                        </div>
+                        <label class="flex items-center space-x-1 text-[11px] text-amber-300 font-semibold cursor-pointer">
+                            <input type="checkbox" id="chkBatchEnable680" checked class="w-3.5 h-3.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0">
+                            <span>Export</span>
+                        </label>
+                    </div>
+                    <div class="space-y-1.5 text-slate-300">
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Mode 99 12-Voice Guard: Prevents hardware voice stealing and culls incidental percussion">
+                            <input type="checkbox" id="chkBatchPolyphony680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Smart Polyphony Guard:</strong> Mode 99 12-voice ceiling, culls low-priority drums</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Purge CC 91 & SysEx: Strips CC 91 and GS/XG SysEx to protect 31,250 baud serial buffer">
+                            <input type="checkbox" id="chkBatchCleanControllers680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Purge CC 91 & SysEx:</strong> Strips reverb & foreign SysEx to protect MIDI buffer</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Linear FM Velocity: Preserves full 1-127 dynamics for FM operator modulation">
+                            <input type="checkbox" id="chkBatchFmVelocity680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Linear FM Dynamics:</strong> Preserves full 1-127 velocity for FM modulation</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="32 Hand Percussion Remap: Translates GM drums to Pad Sets A-D (notes 38-79) with hi-hat choke">
+                            <input type="checkbox" id="chkBatchDrums680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>32 Hand Percussion Remap:</strong> Ch 16 pads (38-79) & Open/Closed Hi-Hat choke</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Sustain Emulation: Extends staccato notes before CC 64 stripping">
+                            <input type="checkbox" id="chkBatchSustain680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Sustain Emulation (CC 64):</strong> Extends staccato notes before CC 64 filter</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Expression Swell Folding: Maps CC 11 into CC 7 volume to preserve dynamics">
+                            <input type="checkbox" id="chkBatchExpressionFold680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Expression Swell Folding:</strong> Folds CC 11 into CC 7 volume curves</span>
+                        </label>
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Melodic Range Boundary: Folds notes into 7-octave FM envelope (C0=24 to C7=108)">
+                            <input type="checkbox" id="chkBatchPitchTune680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
+                            <span><strong>Range & Pitch Boundary:</strong> Folds notes into 7 octaves (24-108) & centers pitch</span>
+                        </label>
+                    </div>
+                </div>
             </div>
 
             <!-- Progress Bar -->

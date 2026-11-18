@@ -307,9 +307,9 @@ namespace PSS790Player.Core
             {
                 foreach (var evt in trackChunk.Events)
                 {
-                    if (evt is ChannelEvent channelEvent)
+                    if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0)
                     {
-                        usedChannels.Add(channelEvent.Channel);
+                        usedChannels.Add(noteOn.Channel);
                     }
                     if (evt is ControlChangeEvent cc && cc.ControlNumber == 0 && (cc.ControlValue == 127 || cc.ControlValue == 128))
                     {
@@ -340,21 +340,26 @@ namespace PSS790Player.Core
                     }
                 }
                 relocatedMelodicChannel ??= drumChannels.FirstOrDefault(d => d != 15);
+                if (relocatedMelodicChannel.HasValue && channelGmPrograms.TryGetValue(15, out var ch15Prog))
+                {
+                    channelGmPrograms[relocatedMelodicChannel.Value] = ch15Prog;
+                }
             }
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 var bentChannels = new HashSet<int>();
 
-                // Filter unsupported events, foreign GS/XG SysEx, and any Program Change on drum channels
+                // Filter unsupported events, foreign GS/XG SysEx, and any Program Change on drum channels (or destination drum Channel 16)
                 // CRITICAL: Must use ManageTimedEvents to preserve absolute event timing and prevent track desync!
                 using (var timedEventsMgr = trackChunk.ManageTimedEvents())
                 {
                     timedEventsMgr.Objects.RemoveAll(te =>
                         te.Event is ChannelAftertouchEvent or NoteAftertouchEvent ||
                         te.Event is NormalSysExEvent or EscapeSysExEvent ||
-                        (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber)) ||
-                        (te.Event is ProgramChangeEvent pc && drumChannels.Contains(pc.Channel))
+                        (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && 
+                            (is680 ? (cc.ControlNumber != 1 && cc.ControlNumber != 7) : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
+                        (te.Event is ProgramChangeEvent pc && (drumChannels.Contains(pc.Channel) || pc.Channel == 15))
                     );
                 }
 
@@ -556,8 +561,8 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Injects default Yamaha DSP Reverb (CC 91) on channels without reverb events
-            if (options.DefaultReverbBoost)
+            // Injects default Yamaha DSP Reverb (CC 91) on channels without reverb events (PSS-790 onboard DSP only; PSS-680 has no DSP reverb chip)
+            if (!is680 && options.DefaultReverbBoost)
             {
                 ApplyReverbBoost(remapped);
             }
