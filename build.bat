@@ -25,9 +25,16 @@ if %ERRORLEVEL% neq 0 (
     exit /b %ERRORLEVEL%
 )
 
+if not exist dist mkdir dist
+copy /y bin\Publish\PSS-Studio.exe dist\PSS-Studio.exe >nul
+copy /y Launch-Studio.bat dist\Launch-Studio.bat >nul
+powershell -NoProfile -Command "Compress-Archive -Path dist\PSS-Studio.exe, dist\Launch-Studio.bat -DestinationPath dist\PSS-Studio-win-x64.zip -Force" >nul
+
 echo.
 echo ======================================================
 echo   SUCCESS: Standalone executable created at:
 echo   bin\Publish\PSS-Studio.exe
+echo   dist\PSS-Studio.exe
+echo   dist\PSS-Studio-win-x64.zip
 echo ======================================================
 pause

@@ -11,16 +11,51 @@ A high-performance standalone MIDI workstation, real-time voice remapper, and mu
 
 ## Overview
 
-The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polyphonic Advanced Wave Memory (AWM) tone generator with 100 preset voices, 50 built-in rhythm styles, a vector synth joystick pad, and 16-channel multi-timbral MIDI reception. However, because it predates the General MIDI (GM) standard, standard MIDI files sound distorted, transposed, or unaligned without translation.
+**Yamaha PortaSound Studio** is a unified, high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio supporting both major eras of classic Yamaha PortaSound synthesizer architecture:
+1. **Yamaha PortaSound PSS-790** (released 1990): 28-voice polyphonic Advanced Wave Memory (AWM) sample-playback tone generator with 100 preset voices, 50 rhythm styles, vector synth joystick, and 16-channel multi-timbral MIDI.
+2. **Yamaha PortaSound PSS-680 / PSS-480 / PSS-780** (released 1988–1989): 12-voice polyphonic 2-Operator FM (Frequency Modulation) sound engine (YM3420 / OPLL family) with 100 FM voices, 100 rhythm styles, 32-drum Hand Percussion & Custom Drummer, 5 digital synthesizer memory banks, and multi-timbral Sound Source Mode 99.
 
-**Yamaha PSS-790 Studio** provides a complete bidirectional workstation across three dedicated studio tabs:
-1. **Player & Voice Remapper**: Real-time translation, hardware playback, and batch file conversion for General MIDI files.
-2. **MIDI Recording Studio & Vault**: Direct capture from the PSS-790 keyboard, styles, and vector pad, with native take preservation (`PSS790_RECORDING:v1`), standalone take vault, stereo VU meters, live chord analyzer, and reverse export to standard General MIDI.
-3. **SysEx Vault & Preset Librarian**: Bidirectional System Exclusive memory dumps, voice parameter backup, hex payload inspection, and 1-click restore to keyboard memory.
+Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI files sound distorted, transposed, or unaligned without translation. Yamaha PortaSound Studio provides real-time translation, hardware playback, direct recording, and bidirectional SysEx preset management across three dedicated studio tabs:
+- **Player & Voice Remapper**: Real-time translation, hardware playback, and batch file conversion for General MIDI files.
+- **MIDI Recording Studio & Vault**: Direct capture from keyboard performance, styles, and vector pad, with native take preservation (`PSS790_RECORDING:v1`), standalone take vault, stereo VU meters, live chord analyzer, and reverse export to standard General MIDI.
+- **SysEx Vault & Preset Librarian**: Bidirectional System Exclusive memory dumps, voice parameter backup, hex payload inspection, and 1-click restore to keyboard memory.
 
 ---
 
 ## Key Features
+
+### 🎛️ Dual-Engine Architecture & Model Dropdown Selector
+- **Interactive Synthesizer Model Selector**:
+  - Top navigation dropdown featuring custom photorealistic 3D isometric squircle icons matching the retro-futuristic dark neon aesthetic.
+  - Switch on the fly between **Yamaha PSS-790 (AWM Engine)** and **Yamaha PSS-680 (2-Op FM Engine)**.
+  - Active selection persists across sessions in `localStorage`.
+- **Dynamic UI Reconfiguration**:
+  - Switching models automatically updates the header branding, engine badge, voice override dropdowns, drum mappings, and SysEx tools.
+  - Channel voice selectors dynamically populate with the active model's 100 preset voices (PSS-790 AWM Chart 2 voices vs PSS-680 FM voices #00–#99).
+
+---
+
+### 🎹 Yamaha PSS-680 / PSS-480 / PSS-780 2-Operator FM Synthesis
+- **2-Operator FM Sound Engine (YM3420)**:
+  - Full support for Yamaha's iconic 2-operator FM architecture (Modulator + Carrier) with 4 sine waveform tables: Standard Sine ($\sin \theta$), Squared Sine ($\sin^2 \theta$), Sine Half-Wave, and Squared Sine Half-Wave.
+  - Fine detune ($\text{DT1} = -3\dots +3$), coarse detune ($\text{DT2} = +600\text{ cents}$), frequency multipliers ($\text{MUL} = 0\dots 15$), and modulator feedback ($\text{FB} = 0\dots 7$).
+- **Sound Source Mode 99 (Multi-Timbral)**:
+  - Dynamic 12-voice polyphony allocation shared across Channels 1–15.
+  - Full dynamic Note-On velocity sensitivity ($9nH, v = 1\dots 127$) for expressive velocity-sensitive playback.
+  - Extended 7-octave playable note range (MIDI Notes 24 to 108 / $C_0$ to $C_7$).
+- **Complete Preset & Style Tables**:
+  - All 100 PSS-680 Preset Voices (#00–#99) from `00: Synth Brass` to `99: Sine Wave`.
+  - All 100 PSS-680 Rhythm Styles (#00–#99) from `00: Rhythm & Blues 1` to `99: Barbershop Quartet`.
+- **32-Drum Hand Percussion & Custom Drummer Mapping**:
+  - Translates and triggers all 32 PCM percussion sounds across Pad Sets A, B, C, D on MIDI Channel 16 (MIDI Notes 38 to 79).
+  - Preserves velocity-sensitive drum dynamics and accent playback.
+- **Deep System Exclusive (SysEx) Engine**:
+  - **Format 00H (FM 2-Operator Voice Data)**: 33 decoded bytes / 66 nibbles exposing deep synthesis parameters hidden from the physical keyboard panel (envelope rates AR, D1R, D2R, RR, SRR, breakpoint D1L, level key scaling LKS HI/LO, rate scaling RKS, vibrato delay VDT, and waveform selection).
+  - **Format 01H (Melody Memory)**: 5026-byte sequence dumps for all 5 melody memory banks with track linking and portamento speed.
+  - **Format 02H (Chord Memory)**: 202-byte chord sequence dumps covering 13 chord types, measure/beat counters, and orchestration switches.
+  - **Format 03H (Rhythm Pattern / Custom Drummer)**: 358-byte pattern dumps for 32 instrument tracks across 8 beats with quantize grids and accent flags.
+  - **Verified Checksum & Nibble Protocol**: Strict implementation of high-nibble-first transmission and Yamaha 7-bit two's complement checksum formula:
+    $$\text{Checksum} = (128 - (\sum \text{DecodedBytes} \pmod{128})) \pmod{128}$$
 
 ### 📻 Tab 1: Player & Voice Remapper
 - **Quick-Pick Folder Tree Sidebar (Jukebox Mode)**:
@@ -167,15 +202,33 @@ The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polypho
 
 ## Installation & Download
 
-### Running Pre-Built Binaries
-Download the latest standalone executable from the **[Releases](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)** page:
-1. Download `PSS-Studio.exe`.
-2. Run `PSS-Studio.exe` directly (no installation or .NET runtime installation required).
+### Latest Release: v2.0.0 (Yamaha PortaSound Studio)
 
-### Running from Project Clone
-If you have cloned the repository, run `Launch-Studio.bat` or run the pre-compiled standalone executable in `bin\Publish`:
+| Download Asset | File Type | Size | Description |
+| :--- | :--- | :--- | :--- |
+| **[`PSS-Studio.exe`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.0.0/PSS-Studio.exe)** | Windows Executable | ~73 MB | **Recommended**: Standalone single-file executable with zero runtime dependencies. |
+| **[`PSS-Studio-win-x64.zip`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.0.0/PSS-Studio-win-x64.zip)** | ZIP Archive | ~68 MB | Complete distribution archive with `PSS-Studio.exe`, `Launch-Studio.bat`, and ROG Ally guide. |
+| **[`Launch-Studio.bat`](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases/download/v2.0.0/Launch-Studio.bat)** | Batch Script | <1 KB | Convenience launcher script. |
+
+> All official standalone binaries are published on the **[GitHub Releases Page](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)**.
+
+#### Summary of Functionality in v2.0.0
+- **Multi-Model Yamaha FM & AWM Support**: Seamlessly switch between the **PSS-790** (Advanced Wave Memory) and the **PSS-680 / PSS-480 / PSS-780** (2-Operator FM Synthesizer) engines directly from the top navigation dropdown.
+- **Dedicated 3D Isometric Hardware Icons**: Hand-crafted 3D isometric squircle icons rendered to faithfully depict each hardware synthesizer's physical front panel, louvered/domed speaker styling, display, and pad layouts.
+- **100 FM Voices & 100 Rhythm Styles**: Complete native preset tables for PSS-680 (#00–#99) integrated into the 16-channel mixer and auto-accompaniment monitors.
+- **32-Drum Hand Percussion Translation**: Channel 16 percussion remapping supporting all 4 pad banks (Sets A, B, C, D) with full dynamic Note-On velocity sensitivity.
+- **Multi-Timbral Sound Source Mode 99**: Complete dynamic 12-voice polyphony management across MIDI channels 1–15 with extended 7-octave keyboard range ($C_0$–$C_7$).
+- **Full SysEx Workstation**: Complete bidirectional System Exclusive support for Format 00H (FM voice dumps with hidden parameters), Format 01H (Melody Memory 5 Banks), Format 02H (Chord Memory), and Format 03H (Custom Drummer rhythm patterns) with verified 7-bit two's complement checksum calculation.
+- **Standalone `dist\` & `bin\Publish\` Distributions**: Packaged as `PSS-Studio.exe` with 1-click `build.bat` and `Launch-Studio.bat` scripts.
+
+### Running from Project Clone / Local Build
+If you have cloned the repository, standalone executables are ready in either the `dist\` or `bin\Publish\` folders:
 ```powershell
-.\bin\Publish\PSS-Studio.exe
+# Run from dist folder
+.\dist\PSS-Studio.exe
+
+# Or use the quick launcher
+.\Launch-Studio.bat
 ```
 
 ---

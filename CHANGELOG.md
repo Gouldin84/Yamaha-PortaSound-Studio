@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-11-18
+
+### Added
+- **Yamaha PortaSound PSS-680 (PSS-480 / PSS-780) 2-Operator FM Synthesizer Support**:
+  - Full support for the vintage 2-operator FM sound engine (YM3420 / OPLL family) alongside the PSS-790 AWM engine.
+  - Multi-timbral Sound Source Mode 99 support with dynamic 12-voice polyphony allocation and full velocity sensitivity (1-127).
+  - 100 PSS-680 FM Preset Voices (#00-#99) and 100 Rhythm Styles (#00-#99).
+  - 32-Drum Hand Percussion & Custom Drummer translation on MIDI Channel 16 across 4 pad banks (Sets A, B, C, D).
+- **Interactive Synthesizer Model Selector**:
+  - Top header dropdown with custom 3D isometric squircle icons allowing on-the-fly switching between PSS-790 (AWM) and PSS-680 (FM).
+  - 16-channel mixer strips dynamically adapt voice overrides to the active model's 100 preset voices.
+  - Active model preference persists across sessions in `localStorage`.
+- **Comprehensive System Exclusive (SysEx) Engine**:
+  - Format 00H: FM 2-Operator Voice Data single bank dumps exposing deep synthesizer parameters.
+  - Format 01H: Melody Memory (5 Banks).
+  - Format 02H: Chord Memory Data.
+  - Format 03H: Rhythm Pattern Data (Custom Drummer).
+  - Verified 7-bit two's complement checksum calculation and high-nibble-first transmission protocol.
+- **Standalone Distribution & Renaming**:
+  - Renamed primary application executable to `PSS-Studio.exe`.
+  - Added `dist/` release distribution directory with `PSS-Studio.exe` and `PSS-Studio-win-x64.zip`.
+  - Added 1-click root scripts `build.bat` and `Launch-Studio.bat`.
+
 ## [1.18.5] - 2026-11-17
 
 ### Fixed

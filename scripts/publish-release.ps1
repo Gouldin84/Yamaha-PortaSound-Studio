@@ -36,7 +36,16 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Publishing failed. Release aborted."
 }
 
-Write-Host "==> Standalone executable successfully built at $OutputDir\PSS-Studio.exe" -ForegroundColor Green
+$DistDir = "$PSScriptRoot\..\dist"
+New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
+Copy-Item "$OutputDir\PSS-Studio.exe" "$DistDir\" -Force
+Copy-Item "$PSScriptRoot\..\Launch-Studio.bat" "$DistDir\" -Force
+if (Test-Path "$PSScriptRoot\..\ASUS_ROG_ALLY_SETUP.txt") {
+    Copy-Item "$PSScriptRoot\..\ASUS_ROG_ALLY_SETUP.txt" "$DistDir\" -Force
+}
+Compress-Archive -Path "$DistDir\PSS-Studio.exe", "$DistDir\Launch-Studio.bat" -DestinationPath "$DistDir\PSS-Studio-win-x64.zip" -Force
+
+Write-Host "==> Standalone executable successfully built at $OutputDir\PSS-Studio.exe and $DistDir\PSS-Studio.exe" -ForegroundColor Green
 
 Write-Host "==> Committing and Tagging Release $Version..." -ForegroundColor Cyan
 git add -A
