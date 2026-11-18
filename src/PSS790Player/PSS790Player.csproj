@@ -7,10 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <RootNamespace>PSS790Player</RootNamespace>
-    <AssemblyName>PSS790Player</AssemblyName>
+    <AssemblyName>PSS-Studio</AssemblyName>
     <Authors>Gouldin84</Authors>
     <Company>Gouldin84</Company>
-    <Product>Yamaha PSS-790 Studio</Product>
+    <Product>Yamaha PortaSound Studio</Product>
     <Copyright>Copyright © 2026 Gouldin84</Copyright>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     

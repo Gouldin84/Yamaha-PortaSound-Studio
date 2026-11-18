@@ -338,6 +338,10 @@ namespace PSS790Player.Bridge
                         var seconds = root.GetProperty("seconds").GetDouble();
                         _player.Seek(TimeSpan.FromSeconds(seconds));
                         break;
+                    case "set_active_model":
+                        var selectedModel = root.GetProperty("model").GetString() ?? "pss790";
+                        SendToJs("model_changed", new { model = selectedModel });
+                        break;
                     case "set_speed":
                         var speed = root.GetProperty("speed").GetDouble();
                         _player.SetSpeed(speed);
@@ -695,6 +699,27 @@ namespace PSS790Player.Bridge
                     })
                     .ToList();
 
+                var pss680Voices = Pss680Constants.Voices.Values
+                    .OrderBy(v => v.Number)
+                    .Select(v => new
+                    {
+                        number = v.Number,
+                        name = v.Name,
+                        category = v.Category,
+                        midiProgram = (byte)v.Number
+                    })
+                    .ToList();
+
+                var pss680Drums = Pss680Constants.DrumMap.Values
+                    .Select(d => new
+                    {
+                        noteNumber = d.NoteNumber,
+                        name = d.Name,
+                        pad = d.PadSetAndNumber,
+                        noteName = d.NoteName
+                    })
+                    .ToList();
+
                 var libraryData = ScanLibraryFiles();
 
                 SendToJs("initial_data", new
@@ -702,6 +727,9 @@ namespace PSS790Player.Bridge
                     devices,
                     inputDevices,
                     voices,
+                    pss790Voices = voices,
+                    pss680Voices,
+                    pss680Drums,
                     library = libraryData,
                     defaultDevice = devices.FirstOrDefault(),
                     defaultInputDevice = inputDevices.FirstOrDefault(),

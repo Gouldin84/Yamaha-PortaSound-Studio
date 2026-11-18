@@ -7,6 +7,10 @@ let state = {
     selectedDevice: null,
     selectedInputDevice: null,
     voices: [],
+    activeModel: localStorage.getItem("yamaha_studio_model") || "pss790",
+    pss790Voices: [],
+    pss680Voices: [],
+    pss680Drums: [],
     library: { gmTree: null, pssTree: null, gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false, baseDir: "" },
     currentFile: null,
     currentFilePath: null,
@@ -262,7 +266,10 @@ function handleHostMessage(msg) {
             state.initialDataReceived = true;
             state.devices = msg.data.devices || [];
             state.inputDevices = msg.data.inputDevices || [];
-            state.voices = msg.data.voices || [];
+            state.pss790Voices = msg.data.pss790Voices || msg.data.voices || [];
+            state.pss680Voices = msg.data.pss680Voices || [];
+            state.pss680Drums = msg.data.pss680Drums || [];
+            applyActiveModel(state.activeModel);
             state.library = msg.data.library || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
             if (msg.data.recorderBpm) {
                 state.recorderBpm = msg.data.recorderBpm;
@@ -3673,6 +3680,100 @@ document.getElementById("btnOpenRecordingsFolder")?.addEventListener("click", ()
 // Expose handleHostMessage to global window so C# can invoke it directly via ExecuteScriptAsync
 window.handleHostMessage = handleHostMessage;
 
+// Model Selector & State Management
+function applyActiveModel(modelKey) {
+    state.activeModel = modelKey;
+    localStorage.setItem("yamaha_studio_model", modelKey);
+
+    const is680 = modelKey === "pss680";
+    if (is680 && state.pss680Voices && state.pss680Voices.length > 0) {
+        state.voices = state.pss680Voices;
+    } else if (!is680 && state.pss790Voices && state.pss790Voices.length > 0) {
+        state.voices = state.pss790Voices;
+    }
+
+    const icon = document.getElementById("activeModelIcon");
+    const title = document.getElementById("activeModelTitle");
+    const badge = document.getElementById("activeModelBadge");
+    const check790 = document.getElementById("check-pss790");
+    const check680 = document.getElementById("check-pss680");
+
+    if (icon) icon.src = is680 ? "pss680_icon.png" : "app_icon.png";
+    if (title) title.textContent = is680 ? "PSS-680 Studio" : "PSS-790 Studio";
+    if (badge) {
+        badge.textContent = is680 ? "2-Op FM Engine" : "AWM Engine";
+        badge.className = is680
+            ? "px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-amber-950 text-amber-400 border border-amber-800/60 hidden md:inline-block"
+            : "px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block";
+    }
+
+    if (check790) check790.classList.toggle("hidden", is680);
+    if (check680) check680.classList.toggle("hidden", !is680);
+
+    // Re-render mixer so voice override dropdowns update to the active model's presets
+    renderMixer();
+
+    sendToHost("set_active_model", { model: modelKey });
+}
+
+function initModelSelector() {
+    const btn = document.getElementById("modelSelectorBtn");
+    const menu = document.getElementById("modelDropdownMenu");
+    const chevron = document.getElementById("modelDropdownChevron");
+
+    if (!btn || !menu) return;
+
+    function openMenu() {
+        menu.classList.remove("hidden");
+        requestAnimationFrame(() => {
+            menu.classList.remove("opacity-0", "scale-95");
+            menu.classList.add("opacity-100", "scale-100");
+        });
+        btn.setAttribute("aria-expanded", "true");
+        if (chevron) chevron.classList.add("rotate-180");
+    }
+
+    function closeMenu() {
+        menu.classList.remove("opacity-100", "scale-100");
+        menu.classList.add("opacity-0", "scale-95");
+        setTimeout(() => {
+            menu.classList.add("hidden");
+        }, 150);
+        btn.setAttribute("aria-expanded", "false");
+        if (chevron) chevron.classList.remove("rotate-180");
+    }
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = !menu.classList.contains("hidden");
+        if (isOpen) closeMenu();
+        else openMenu();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            closeMenu();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !menu.classList.contains("hidden")) {
+            closeMenu();
+        }
+    });
+
+    menu.querySelectorAll(".model-option-btn").forEach(optBtn => {
+        optBtn.addEventListener("click", () => {
+            const modelKey = optBtn.dataset.model;
+            applyActiveModel(modelKey);
+            closeMenu();
+        });
+    });
+
+    const savedModel = localStorage.getItem("yamaha_studio_model") || "pss790";
+    applyActiveModel(savedModel);
+}
+
 // Trigger initial handshake and keyboard shortcuts
 function startApp() {
     initTheme();
@@ -3680,6 +3781,7 @@ function startApp() {
     initSidebarState();
     initVuMeters();
     renderRecordingsLibrary();
+    initModelSelector();
 
     // Immediately render initial mixer strips, device dropdowns, and song tree so the UI is never blank
     renderMixer();

@@ -1,8 +1,8 @@
-# Yamaha PSS-790 Studio
+# Yamaha PortaSound Studio
 
-A high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio designed specifically for the **Yamaha PortaSound PSS-790** keyboard synthesizer.
+A high-performance standalone MIDI workstation, real-time voice remapper, and multi-tab recording & SysEx studio designed for the **Yamaha PortaSound PSS-790** (AWM) and **PSS-680 / PSS-480 / PSS-780** (2-Operator FM) keyboard synthesizers.
 
-[![Release](https://img.shields.io/github/v/release/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter)](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)
+[![Release](https://img.shields.io/github/v/release/Gouldin84/Yamaha-PortaSound-Studio)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
@@ -168,14 +168,14 @@ The **Yamaha PortaSound PSS-790** (released in 1990) features a 28-voice polypho
 ## Installation & Download
 
 ### Running Pre-Built Binaries
-Download the latest standalone executable from the **[Releases](https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter/releases)** page:
-1. Download `PSS790Player.exe`.
-2. Run `PSS790Player.exe` directly (no installation or .NET runtime installation required).
+Download the latest standalone executable from the **[Releases](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)** page:
+1. Download `PSS-Studio.exe`.
+2. Run `PSS-Studio.exe` directly (no installation or .NET runtime installation required).
 
 ### Running from Project Clone
-If you have cloned the repository, a pre-compiled standalone executable is ready in the root `dist` folder:
+If you have cloned the repository, run `Launch-Studio.bat` or run the pre-compiled standalone executable in `bin\Publish`:
 ```powershell
-.\dist\PSS790Player.exe
+.\bin\Publish\PSS-Studio.exe
 ```
 
 ---
@@ -183,26 +183,27 @@ If you have cloned the repository, a pre-compiled standalone executable is ready
 ## Hardware Setup Guide
 
 ### 1. Cabling
-- **For Playback**: Connect your PC's USB-MIDI Interface `OUT` &rarr; Yamaha PSS-790 `MIDI IN`.
-- **For Recording**: Connect Yamaha PSS-790 `MIDI OUT` &rarr; PC's USB-MIDI Interface `IN`.
-- *Caution*: Keep the application's **MIDI Thru Forward** switch disabled unless intentionally routing to a separate sound module; the PSS-790 automatically merges MIDI IN data into its MIDI OUT jack, which can create a loopback feedback storm if echoed by the PC.
+- **For Playback**: Connect your PC's USB-MIDI Interface `OUT` &rarr; Yamaha PSS `MIDI IN`.
+- **For Recording**: Connect Yamaha PSS `MIDI OUT` &rarr; PC's USB-MIDI Interface `IN`.
+- *Caution*: Keep the application's **MIDI Thru Forward** switch disabled unless intentionally routing to a separate sound module; vintage Yamaha keyboards automatically merge MIDI IN data into their MIDI OUT jack, which can create a loopback feedback storm if echoed by the PC.
 
-### 2. Configure PSS-790 Multi-Timbre Mode
-1. Press the `RECEIVE CH/CLOCK` button on the PSS-790.
-2. Verify that channels 1 through 16 are enabled (`<E 1>` through `<E 16>`).
-3. Set MIDI Clock to disabled (`<d c>`) for playback, or enabled (`<E c>`) if synchronizing keyboard rhythm styles with external software.
+### 2. Configure Multi-Timbre Mode
+- **PSS-790**: Press `RECEIVE CH/CLOCK` and verify channels 1–16 are enabled (`<E 1>` through `<E 16>`).
+- **PSS-680 / 480 / 780**: Press `MIDI MODE [c]` and select `c.99` (Sound Source / Multi-timbral mode).
 
 ### 3. Launch & Connect
 1. Select your USB-MIDI interface in the application's **MIDI Port** (Output) and **MIDI In** (Input) dropdowns.
-2. Drag and drop `.mid` files into `C:\Users\%USERNAME%\Music\Midi\GM Midi\` or click **Load File**.
-3. Customize voice assignments if desired, and click **Play**.
+2. Select your active synthesizer model (**PSS-790** or **PSS-680**) from the top header dropdown.
+3. Drag and drop `.mid` files into `C:\Users\%USERNAME%\Music\Midi\GM Midi\` or click **Load File**.
+4. Customize voice assignments if desired, and click **Play**.
 
 ---
 
 ## Technical Documentation
 
 Detailed MIDI implementation tables, non-linear voice matrices, percussion mappings, and hardware quirks are documented in:
-- [docs/PSS-790_MIDI_Reference.md](docs/PSS-790_MIDI_Reference.md)
+- [docs/PSS-790_MIDI_Reference.md](docs/PSS-790_MIDI_Reference.md): PSS-790 AWM specifications & remapping matrix
+- [docs/PSS680_SYSEX_SPEC.md](docs/PSS680_SYSEX_SPEC.md): PSS-680 / 480 / 780 2-Operator FM synthesis & SysEx specifications
 
 ---
 
@@ -214,17 +215,16 @@ Requirements:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter.git
-cd Yamaha-PSS-790-Midi-Player-Converter
+git clone https://github.com/Gouldin84/Yamaha-PortaSound-Studio.git
+cd Yamaha-PortaSound-Studio
 
-# Build solution
-dotnet build
-
-# Run automated unit & integration tests
+# Build solution and run automated unit & integration tests
+.\build.bat
+# Or manually:
 dotnet test
 
 # Publish standalone single-file executable
-dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist/
+dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o bin/Publish/
 ```
 
 ---

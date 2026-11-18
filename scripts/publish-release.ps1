@@ -36,7 +36,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Error "Publishing failed. Release aborted."
 }
 
-Write-Host "==> Standalone executable successfully built at $OutputDir\PSS790Player.exe" -ForegroundColor Green
+Write-Host "==> Standalone executable successfully built at $OutputDir\PSS-Studio.exe" -ForegroundColor Green
 
 Write-Host "==> Committing and Tagging Release $Version..." -ForegroundColor Cyan
 git add -A

@@ -237,7 +237,22 @@ namespace PSS790Player.Core
 
                     if (mfg == 0x43)
                     {
-                        info.DumpType = "PSS-790 Song & Memory Bulk Dump";
+                        if (bytes.Length > 2 && bytes[2] == Pss680Constants.InstrumentClassPss)
+                        {
+                            byte format = bytes.Length > 3 ? bytes[3] : (byte)0xFF;
+                            info.DumpType = format switch
+                            {
+                                Pss680Constants.FormatFmVoice => "PSS-680/480/780 FM Voice Data (Format 00H)",
+                                Pss680Constants.FormatMelodyMemory => "PSS-680/480/780 Melody Memory (Format 01H)",
+                                Pss680Constants.FormatChordMemory => "PSS-680/480/780 Chord Memory (Format 02H)",
+                                Pss680Constants.FormatRhythmPattern => "PSS-680/480/780 Custom Drummer (Format 03H)",
+                                _ => "PSS-680/480/780 System Exclusive"
+                            };
+                        }
+                        else
+                        {
+                            info.DumpType = "PSS-790 Song & Memory Bulk Dump";
+                        }
                     }
                 }
 

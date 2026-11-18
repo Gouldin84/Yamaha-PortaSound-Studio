@@ -56,15 +56,54 @@
 
     <!-- Top Navigation Header -->
     <header class="glass-panel shrink-0 z-30 px-2 sm:px-4 py-1.5 sm:py-2 border-b border-slate-800/80 flex items-center justify-between gap-1 sm:gap-2">
-        <!-- Logo & Title -->
-        <div class="flex items-center space-x-2 shrink-0" title="Yamaha PortaSound PSS-790 (1990) Multi-Timbral 28-Voice Synthesizer Workstation">
-            <img src="app_icon.png" alt="PSS-790 Studio" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-md shadow-cyan-500/20 shrink-0 border border-slate-700/60 object-cover">
-            <div>
-                <div class="flex items-center space-x-1.5">
-                    <h1 class="text-xs sm:text-sm font-bold tracking-tight text-white whitespace-nowrap">PSS-790 Studio</h1>
-                    <span title="Advanced Wave Memory (AWM) 12-bit sample playback engine with 100 preset voices &amp; 28-voice polyphony" class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block cursor-help">AWM Engine</span>
+        <!-- Synthesizer Model Selector (Dropdown & Text Selector) -->
+        <div class="relative shrink-0" id="modelSelectorContainer">
+            <button id="modelSelectorBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Switch Synthesizer Model: Select Yamaha PSS-790 (AWM) or PSS-680 (FM)" class="flex items-center space-x-2 px-2 py-1 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-700/60 hover:border-cyan-500/50 shadow-md transition-all duration-200 group cursor-pointer">
+                <img id="activeModelIcon" src="app_icon.png" alt="Model Icon" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg shadow-md shadow-cyan-500/20 shrink-0 border border-slate-700/60 object-cover transition-transform group-hover:scale-105">
+                <div class="text-left">
+                    <div class="flex items-center space-x-1.5">
+                        <span id="activeModelTitle" class="text-xs sm:text-sm font-bold tracking-tight text-white whitespace-nowrap">PSS-790 Studio</span>
+                        <span id="activeModelBadge" class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block">AWM Engine</span>
+                    </div>
+                    <p id="activeModelSubtitle" class="hidden 2xl:block text-[10px] text-slate-400">Yamaha PortaSound Studio</p>
                 </div>
-                <p class="hidden 2xl:block text-[10px] text-slate-400">Multi-Timbral 16-Channel Voice & Drum Synthesizer Workstation</p>
+                <svg id="modelDropdownChevron" class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-transform duration-200 ml-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+
+            <!-- Floating Model Dropdown Menu -->
+            <div id="modelDropdownMenu" class="absolute left-0 mt-1.5 w-80 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl shadow-cyan-950/30 p-2 z-50 hidden transition-all duration-150 transform opacity-0 scale-95" role="menu">
+                <div class="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1 flex items-center justify-between">
+                    <span>Synthesizer Model</span>
+                    <span class="text-cyan-400 font-mono text-[9px]">Tone Generator</span>
+                </div>
+
+                <!-- Option 1: Yamaha PSS-790 -->
+                <button type="button" data-model="pss790" class="model-option-btn w-full flex items-center space-x-3 p-2 rounded-xl hover:bg-slate-800/80 transition-all text-left group/item relative cursor-pointer">
+                    <img src="app_icon.png" alt="PSS-790" class="w-9 h-9 rounded-lg shadow-sm border border-slate-700/80 object-cover shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-white group-hover/item:text-cyan-300">Yamaha PSS-790</span>
+                            <span class="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60">AWM</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 truncate">Advanced Wave Memory • 28 Voices • Vector Synth</p>
+                    </div>
+                    <span id="check-pss790" class="model-check-icon text-cyan-400 font-bold ml-1">✓</span>
+                </button>
+
+                <!-- Option 2: Yamaha PSS-680 -->
+                <button type="button" data-model="pss680" class="model-option-btn w-full flex items-center space-x-3 p-2 rounded-xl hover:bg-slate-800/80 transition-all text-left group/item relative cursor-pointer">
+                    <img src="pss680_icon.png" alt="PSS-680" class="w-9 h-9 rounded-lg shadow-sm border border-slate-700/80 object-cover shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-white group-hover/item:text-cyan-300">Yamaha PSS-680</span>
+                            <span class="px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-amber-950 text-amber-400 border border-amber-800/60">2-Op FM</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 truncate">2-Op FM Synthesizer • 12 Voices • PSS-480 / 780</p>
+                    </div>
+                    <span id="check-pss680" class="model-check-icon text-cyan-400 font-bold ml-1 hidden">✓</span>
+                </button>
             </div>
         </div>
 
