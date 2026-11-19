@@ -20,6 +20,7 @@ namespace PSS790Player.Core
         public static string RecordingsDir => Path.Combine(BaseMidiDir, "Recordings");
         public static string MetadataDir => Path.Combine(BaseMidiDir, ".pss790");
         public static string OverridesFilePath => Path.Combine(MetadataDir, "overrides.json");
+        public static string FavoritesFilePath => Path.Combine(MetadataDir, "favourites.json");
 
         public static string GetModelMidiDir(string model) =>
             string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? Pss680MidiDir : Pss790MidiDir;
@@ -117,6 +118,59 @@ namespace PSS790Player.Core
             catch { }
 
             return Path.GetFileName(fullPath);
+        }
+
+        public static string GetLibrarySubPath(string fullPath, string? gmDir = null, string? pss790Dir = null, string? pss680Dir = null)
+        {
+            if (string.IsNullOrWhiteSpace(fullPath)) return string.Empty;
+
+            try
+            {
+                var clean = fullPath.Replace('\\', '/');
+                var match = System.Text.RegularExpressions.Regex.Match(clean, @"^(?:.*?/)?(?:GM Midi|PSS-790 Midi|PSS-680 Midi)/(?<subpath>.+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return match.Groups["subpath"].Value.Replace('\\', '/');
+                }
+
+                if (Path.IsPathRooted(fullPath))
+                {
+                    var full = Path.GetFullPath(fullPath);
+                    var gm = Path.GetFullPath(gmDir ?? GmMidiDir);
+                    var pss790 = Path.GetFullPath(pss790Dir ?? Pss790MidiDir);
+                    var pss680 = Path.GetFullPath(pss680Dir ?? Pss680MidiDir);
+
+                    if (full.StartsWith(gm, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var rel = Path.GetRelativePath(gm, full);
+                        return rel.Replace('\\', '/');
+                    }
+                    if (full.StartsWith(pss790, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var rel = Path.GetRelativePath(pss790, full);
+                        return rel.Replace('\\', '/');
+                    }
+                    if (full.StartsWith(pss680, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var rel = Path.GetRelativePath(pss680, full);
+                        return rel.Replace('\\', '/');
+                    }
+                }
+                else
+                {
+                    return clean.TrimStart('/');
+                }
+            }
+            catch { }
+
+            return Path.GetFileName(fullPath).Replace('\\', '/');
+        }
+
+        public static string ResolveInLibrary(string librarySubPath, string libraryRoot)
+        {
+            if (string.IsNullOrWhiteSpace(librarySubPath)) return string.Empty;
+            var normalized = librarySubPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+            return Path.Combine(libraryRoot, normalized);
         }
 
         public static bool IsPathInsideLibrary(string path, string? gmDir = null, string? pss790Dir = null, string? pss680Dir = null)

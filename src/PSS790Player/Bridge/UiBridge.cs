@@ -308,6 +308,12 @@ namespace PSS790Player.Bridge
                             SendToJs("notification", new { message = $"Pruned {pruned} empty folders across all 3 libraries." });
                         }
                         break;
+                    case "toggle_favorite":
+                        HandleToggleFavorite(root);
+                        break;
+                    case "get_favorites":
+                        SendToJs("favorites_updated", new { favorites = FavoriteStore.Instance.GetAllFavorites() });
+                        break;
                     case "rescan_devices":
                         _deviceMonitor.TriggerRescan(0);
                         SendDevicesUpdated();
@@ -1156,7 +1162,8 @@ namespace PSS790Player.Bridge
                     sysexLibrary = _sysexManager.GetSysExLibrary(),
                     recordingsLibrary = _recorder.GetRecordingsLibrary(),
                     fmVoiceLibrary = GetFmVoiceLibraryData(),
-                    vectorLibrary = GetVectorLibraryData()
+                    vectorLibrary = GetVectorLibraryData(),
+                    favorites = FavoriteStore.Instance.GetAllFavorites()
                 });
 
                 if (devices.Count > 0)
@@ -2062,7 +2069,8 @@ namespace PSS790Player.Bridge
                 flatFiles = allFlat,
                 hasFiles = allFlat.Count > 0,
                 baseDir = AppPaths.BaseMidiDir,
-                activeModel = _activeModel
+                activeModel = _activeModel,
+                favorites = FavoriteStore.Instance.GetAllFavorites()
             };
         }
 
@@ -2074,6 +2082,7 @@ namespace PSS790Player.Bridge
             public string subFolder { get; set; } = "";
             public string category { get; set; } = "";
             public string format { get; set; } = "";
+            public bool isFavorite { get; set; }
         }
 
         public class FolderNodeDto
@@ -2184,7 +2193,8 @@ namespace PSS790Player.Bridge
                         relativePath = fileRel,
                         subFolder = fileSub,
                         category = categoryName,
-                        format = format
+                        format = format,
+                        isFavorite = FavoriteStore.Instance.IsFavorite(file)
                     };
 
                     flatCollector.Add(fileItem);
@@ -2936,6 +2946,16 @@ namespace PSS790Player.Bridge
                         totalOps = result.TotalOperations
                     });
 
+                    try
+                    {
+                        var existingFiles = Directory.GetFiles(AppPaths.GmMidiDir, "*", SearchOption.AllDirectories)
+                            .Concat(Directory.GetFiles(AppPaths.Pss790MidiDir, "*", SearchOption.AllDirectories))
+                            .Concat(Directory.GetFiles(AppPaths.Pss680MidiDir, "*", SearchOption.AllDirectories));
+                        FavoriteStore.Instance.PruneMissing(existingFiles);
+                        SendToJs("favorites_updated", new { favorites = FavoriteStore.Instance.GetAllFavorites() });
+                    }
+                    catch { }
+
                     SendLibraryUpdate();
                 }
                 catch (Exception ex)
@@ -2943,6 +2963,33 @@ namespace PSS790Player.Bridge
                     SendToJs("error", new { message = $"Sync execution error: {ex.Message}" });
                 }
             });
+        }
+
+        private void HandleToggleFavorite(JsonElement root)
+        {
+            try
+            {
+                var path = root.TryGetProperty("path", out var p) ? p.GetString() : (root.TryGetProperty("filePath", out var fp) ? fp.GetString() : null);
+                if (string.IsNullOrWhiteSpace(path)) return;
+
+                bool isFav = FavoriteStore.Instance.ToggleFavorite(path);
+                var subPath = AppPaths.GetLibrarySubPath(path);
+                var fileName = Path.GetFileName(path);
+
+                SendToJs("favorites_updated", new
+                {
+                    favorites = FavoriteStore.Instance.GetAllFavorites(),
+                    path = subPath,
+                    isFavorite = isFav,
+                    toastMessage = isFav ? $"Added '{fileName}' to Favourites" : $"Removed '{fileName}' from Favourites"
+                });
+
+                SendLibraryUpdate();
+            }
+            catch (Exception ex)
+            {
+                SendToJs("notification", new { message = $"Failed to update favorites: {ex.Message}" });
+            }
         }
 
         private void SendToJs(string type, object data)

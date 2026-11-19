@@ -33,6 +33,8 @@ let state = {
     expandedFolders: new Set(),
     collapsedCategories: new Set(),
     visibleSongList: [],
+    favorites: new Set(),
+    collapsedFavorites: new Set(),
     // Multi-Selection State
     isSelectMode: false,
     selectedSongs: new Set(),
@@ -147,6 +149,54 @@ function getNoteName(noteNumber) {
     const octave = Math.floor(noteNumber / 12) - 1;
     const name = NOTE_NAMES[noteNumber % 12];
     return `${name}${octave}`;
+}
+
+// --- Favourites Management Helpers ---
+function normalizeFavoriteKey(path) {
+    if (!path) return "";
+    let clean = String(path).replace(/\\/g, "/");
+    clean = clean.replace(/^.*?\/(GM Midi|PSS-790 Midi|PSS-680 Midi)\//i, "");
+    clean = clean.replace(/^(GM Midi|PSS-790 Midi|PSS-680 Midi)\//i, "");
+    return clean.toLowerCase();
+}
+
+function isSongFavorite(path) {
+    if (!path || !state.favorites || state.favorites.size === 0) return false;
+    const key = normalizeFavoriteKey(path);
+    const fileName = String(path).split(/[\/\\]/).pop().toLowerCase();
+    for (const fav of state.favorites) {
+        const normFav = normalizeFavoriteKey(fav);
+        if (normFav === key || normFav.endsWith("/" + key) || key.endsWith("/" + normFav) || normFav === fileName) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function updateCurrentSongFavoriteButton() {
+    const btn = document.getElementById("btnToggleFavoriteCurrent");
+    const star = document.getElementById("starIconCurrent");
+    if (!btn || !star) return;
+
+    if (!state.currentFilePath) {
+        btn.classList.add("opacity-40", "cursor-not-allowed");
+        btn.title = "No song loaded";
+        star.textContent = "☆";
+        star.className = "text-slate-500";
+        return;
+    }
+
+    btn.classList.remove("opacity-40", "cursor-not-allowed");
+    const isFav = isSongFavorite(state.currentFilePath);
+    if (isFav) {
+        star.textContent = "★";
+        star.className = "text-amber-400 font-bold text-sm";
+        btn.title = "Remove currently playing song from Favourites (F)";
+    } else {
+        star.textContent = "☆";
+        star.className = "text-slate-400 hover:text-amber-400 text-sm";
+        btn.title = "Add currently playing song to Favourites (F)";
+    }
 }
 
 // --- Tab Switching ---
@@ -328,6 +378,10 @@ function handleHostMessage(msg) {
             if (msg.data.recordingsLibrary) {
                 handleRecordingsLibraryUpdated(msg.data.recordingsLibrary);
             }
+            if (msg.data.favorites) {
+                state.favorites = new Set(msg.data.favorites);
+            }
+            updateCurrentSongFavoriteButton();
             renderDeviceSelect(msg.data.defaultDevice);
             renderInputDeviceSelect(msg.data.defaultInputDevice);
             renderLibrarySelect();
@@ -336,6 +390,13 @@ function handleHostMessage(msg) {
             renderRecorderChannels();
             initSidebarState();
             renderHealthBadge(null);
+            break;
+
+        case "favorites_updated":
+            if (msg.data.favorites) state.favorites = new Set(msg.data.favorites);
+            if (msg.data.toastMessage) showToast(msg.data.toastMessage);
+            updateCurrentSongFavoriteButton();
+            renderLibraryTree();
             break;
 
         case "devices_updated":
@@ -355,6 +416,10 @@ function handleHostMessage(msg) {
 
         case "library_updated":
             state.library = msg.data || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
+            if (msg.data && msg.data.favorites) {
+                state.favorites = new Set(msg.data.favorites);
+            }
+            updateCurrentSongFavoriteButton();
             renderLibrarySelect();
             renderLibraryTree();
             break;
@@ -399,6 +464,7 @@ function handleHostMessage(msg) {
             state.currentFilePath = msg.data.filePath;
             state.selectedSongPath = msg.data.filePath;
             state.durationSeconds = msg.data.durationSeconds || 0;
+            updateCurrentSongFavoriteButton();
             document.getElementById("currentSongTitle").textContent = msg.data.fileName;
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
             document.getElementById("timeScrubber").max = state.durationSeconds;
@@ -841,6 +907,16 @@ function updateSidebarVisibility() {
 }
 
 function toggleFolder(folderKey) {
+    if (folderKey && folderKey.includes("__fav_")) {
+        if (!state.collapsedFavorites) state.collapsedFavorites = new Set();
+        if (state.collapsedFavorites.has(folderKey)) {
+            state.collapsedFavorites.delete(folderKey);
+        } else {
+            state.collapsedFavorites.add(folderKey);
+        }
+        renderLibraryTree();
+        return;
+    }
     if (state.expandedFolders.has(folderKey)) {
         state.expandedFolders.delete(folderKey);
     } else {
@@ -1016,6 +1092,8 @@ function showContextMenu(e, target) {
     const itemMove = document.getElementById("ctxItemMove");
     const itemRename = document.getElementById("ctxItemRename");
     const itemReveal = document.getElementById("ctxItemReveal");
+    const itemFavorite = document.getElementById("ctxItemFavorite");
+    const itemFavoriteText = document.getElementById("ctxItemFavoriteText");
     const separator = document.getElementById("ctxSeparator");
     const itemDelete = document.getElementById("ctxItemDelete");
 
@@ -1024,9 +1102,17 @@ function showContextMenu(e, target) {
         itemMove.classList.remove("hidden");
         itemRename.classList.remove("hidden");
         itemReveal.classList.remove("hidden");
+        if (itemFavorite) {
+            itemFavorite.classList.remove("hidden");
+            const isFav = isSongFavorite(target.fullPath || target.name);
+            if (itemFavoriteText) {
+                itemFavoriteText.textContent = isFav ? "Remove from Favourites" : "Add to Favourites";
+            }
+        }
         separator.classList.remove("hidden");
         itemDelete.classList.remove("hidden");
     } else if (target.type === "folder") {
+        if (itemFavorite) itemFavorite.classList.add("hidden");
         itemNewFolder.classList.remove("hidden");
         itemMove.classList.add("hidden");
         itemRename.classList.remove("hidden");
@@ -1034,6 +1120,7 @@ function showContextMenu(e, target) {
         separator.classList.remove("hidden");
         itemDelete.classList.remove("hidden");
     } else if (target.type === "category" || target.type === "empty") {
+        if (itemFavorite) itemFavorite.classList.add("hidden");
         itemNewFolder.classList.remove("hidden");
         itemMove.classList.add("hidden");
         itemRename.classList.add("hidden");
@@ -1420,16 +1507,23 @@ function filterFolderNode(folder, query) {
 }
 
 function renderFolderNode(folder, depth, catKey, query) {
+    const isFavFolder = !!folder.isVirtualFavorites;
     const folderKey = `${catKey}:${folder.relativePath || folder.name}`;
-    const isFolderExpanded = query.length > 0 || state.expandedFolders.has(folderKey);
+    const isFolderExpanded = isFavFolder
+        ? (query.length > 0 || !state.collapsedFavorites || !state.collapsedFavorites.has(folderKey))
+        : (query.length > 0 || state.expandedFolders.has(folderKey));
 
     const folderGroup = document.createElement("div");
-    folderGroup.className = "tree-folder-group space-y-0.5";
+    folderGroup.className = isFavFolder ? "tree-folder-group space-y-0.5 mb-1" : "tree-folder-group space-y-0.5";
 
     const padPx = depth * 12;
 
     const folderHeader = document.createElement("div");
-    folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
+    if (isFavFolder) {
+        folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-amber-300 hover:text-amber-200 bg-amber-950/25 hover:bg-amber-950/45 border border-amber-800/40 cursor-pointer transition select-none text-[11px] shadow-sm";
+    } else {
+        folderHeader.className = "flex items-center justify-between px-2 py-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800/60 cursor-pointer transition select-none text-[11px]";
+    }
     if (padPx > 0) {
         folderHeader.style.paddingLeft = `${padPx + 8}px`;
     }
@@ -1439,48 +1533,64 @@ function renderFolderNode(folder, depth, catKey, query) {
         return document.createDocumentFragment();
     }
 
-    folderHeader.innerHTML = `
-        <div class="flex items-center space-x-1.5 truncate">
-            <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
-            <span class="text-amber-400 text-xs">📁</span>
-            <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
-        </div>
-        <span class="text-[9px] font-mono text-slate-500 ml-1">(${count})</span>
-    `;
-    folderHeader.title = `Folder: ${folder.name} (${count} song${count === 1 ? '' : 's'})\nClick to expand/collapse • Right-click for folder actions • Drag to move folder`;
+    if (isFavFolder) {
+        folderHeader.innerHTML = `
+            <div class="flex items-center space-x-1.5 truncate">
+                <span class="text-[8px] text-amber-400 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
+                <span class="text-amber-400 text-xs">⭐</span>
+                <span class="font-bold truncate text-amber-300">Favourites</span>
+            </div>
+            <span class="text-[9px] font-mono text-amber-400/90 font-bold ml-1">(${count})</span>
+        `;
+        folderHeader.title = `Favourites (${count} song${count === 1 ? '' : 's'})\nPinned for quick access • Click to expand/collapse`;
+    } else {
+        folderHeader.innerHTML = `
+            <div class="flex items-center space-x-1.5 truncate">
+                <span class="text-[8px] text-slate-500 transform transition-transform">${isFolderExpanded ? '▼' : '▶'}</span>
+                <span class="text-amber-400 text-xs">📁</span>
+                <span class="font-medium truncate text-slate-300">${escapeHtml(folder.name)}</span>
+            </div>
+            <span class="text-[9px] font-mono text-slate-500 ml-1">(${count})</span>
+        `;
+        folderHeader.title = `Folder: ${folder.name} (${count} song${count === 1 ? '' : 's'})\nClick to expand/collapse • Right-click for folder actions • Drag to move folder`;
+    }
 
-    folderHeader.draggable = true;
-    folderHeader.addEventListener("dragstart", (e) => {
-        e.stopPropagation();
-        e.dataTransfer.setData("application/json", JSON.stringify({
-            type: "folder",
-            fullPath: folder.fullPath,
-            name: folder.name,
-            category: catKey,
-            relativePath: folder.relativePath || folder.name
-        }));
-        e.dataTransfer.effectAllowed = "move";
-        folderHeader.classList.add("opacity-50");
-    });
-    folderHeader.addEventListener("dragend", () => {
-        folderHeader.classList.remove("opacity-50");
-        document.querySelectorAll(".drag-target-active").forEach(el => {
-            el.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+    if (!isFavFolder) {
+        folderHeader.draggable = true;
+        folderHeader.addEventListener("dragstart", (e) => {
+            e.stopPropagation();
+            e.dataTransfer.setData("application/json", JSON.stringify({
+                type: "folder",
+                fullPath: folder.fullPath,
+                name: folder.name,
+                category: catKey,
+                relativePath: folder.relativePath || folder.name
+            }));
+            e.dataTransfer.effectAllowed = "move";
+            folderHeader.classList.add("opacity-50");
         });
-    });
+        folderHeader.addEventListener("dragend", () => {
+            folderHeader.classList.remove("opacity-50");
+            document.querySelectorAll(".drag-target-active").forEach(el => {
+                el.classList.remove("drag-target-active", "ring-2", "ring-cyan-400", "bg-cyan-950/60");
+            });
+        });
 
-    attachDropTarget(folderHeader, catKey, folder.relativePath || folder.name, folder.fullPath);
+        attachDropTarget(folderHeader, catKey, folder.relativePath || folder.name, folder.fullPath);
+    }
 
     folderHeader.addEventListener("click", () => toggleFolder(folderKey));
-    folderHeader.addEventListener("contextmenu", (e) => {
-        showContextMenu(e, {
-            type: "folder",
-            category: catKey,
-            folderName: folder.relativePath || folder.name,
-            fullPath: folder.fullPath,
-            name: folder.name
+    if (!isFavFolder) {
+        folderHeader.addEventListener("contextmenu", (e) => {
+            showContextMenu(e, {
+                type: "folder",
+                category: catKey,
+                folderName: folder.relativePath || folder.name,
+                fullPath: folder.fullPath,
+                name: folder.name
+            });
         });
-    });
+    }
     folderGroup.appendChild(folderHeader);
 
     if (isFolderExpanded) {
@@ -1576,11 +1686,45 @@ function renderLibraryTree() {
             });
             filteredRootFiles = sourceRootFiles.filter(f => f.fileName.toLowerCase().includes(query));
         } else {
-            filteredSubFolders = sourceSubFolders;
-            filteredRootFiles = sourceRootFiles;
+            filteredSubFolders = [...sourceSubFolders];
+            filteredRootFiles = [...sourceRootFiles];
         }
 
-        const catSongCount = filteredSubFolders.reduce((acc, f) => acc + (f.totalCount !== undefined ? f.totalCount : (f.files ? f.files.length : 0)), 0) + filteredRootFiles.length;
+        // Virtual Favourites Folder: Pin at top of category if any favorited songs exist
+        function collectAllCategoryFiles(node) {
+            let files = [];
+            if (!node) return files;
+            if (node.files && node.files.length > 0) files.push(...node.files);
+            if (node.subFolders && node.subFolders.length > 0) {
+                node.subFolders.forEach(sub => files.push(...collectAllCategoryFiles(sub)));
+            }
+            return files;
+        }
+
+        const allCatFiles = collectAllCategoryFiles(tree);
+        let favFiles = allCatFiles.filter(f => isSongFavorite(f.fullPath || f.relativePath || f.fileName));
+        if (query) {
+            favFiles = favFiles.filter(f => f.fileName.toLowerCase().includes(query));
+        }
+
+        if (favFiles.length > 0) {
+            const favFolder = {
+                name: "Favourites",
+                isVirtualFavorites: true,
+                fullPath: `__fav_${cat.key}__`,
+                relativePath: `__fav_${cat.key}__`,
+                files: favFiles,
+                subFolders: [],
+                directCount: favFiles.length,
+                totalCount: favFiles.length
+            };
+            filteredSubFolders.unshift(favFolder);
+        }
+
+        const catSongCount = filteredSubFolders.reduce((acc, f) => {
+            if (f.isVirtualFavorites) return acc;
+            return acc + (f.totalCount !== undefined ? f.totalCount : (f.files ? f.files.length : 0));
+        }, 0) + filteredRootFiles.length;
         if (catSongCount === 0) return;
 
         totalRenderedSongs += catSongCount;
@@ -1707,6 +1851,7 @@ function createSongItemElement(file) {
     const is680 = file.format === "pss680" || (file.format !== "gm" && file.format !== "rec" && state.activeModel === "pss680");
     const isPss = file.format === "pss790" || is680;
     const isChecked = state.selectedSongs.has(file.fullPath);
+    const isFav = isSongFavorite(file.fullPath || file.relativePath || file.fileName);
     const isTouch = window.matchMedia('(pointer: coarse)').matches || ('ontouchstart' in window);
     const chkVisibility = (isTouch || state.isSelectMode || state.selectedSongs.size > 0 || isChecked) ? 'inline-block' : 'hidden group-hover:inline-block';
 
@@ -1735,6 +1880,9 @@ function createSongItemElement(file) {
     div.innerHTML = `
         <div class="flex items-center space-x-1.5 min-w-0 flex-1">
             <input type="checkbox" class="song-checkbox w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 cursor-pointer mr-0.5 accent-cyan-500 shrink-0 ${chkVisibility}" ${isChecked ? 'checked' : ''} title="Select song for batch moving or deletion">
+            <button type="button" class="btn-song-star shrink-0 text-[11px] px-0.5 hover:scale-125 transition ${isFav ? 'text-amber-400 font-bold' : 'text-slate-600 hover:text-amber-400'}" title="${isFav ? 'Remove from Favourites (F)' : 'Add to Favourites (F)'}">
+                ${isFav ? '★' : '☆'}
+            </button>
             <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}" title="${isPlaying ? 'Currently playing' : (isSelected ? 'Currently selected' : 'MIDI song file')}">
                 ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
             </span>
@@ -1744,6 +1892,14 @@ function createSongItemElement(file) {
             ${badgeLabel}
         </span>
     `;
+
+    const starBtn = div.querySelector(".btn-song-star");
+    if (starBtn) {
+        starBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            sendToHost("toggle_favorite", { path: file.fullPath });
+        });
+    }
 
     const chk = div.querySelector(".song-checkbox");
     if (chk) {
@@ -1798,14 +1954,14 @@ function createSongItemElement(file) {
     });
 
     div.addEventListener("click", (e) => {
-        if (e.target.classList.contains("song-checkbox")) return;
+        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_metadata", { path: file.fullPath });
     });
 
     div.addEventListener("dblclick", (e) => {
-        if (e.target.classList.contains("song-checkbox")) return;
+        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_and_play", { path: file.fullPath });
@@ -1998,6 +2154,15 @@ function setupKeyboardShortcuts() {
                 e.preventDefault();
                 const loopBtn = document.getElementById("btnLoop");
                 if (loopBtn) loopBtn.click();
+                return;
+            } else if (e.key === "f" || e.key === "F") {
+                e.preventDefault();
+                const songToToggle = state.selectedSongPath || state.currentFilePath;
+                if (songToToggle) {
+                    sendToHost("toggle_favorite", { path: songToToggle });
+                } else {
+                    showToast("Select or play a song first to toggle favourite");
+                }
                 return;
             }
         }
@@ -3314,6 +3479,21 @@ document.getElementById("ctxItemReveal")?.addEventListener("click", () => {
     hideContextMenu();
     if (activeContextTarget && activeContextTarget.fullPath) {
         sendToHost("reveal_in_explorer", { fullPath: activeContextTarget.fullPath });
+    }
+});
+
+document.getElementById("ctxItemFavorite")?.addEventListener("click", () => {
+    hideContextMenu();
+    if (activeContextTarget && (activeContextTarget.fullPath || activeContextTarget.name)) {
+        sendToHost("toggle_favorite", { path: activeContextTarget.fullPath || activeContextTarget.name });
+    }
+});
+
+document.getElementById("btnToggleFavoriteCurrent")?.addEventListener("click", () => {
+    if (state.currentFilePath) {
+        sendToHost("toggle_favorite", { path: state.currentFilePath });
+    } else {
+        showToast("No song currently loaded to favourite");
     }
 });
 
