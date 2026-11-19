@@ -26,6 +26,7 @@ namespace PSS790Player.Core
         public int AcousticMicroBendsNeutralized { get; set; }
         public int OutOfBoundsNotesCount { get; set; }
         public List<int> NonStandardDrumChannels { get; set; } = new();
+        public List<int> XgSfxChannels { get; set; } = new();
         public List<string> AppliedAutoFixes { get; set; } = new();
 
         public string BadgeType { get; set; } = "optimal"; // "optimal", "autofixed", "warning"
@@ -208,6 +209,13 @@ namespace PSS790Player.Core
                                 report.NonStandardDrumChannels.Add(ch);
                             }
                         }
+                        else if (cc.ControlNumber == 0 && cc.ControlValue == 64)
+                        {
+                            if (!report.XgSfxChannels.Contains(ch))
+                            {
+                                report.XgSfxChannels.Add(ch);
+                            }
+                        }
                     }
                 }
 
@@ -280,6 +288,10 @@ namespace PSS790Player.Core
             if (report.NonStandardDrumChannels.Count > 0)
             {
                 report.AppliedAutoFixes.Add($"Remapped GS/XG secondary drum parts (Ch {string.Join(", ", report.NonStandardDrumChannels.Select(c => c + 1))}) to Channel 16");
+            }
+            if (report.XgSfxChannels.Count > 0)
+            {
+                report.AppliedAutoFixes.Add($"Mapped {report.XgSfxChannels.Count} Yamaha XG SFX voice channel(s) to hardware sound effects");
             }
             if (report.OutOfBoundsNotesCount > 0)
             {

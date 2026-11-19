@@ -409,12 +409,18 @@ namespace PSS790Player.Core
                 return pss680Note;
             }
 
-            // Musical fallbacks for extended GM/GS drum notes
-            if (gmNote is 27 or 28) return 51; // High Q / Slap -> Rim Shot (Pad A1)
-            if (gmNote is 31 or 33) return 55; // Sticks / Click -> Cowbell (Pad D5)
-            if (gmNote is 82 or 83) return 56; // Shaker / Jingle Bell -> Cabasa (Pad D6)
-            if (gmNote is 84 or 85) return 71; // Bell Tree / Castanets -> Tambourine (Pad C7)
-            if (gmNote is 86 or 87) return 45; // Surdo -> Bass Drum (Pad B1)
+            // Musical fallbacks for extended GM/GS/XG drum notes (13-34 and 82-91)
+            if (gmNote is 13 or 14 or 86 or 87) return 45; // Surdo -> Bass Drum (Pad B1)
+            if (gmNote is 15 or 16 or 27 or 28) return 51; // High Q / Slap / Whip -> Rim Shot (Pad A1)
+            if (gmNote is 17 or 18 or 29 or 30) return 57; // Scratch Push/Pull -> Closed Hi-Hat (Pad D7)
+            if (gmNote is 19 or 26) return 51;             // Finger Snap -> Rim Shot (Pad A1)
+            if (gmNote is 20 or 21 or 23 or 31 or 32 or 33) return 55; // Clicks / Sticks -> Cowbell (Pad D5)
+            if (gmNote is 22 or 34) return 61;             // Metronome Bell -> Agogo Hi (Pad B5)
+            if (gmNote is 24 or 25) return 52;             // Snare Roll -> Snare Low (Pad A2)
+            if (gmNote is 82 or 83) return 56;             // Shaker / Jingle Bell -> Cabasa (Pad D6)
+            if (gmNote is 84 or 85) return 71;             // Bell Tree / Castanets -> Tambourine (Pad C7)
+            if (gmNote is 88 or 89) return 61;             // Cuica -> Agogo Hi (Pad B5)
+            if (gmNote is 90 or 91) return 61;             // Triangle -> Agogo Hi (Pad B5)
 
             if (DrumMap.ContainsKey(gmNote))
             {

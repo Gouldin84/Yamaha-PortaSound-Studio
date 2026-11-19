@@ -209,7 +209,7 @@ namespace PSS790Player.Core
             {
                 foreach (var evt in trackChunk.Events)
                 {
-                    if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length >= 8)
+                    if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length >= 7)
                     {
                         var d = sysex.Data;
                         // Yamaha XG SysEx: 43 [dev] 4C ...
@@ -312,7 +312,9 @@ namespace PSS790Player.Core
             }
 
             // Pre-scan for Drum Channels (GM Channel 9 is standard percussion; GS/XG channels use Bank Select CC 0 == 127 or 128)
+            // and XG Sound Effect Channels (Bank Select CC 0 == 64)
             var drumChannels = new HashSet<int> { 9 };
+            var sfxChannels = new HashSet<int>();
             var usedChannels = new HashSet<int>();
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
@@ -322,9 +324,16 @@ namespace PSS790Player.Core
                     {
                         usedChannels.Add(noteOn.Channel);
                     }
-                    if (evt is ControlChangeEvent cc && cc.ControlNumber == 0 && (cc.ControlValue == 127 || cc.ControlValue == 128))
+                    if (evt is ControlChangeEvent cc && cc.ControlNumber == 0)
                     {
-                        drumChannels.Add(cc.Channel);
+                        if (cc.ControlValue == 127 || cc.ControlValue == 128)
+                        {
+                            drumChannels.Add(cc.Channel);
+                        }
+                        else if (cc.ControlValue == 64)
+                        {
+                            sfxChannels.Add(cc.Channel);
+                        }
                     }
                     if (evt is NormalSysExEvent sysex && sysex.Data.Length > 6)
                     {
@@ -486,7 +495,12 @@ namespace PSS790Player.Core
                                 else
                                 {
                                     byte progNum = (byte)pc.ProgramNumber;
-                                    if (is680)
+                                    if (sfxChannels.Contains(originalChannel))
+                                    {
+                                        byte sfxProg = TranslateXgSfxVoice(progNum, is680);
+                                        pc.ProgramNumber = (SevenBitNumber)sfxProg;
+                                    }
+                                    else if (is680)
                                     {
                                         int pssVoiceNum = Pss680Constants.GmToPss680VoiceMap.GetValueOrDefault(progNum, 3);
                                         pc.ProgramNumber = (SevenBitNumber)Math.Clamp(pssVoiceNum, 0, 99);
@@ -719,16 +733,53 @@ namespace PSS790Player.Core
                 return pssNote;
             }
 
-            // Musical fallbacks for extended GM/GS drum notes
+            // Musical fallbacks for extended GM/GS/XG drum notes
+            if (gmNote is 24 or 25) return 49; // Snare Roll -> Snare Hi
+            if (gmNote is 26) return 64;       // Finger Snap -> High Q / Rimshot
             if (gmNote is 27 or 28) return 64; // High Q / Slap -> Rimshot
-            if (gmNote is 31 or 33) return 75; // Sticks / Click -> Woodblock/Cowbell
+            if (gmNote is 29 or 30) return 79; // Scratch Push/Pull -> Brash Squeeze
+            if (gmNote is 31 or 32 or 33) return 75; // Sticks / Square Click / Metronome Click -> Woodblock/Cowbell
+            if (gmNote is 34) return 39;       // Metronome Bell -> Triangle Open
             if (gmNote is 82 or 83) return 58; // Shaker / Jingle Bell -> Maracas
-            if (gmNote is 84 or 85) return 76; // Bell Tree / Castanets -> Triangle Open
+            if (gmNote is 84 or 85) return 39; // Bell Tree / Castanets -> Triangle Open
             if (gmNote is 86 or 87) return 45; // Surdo -> Bass Drum Hi
+            if (gmNote is 88 or 89) return 77; // Cuica Hi/Lo -> Cuica Hi
+            if (gmNote is 90) return 37;       // Triangle Mute -> Triangle Mute
+            if (gmNote is 91) return 39;       // Triangle Open -> Triangle Open
 
             if (gmNote < 35) return 44; // Bass drum lo
             if (gmNote > 81) return 58; // Default high percussion -> Maracas
             return 49;                  // Snare hi
+        }
+
+        public static byte TranslateXgSfxVoice(byte xgProgram, bool is680)
+        {
+            if (is680)
+            {
+                // PSS-680 FM Sound Effects:
+                // 95: SIREN, 96: EMERGENCY, 97: LASER, 98: COSMIC, 99: UFO
+                return xgProgram switch
+                {
+                    >= 48 and <= 51 => 97,   // Machine Gun, Laser Gun, Explosion, Firework -> LASER (97)
+                    >= 80 and <= 88 => 95,   // Phone, Door, Car, Siren -> SIREN (95)
+                    >= 90 and <= 92 => 99,   // Helicopter, Starship, Jet Plane -> UFO (99)
+                    >= 93 and <= 127 => 97,  // Gunshot / etc -> LASER (97)
+                    _ => 98                  // Other FX -> COSMIC (98)
+                };
+            }
+            else
+            {
+                // PSS-790 Hardware AWM Voicing for Sound Effects:
+                int pssVoice = xgProgram switch
+                {
+                    >= 48 and <= 51 => 99,   // Laser Gun, Machine Gun, Explosion -> ORCHESTRA HIT (Voice 99)
+                    >= 80 and <= 88 => 43,   // Phone, Door, Car, Siren -> GLOCKENSPIEL / SYNTH LEAD (Voice 43)
+                    >= 90 and <= 92 => 15,   // Helicopter, Starship, Jet Plane -> DISTORTION GUITAR (Voice 15)
+                    >= 93 and <= 127 => 99,  // Gunshot / etc -> ORCHESTRA HIT (Voice 99)
+                    _ => 82                  // Wind, Stream, Bubble, Cosmic -> FANTASY (Voice 82)
+                };
+                return Constants.Pss790Voices[pssVoice].MidiProgram;
+            }
         }
 
         public static bool IsPianoOrKeyboardInstrument(byte gmProgram)

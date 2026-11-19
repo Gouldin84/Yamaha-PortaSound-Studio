@@ -419,7 +419,7 @@ namespace PSS790Player.Tests
             Assert.Equal((byte)64, Remapper.TranslateDrumNote(28)); // Slap -> Rimshot
             Assert.Equal((byte)75, Remapper.TranslateDrumNote(31)); // Sticks -> Woodblock
             Assert.Equal((byte)58, Remapper.TranslateDrumNote(82)); // Shaker -> Maracas
-            Assert.Equal((byte)76, Remapper.TranslateDrumNote(84)); // Bell Tree -> Triangle Open
+            Assert.Equal((byte)39, Remapper.TranslateDrumNote(84)); // Bell Tree -> Triangle Open
         }
 
         [Fact]
