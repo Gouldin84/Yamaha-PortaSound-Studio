@@ -960,36 +960,6 @@ function autoFitSidebarWidth(force = false) {
 
 function formatSongTitleHtml(fileName, subFolder) {
     if (!fileName) return "";
-    if (!subFolder || subFolder === "(Root)") {
-        return `<span class="song-title truncate font-medium">${escapeHtml(fileName)}</span>`;
-    }
-
-    const cleanSub = subFolder.trim();
-    let prefix = null;
-    let unique = fileName;
-
-    const lowerFile = fileName.toLowerCase();
-    const lowerSub = cleanSub.toLowerCase();
-
-    if (lowerFile.startsWith(lowerSub)) {
-        let remainder = fileName.substring(cleanSub.length);
-        const match = remainder.match(/^[\s\-_:]+(.+)$/);
-        if (match) {
-            prefix = fileName.substring(0, fileName.length - match[1].length);
-            unique = match[1];
-        }
-    } else {
-        const dashIdx = fileName.indexOf(" - ");
-        if (dashIdx > 8) {
-            prefix = fileName.substring(0, dashIdx + 3);
-            unique = fileName.substring(dashIdx + 3);
-        }
-    }
-
-    if (prefix) {
-        return `<span class="song-title truncate font-medium"><span class="song-title-prefix">${escapeHtml(prefix)}</span><span class="song-title-unique">${escapeHtml(unique)}</span></span>`;
-    }
-
     return `<span class="song-title truncate font-medium">${escapeHtml(fileName)}</span>`;
 }
 

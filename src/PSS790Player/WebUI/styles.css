@@ -237,20 +237,17 @@ body.is-resizing-sidebar {
     user-select: none !important;
 }
 
-/* Song Title Prefix & Unique Name Separation (Dark Theme Default) */
+/* Song Title Styling (Dark Theme Default) */
 .song-title {
     color: #f1f5f9;
+    font-weight: 500;
 }
 
-.song-title-prefix {
-    opacity: 0.55;
-    font-weight: normal;
-    color: #94a3b8;
-}
-
+.song-title-prefix,
 .song-title-unique {
-    font-weight: 600;
-    color: #f8fafc;
+    color: inherit;
+    opacity: 1;
+    font-weight: inherit;
 }
 
 .tree-song-item {
@@ -516,17 +513,14 @@ body.theme-light .tree-song-item.playing .song-title-prefix {
 
 body.theme-light .song-title {
     color: #0f172a !important;
+    font-weight: 600 !important;
 }
 
-body.theme-light .song-title-unique {
-    color: #0f172a !important;
-    font-weight: 700 !important;
-}
-
+body.theme-light .song-title-unique,
 body.theme-light .song-title-prefix {
-    color: #64748b !important;
-    opacity: 0.85 !important;
-    font-weight: 500 !important;
+    color: #0f172a !important;
+    opacity: 1 !important;
+    font-weight: inherit !important;
 }
 
 body.theme-light .tree-folder-group .font-medium {
