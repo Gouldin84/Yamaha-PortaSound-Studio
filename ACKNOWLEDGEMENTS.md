@@ -1,7 +1,7 @@
 # Acknowledgements and Legal Notices
 
 ## Trademark Disclaimer
-**Yamaha**, **PortaSound**, **PSS-790**, and **AWM** (Advanced Wave Memory) are registered trademarks of Yamaha Corporation.
+**Yamaha**, **PortaSound**, **PSS-790**, **PSS-680**, **PSS-480**, **PSS-780**, **XG**, and **AWM** (Advanced Wave Memory) are registered trademarks of Yamaha Corporation.
 
 This software is an independent open-source enthusiast project developed by Gouldin84 for vintage hardware interoperability, preservation, and educational study. This project is not affiliated with, endorsed by, sponsored by, or certified by Yamaha Corporation or any of its subsidiaries. Any references to Yamaha products, trademarks, or model designations are made strictly for identification, hardware interoperability, and educational purposes under fair use.
 

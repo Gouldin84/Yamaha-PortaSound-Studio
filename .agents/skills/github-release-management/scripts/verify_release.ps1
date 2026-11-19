@@ -47,7 +47,7 @@ if ($Tag) {
 }
 
 # 3. Retrieve Token via Git Credential Manager
-$gcmPath = "C:\Users\MichaelGoulding\AppData\Local\Programs\Git\mingw64\bin\git-credential-manager.exe"
+$gcmPath = "$env:LOCALAPPDATA\Programs\Git\mingw64\bin\git-credential-manager.exe"
 if (-not (Test-Path $gcmPath)) {
     $gcmCmd = Get-Command "git-credential-manager" -ErrorAction SilentlyContinue
     if ($gcmCmd) { $gcmPath = $gcmCmd.Source }

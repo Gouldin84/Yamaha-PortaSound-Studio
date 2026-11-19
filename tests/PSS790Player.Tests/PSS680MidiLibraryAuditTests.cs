@@ -17,9 +17,9 @@ namespace PSS790Player.Tests
         private readonly ITestOutputHelper? _output;
         private readonly string _tempTestDir;
 
-        public const string GmMidiDir = @"C:\Users\MichaelGoulding\Music\Midi\GM Midi";
-        public const string Pss680MidiDir = @"C:\Users\MichaelGoulding\Music\Midi\PSS-680 Midi";
-        public const string Pss790MidiDir = @"C:\Users\MichaelGoulding\Music\Midi\PSS-790 Midi";
+        public static readonly string GmMidiDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Midi", "GM Midi");
+        public static readonly string Pss680MidiDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Midi", "PSS-680 Midi");
+        public static readonly string Pss790MidiDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Midi", "PSS-790 Midi");
 
         // Shard 1: Anime & Movie Soundtracks (20 files)
         public static readonly string[] ShardAnimeMoviesFiles = new[]

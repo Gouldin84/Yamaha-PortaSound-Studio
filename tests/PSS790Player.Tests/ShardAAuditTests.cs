@@ -55,10 +55,10 @@ namespace PSS790Player.Tests
         [Fact]
         public void Audit_All28ShardAFiles_VerifyAnomaliesAndRemapper()
         {
-            string midiDir = @"C:\Projects\PSS-790\General MIDI";
-            if (!Directory.Exists(midiDir))
+            string midiDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Midi", "GM Midi");
+            if (!Directory.Exists(midiDir) || !ShardAFiles.All(f => File.Exists(Path.Combine(midiDir, f))))
             {
-                _output.WriteLine($"[AUDIT SKIPPED] Local directory not found: {midiDir}");
+                _output.WriteLine($"[AUDIT SKIPPED] Local legacy directory or shard files not found: {midiDir}");
                 return;
             }
 
