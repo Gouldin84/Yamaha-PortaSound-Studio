@@ -880,7 +880,7 @@ function initSidebarState() {
         const savedWidth = localStorage.getItem("pss790_sidebar_width");
         if (savedWidth) {
             const w = parseInt(savedWidth, 10);
-            if (!isNaN(w) && w >= 260 && w <= 700) {
+            if (!isNaN(w) && w >= 260 && w <= 720) {
                 state.sidebarWidth = w;
                 const sidebar = document.getElementById("quickPickSidebar");
                 if (sidebar) sidebar.style.width = `${w}px`;
@@ -906,7 +906,7 @@ function autoFitSidebarWidth(force = false) {
     if (!sidebar) return;
 
     const baseMin = 280;
-    const maxAllowed = Math.min(650, Math.floor(window.innerWidth * 0.45));
+    const maxAllowed = Math.min(720, Math.floor(window.innerWidth * 0.50));
 
     // If no songs are rendered/visible or library empty, smoothly shrink to baseMin
     if (!state.visibleSongList || state.visibleSongList.length === 0) {
@@ -918,7 +918,7 @@ function autoFitSidebarWidth(force = false) {
     // Measure the longest visible title and folder names with an offscreen canvas
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d");
-    ctx.font = "500 11px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.font = "600 11px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
     let maxTextWidth = 100;
 
@@ -935,13 +935,20 @@ function autoFitSidebarWidth(force = false) {
     });
 
     // Required width chrome calculation:
-    // Sidebar padding (p-2.5 = 20px)
-    // Deepest folder indent (up to ~36px)
-    // Checkbox (18px) + Star button (18px) + Note icon (18px) + Spacing (16px)
-    // Badge (GM/680/REC/PSS ~36px) + margin (6px)
-    // Scrollbar allowance (8px) + safe breathing margin (10px)
-    // Total chrome overhead = ~155px
-    const requiredTotalWidth = Math.ceil(maxTextWidth + 155);
+    // Sidebar padding (p-2.5 = 20px) + Category container padding (6px) + folder group margin (10px) = 36px
+    // Song item padding px-2 (16px) + Checkbox (16px) + Star (16px) + Music icon (16px) + Spacings (18px) = 82px
+    // Badge (GM/680/REC/PSS ~42px) + ml-1.5 margin (6px) = 48px
+    // Scrollbar (17px) + safe breathing margin (18px) = 35px
+    // Total base chrome = 36 + 82 + 48 + 35 = 201px (~205px)
+    let maxFolderDepth = 0;
+    for (const file of state.visibleSongList) {
+        if (file.subFolder) {
+            const depth = (file.subFolder.split(/[\\\/]/).filter(Boolean).length) || 1;
+            if (depth > maxFolderDepth) maxFolderDepth = depth;
+        }
+    }
+    const folderIndentAllowance = Math.min(maxFolderDepth * 16, 64);
+    const requiredTotalWidth = Math.ceil(maxTextWidth + 205 + folderIndentAllowance);
 
     // Bidirectional clamping:
     // Automatically expands when long titles are visible, and automatically shrinks down to baseline (280px) when collapsed!
@@ -3831,7 +3838,7 @@ function initSidebarResizer() {
         if (!isDragging) return;
         const dx = e.clientX - startX;
         const minW = 260;
-        const maxW = Math.min(700, Math.floor(window.innerWidth * 0.55));
+        const maxW = Math.min(720, Math.floor(window.innerWidth * 0.55));
         const newWidth = Math.max(minW, Math.min(startWidth + dx, maxW));
 
         sidebar.style.width = `${newWidth}px`;
