@@ -220,8 +220,8 @@
         <!-- ================= TAB 1: PLAYER & REMAPPER ================= -->
         <div id="viewPlayer" class="w-full h-full flex gap-2.5 overflow-hidden">
 
-            <!-- Quick-Pick Folder Tree Sidebar (Docked Left, ~285px) -->
-            <aside id="quickPickSidebar" class="w-[285px] shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden transition-all duration-300">
+            <!-- Quick-Pick Folder Tree Sidebar (Dynamic Width with Auto-Fit & Resizer, min 260px) -->
+            <aside id="quickPickSidebar" class="shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden transition-all duration-300" style="width: 280px; min-width: 260px; max-width: 650px;">
                 <!-- Sidebar Header -->
                 <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
                     <div class="flex items-center space-x-1.5">
@@ -231,6 +231,7 @@
                         <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Library</h3>
                     </div>
                     <div class="flex items-center space-x-1">
+                        <button id="btnAutoFitSidebar" title="Auto-Fit Width: Expand or shrink sidebar to fit longest visible file name (or double-click divider)" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">↔</button>
                         <button id="btnToggleSelectMode" title="Toggle Multi-Select Mode: Enable checkboxes on all songs for batch moving or deleting" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">☑</button>
                         <button id="btnCollapseAll" title="Collapse / Expand All: Toggle expansion state for all folders in the library tree" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
                         <span id="sidebarSongCount" title="Total songs indexed across General MIDI, PSS-790, and PSS-680 library folders" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60 cursor-help">0 songs</span>
@@ -296,6 +297,11 @@
                     <span class="text-slate-500 text-[10px]">1x: Load • 2x: Play</span>
                 </div>
             </aside>
+
+            <!-- Sidebar Drag-to-Resize Splitter Handle (DAW/IDE Style) -->
+            <div id="sidebarResizer" class="w-2.5 -mx-1 h-full cursor-col-resize flex items-center justify-center group shrink-0 z-20 select-none" title="Drag to resize library • Double-click to auto-fit content">
+                <div class="w-1 h-8 rounded-full bg-slate-700/60 group-hover:bg-cyan-400 group-hover:h-16 group-hover:shadow-[0_0_8px_rgba(6,182,212,0.6)] transition-all duration-200"></div>
+            </div>
 
             <!-- Main Deck & 16-Channel Mixer Area (Independently Scrollable) -->
             <div id="viewPlayerRightPane" class="flex-1 min-w-0 h-full overflow-y-auto space-y-2 pr-1 custom-scrollbar">
@@ -2307,7 +2313,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.4.1</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.4.2</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">

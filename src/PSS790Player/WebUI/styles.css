@@ -200,6 +200,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
     max-height: 100%;
     display: flex;
     flex-direction: column;
+    min-width: 260px;
+    max-width: 650px;
     transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease, opacity 0.2s ease;
 }
 
@@ -214,6 +216,36 @@ input[type="range"]::-webkit-slider-thumb:hover {
     overflow: hidden !important;
     border: none !important;
     margin: 0 !important;
+}
+
+/* Sidebar Resizer Divider & Drag State */
+#sidebarResizer {
+    user-select: none;
+    touch-action: none;
+}
+
+#quickPickSidebar.sidebar-collapsed + #sidebarResizer {
+    display: none !important;
+}
+
+body.is-resizing-sidebar #quickPickSidebar {
+    transition: none !important;
+}
+
+body.is-resizing-sidebar {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+/* Song Title Prefix & Unique Name Separation */
+.song-title-prefix {
+    opacity: 0.52;
+    font-weight: normal;
+}
+
+.song-title-unique {
+    font-weight: 600;
+    color: #f8fafc;
 }
 
 .tree-song-item {

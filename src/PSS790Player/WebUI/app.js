@@ -35,6 +35,8 @@ let state = {
     visibleSongList: [],
     favorites: new Set(),
     collapsedFavorites: new Set(),
+    sidebarWidth: 280,
+    isAutoFitSidebar: true,
     // Multi-Selection State
     isSelectMode: false,
     selectedSongs: new Set(),
@@ -860,12 +862,114 @@ function initSidebarState() {
             // but keep custom subfolders collapsed for clean organization
             state.expandedFolders = new Set(["gm:__root__", "pss790:__root__"]);
         }
+
+        const savedWidth = localStorage.getItem("pss790_sidebar_width");
+        if (savedWidth) {
+            const w = parseInt(savedWidth, 10);
+            if (!isNaN(w) && w >= 260 && w <= 700) {
+                state.sidebarWidth = w;
+                const sidebar = document.getElementById("quickPickSidebar");
+                if (sidebar) sidebar.style.width = `${w}px`;
+            }
+        }
+
+        const savedAutoFit = localStorage.getItem("pss790_sidebar_autofit");
+        if (savedAutoFit !== null) {
+            state.isAutoFitSidebar = savedAutoFit === "true";
+        }
     } catch (e) {
         state.expandedFolders = new Set(["gm:__root__", "pss790:__root__"]);
     }
 
     updateSidebarVisibility();
     updateCollapseAllButton();
+}
+
+function autoFitSidebarWidth(force = false) {
+    if (state.isSidebarCollapsed) return;
+    if (!force && !state.isAutoFitSidebar) return;
+    const sidebar = document.getElementById("quickPickSidebar");
+    if (!sidebar) return;
+
+    const baseMin = 280;
+    const maxAllowed = Math.min(650, Math.floor(window.innerWidth * 0.45));
+
+    // If no songs are rendered/visible or library empty, smoothly shrink to baseMin
+    if (!state.visibleSongList || state.visibleSongList.length === 0) {
+        sidebar.style.width = `${baseMin}px`;
+        state.sidebarWidth = baseMin;
+        return;
+    }
+
+    // Measure the longest visible title and folder names with an offscreen canvas
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.font = "500 11px ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+    let maxTextWidth = 100;
+
+    for (const file of state.visibleSongList) {
+        const w = ctx.measureText(file.fileName || "").width;
+        if (w > maxTextWidth) maxTextWidth = w;
+    }
+
+    // Also check visible folder group labels
+    document.querySelectorAll(".tree-folder-group > div:first-child span.font-medium").forEach(el => {
+        const text = el.textContent || "";
+        const w = ctx.measureText(text).width;
+        if (w > maxTextWidth) maxTextWidth = w;
+    });
+
+    // Required width chrome calculation:
+    // Sidebar padding (p-2.5 = 20px)
+    // Deepest folder indent (up to ~36px)
+    // Checkbox (18px) + Star button (18px) + Note icon (18px) + Spacing (16px)
+    // Badge (GM/680/REC/PSS ~36px) + margin (6px)
+    // Scrollbar allowance (8px) + safe breathing margin (10px)
+    // Total chrome overhead = ~155px
+    const requiredTotalWidth = Math.ceil(maxTextWidth + 155);
+
+    // Bidirectional clamping:
+    // Automatically expands when long titles are visible, and automatically shrinks down to baseline (280px) when collapsed!
+    const targetWidth = Math.max(baseMin, Math.min(requiredTotalWidth, maxAllowed));
+
+    sidebar.style.width = `${targetWidth}px`;
+    state.sidebarWidth = targetWidth;
+}
+
+function formatSongTitleHtml(fileName, subFolder) {
+    if (!fileName) return "";
+    if (!subFolder || subFolder === "(Root)") {
+        return `<span class="song-title truncate font-medium">${escapeHtml(fileName)}</span>`;
+    }
+
+    const cleanSub = subFolder.trim();
+    let prefix = null;
+    let unique = fileName;
+
+    const lowerFile = fileName.toLowerCase();
+    const lowerSub = cleanSub.toLowerCase();
+
+    if (lowerFile.startsWith(lowerSub)) {
+        let remainder = fileName.substring(cleanSub.length);
+        const match = remainder.match(/^[\s\-_:]+(.+)$/);
+        if (match) {
+            prefix = fileName.substring(0, fileName.length - match[1].length);
+            unique = match[1];
+        }
+    } else {
+        const dashIdx = fileName.indexOf(" - ");
+        if (dashIdx > 8) {
+            prefix = fileName.substring(0, dashIdx + 3);
+            unique = fileName.substring(dashIdx + 3);
+        }
+    }
+
+    if (prefix) {
+        return `<span class="song-title truncate font-medium"><span class="song-title-prefix">${escapeHtml(prefix)}</span><span class="song-title-unique">${escapeHtml(unique)}</span></span>`;
+    }
+
+    return `<span class="song-title truncate font-medium">${escapeHtml(fileName)}</span>`;
 }
 
 function saveExpandedFolders() {
@@ -1842,6 +1946,9 @@ function renderLibraryTree() {
         const btnClear = document.getElementById("btnTreeClearSearch");
         if (btnClear) btnClear.addEventListener("click", clearSearchFilter);
     }
+
+    // Bidirectionally auto-fit sidebar width to visible file & folder content
+    autoFitSidebarWidth();
 }
 
 function createSongItemElement(file) {
@@ -1886,7 +1993,7 @@ function createSongItemElement(file) {
             <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}" title="${isPlaying ? 'Currently playing' : (isSelected ? 'Currently selected' : 'MIDI song file')}">
                 ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
             </span>
-            <span class="song-title truncate font-medium">${escapeHtml(file.fileName)}</span>
+            ${formatSongTitleHtml(file.fileName, file.subFolder)}
         </div>
         <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${badgeClass}" title="${badgeTitle}">
             ${badgeLabel}
@@ -3407,6 +3514,72 @@ if (btnCloseSidebar) {
 const btnCollapseAll = document.getElementById("btnCollapseAll");
 if (btnCollapseAll) {
     btnCollapseAll.addEventListener("click", toggleCollapseAllFolders);
+}
+
+const btnAutoFitSidebar = document.getElementById("btnAutoFitSidebar");
+if (btnAutoFitSidebar) {
+    btnAutoFitSidebar.addEventListener("click", () => {
+        state.isAutoFitSidebar = true;
+        try {
+            localStorage.setItem("pss790_sidebar_autofit", "true");
+        } catch (e) {}
+        autoFitSidebarWidth(true);
+        showToast("Library width auto-fitted to content");
+    });
+}
+
+function initSidebarResizer() {
+    const resizer = document.getElementById("sidebarResizer");
+    const sidebar = document.getElementById("quickPickSidebar");
+    if (!resizer || !sidebar) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 280;
+
+    resizer.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return; // Only left mouse button
+        isDragging = true;
+        startX = e.clientX;
+        startWidth = sidebar.getBoundingClientRect().width;
+
+        document.body.classList.add("is-resizing-sidebar");
+        e.preventDefault();
+    });
+
+    window.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - startX;
+        const minW = 260;
+        const maxW = Math.min(700, Math.floor(window.innerWidth * 0.55));
+        const newWidth = Math.max(minW, Math.min(startWidth + dx, maxW));
+
+        sidebar.style.width = `${newWidth}px`;
+        state.sidebarWidth = newWidth;
+    });
+
+    window.addEventListener("mouseup", () => {
+        if (!isDragging) return;
+        isDragging = false;
+        document.body.classList.remove("is-resizing-sidebar");
+
+        // When user manually drags to a preferred width, preserve it and pause auto-fit until requested
+        state.isAutoFitSidebar = false;
+        try {
+            localStorage.setItem("pss790_sidebar_width", state.sidebarWidth);
+            localStorage.setItem("pss790_sidebar_autofit", "false");
+        } catch (e) {}
+    });
+
+    // Double-click divider: Resume auto-fit and immediately auto-fit to content!
+    resizer.addEventListener("dblclick", () => {
+        state.isAutoFitSidebar = true;
+        try {
+            localStorage.setItem("pss790_sidebar_autofit", "true");
+        } catch (e) {}
+        autoFitSidebarWidth(true);
+        showToast("Library width auto-fitted to content");
+    });
 }
 
 const btnToggleSelectMode = document.getElementById("btnToggleSelectMode");
@@ -7197,6 +7370,7 @@ function startApp() {
     initTheme();
     setupKeyboardShortcuts();
     initSidebarState();
+    initSidebarResizer();
     initVuMeters();
     renderRecordingsLibrary();
     initModelSelector();
