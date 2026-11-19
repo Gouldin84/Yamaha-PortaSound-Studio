@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.5.2">
+    <link rel="stylesheet" href="styles.css?v=2.5.3">
     <script>
         tailwind.config = {
             theme: {
@@ -192,21 +192,14 @@
                 <span class="hidden 2xl:inline">Batch</span>
             </button>
 
-            <!-- Gamepad Controller Active Indicator -->
-            <div id="gamepadIndicator" class="hidden items-center space-x-1.5 px-2 py-1 rounded-lg bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 text-[11px] font-medium shrink-0 animate-fade-in" title="Asus ROG Ally / Gamepad Controller Active &amp; Ready">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span class="hidden md:inline">🎮 Ally Active</span>
-                <span class="md:hidden">🎮</span>
-            </div>
-
             <!-- Handheld Touch Mode Toggle Button -->
             <button id="btnToggleHandheldMode" title="Toggle Handheld Touch Mode: Enlarges touch targets, sliders, and buttons for 7-inch Asus ROG Ally screen" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <span class="text-xs">🖐️</span>
                 <span id="handheldModeText" class="hidden 2xl:inline text-[11px]">Touch</span>
             </button>
 
-            <!-- DAW Keyboard & Gamepad Shortcuts Button -->
-            <button id="btnShortcuts" title="Keyboard &amp; Gamepad Controller Shortcuts (? or F1)" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+            <!-- DAW Keyboard Shortcuts Button -->
+            <button id="btnShortcuts" title="Keyboard Shortcuts (? or F1)" class="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
                 <span class="text-xs">⌨️</span>
                 <span class="hidden 2xl:inline">Hotkeys</span>
             </button>
@@ -2247,18 +2240,18 @@
         </div>
     </div>
 
-    <!-- DAW Keyboard & Gamepad Shortcuts Modal -->
+    <!-- DAW Keyboard Shortcuts Modal -->
     <div id="shortcutsModal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
         <div class="glass-panel w-full max-w-xl rounded-2xl border border-slate-700/80 shadow-2xl p-5 space-y-4 max-h-[88vh] flex flex-col">
             <!-- Modal Header -->
             <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
                 <div class="flex items-center space-x-2.5">
                     <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-base">
-                        🎮
+                        ⌨️
                     </div>
                     <div>
-                        <h3 class="text-sm font-bold text-white">Shortcuts, Hotkeys &amp; ROG Ally Controls</h3>
-                        <p class="text-[11px] text-slate-400">Gamepad controller, touchscreen, and keyboard navigation</p>
+                        <h3 class="text-sm font-bold text-white">Shortcuts &amp; Hotkeys</h3>
+                        <p class="text-[11px] text-slate-400">Touchscreen and keyboard navigation</p>
                     </div>
                 </div>
                 <button id="btnCloseShortcutsModal" class="text-slate-400 hover:text-white transition p-1" title="Close hotkeys dialog">
@@ -2270,59 +2263,6 @@
 
             <!-- Shortcuts Content -->
             <div class="space-y-4 text-xs text-slate-300 overflow-y-auto custom-scrollbar pr-1 flex-1">
-                <!-- Asus ROG Ally & Gamepad Controls -->
-                <div class="space-y-2 p-3 rounded-xl bg-slate-900/90 border border-amber-500/30">
-                    <div class="flex items-center justify-between">
-                        <h4 class="text-[11px] font-bold uppercase tracking-wider text-amber-400 flex items-center space-x-1.5">
-                            <span>🎮</span>
-                            <span>Asus ROG Ally &amp; Gamepad Controller</span>
-                        </h4>
-                        <span class="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/60">Haptic Rumble Ready</span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[11px]">
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Step Songs / Hold Fast</span>
-                            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">D-Pad / L-Stick</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Fluid Library Scroll</span>
-                            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">R-Stick Up/Down</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Play / Pause</span>
-                            <span class="w-5 h-5 rounded-full bg-emerald-900/80 border border-emerald-500 text-emerald-300 flex items-center justify-center font-bold text-[10px]">A</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Stop Playback</span>
-                            <span class="w-5 h-5 rounded-full bg-rose-900/80 border border-rose-500 text-rose-300 flex items-center justify-center font-bold text-[10px]">B</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Toggle Favourite (★)</span>
-                            <span class="w-5 h-5 rounded-full bg-cyan-900/80 border border-cyan-500 text-cyan-300 flex items-center justify-center font-bold text-[10px]">X</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Toggle Handheld Touch</span>
-                            <span class="w-5 h-5 rounded-full bg-amber-900/80 border border-amber-500 text-amber-300 flex items-center justify-center font-bold text-[10px]">Y</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Prev / Next Track</span>
-                            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">LB / RB</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Page Up / Down (±8)</span>
-                            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">LT / RT</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Collapse / Expand Folder</span>
-                            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">D-Pad ◄ / ►</span>
-                        </div>
-                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
-                            <span>Toggle Sidebar</span>
-                            <span class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300 font-bold">View / Select</span>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Keyboard Transport & Playback -->
                 <div class="space-y-1.5">
                     <h4 class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Transport &amp; Playback (Keyboard)</h4>
@@ -2421,7 +2361,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.5.2</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.5.3</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2567,6 +2507,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.4.0"></script>
+    <script src="app.js?v=2.5.3"></script>
 </body>
 </html>

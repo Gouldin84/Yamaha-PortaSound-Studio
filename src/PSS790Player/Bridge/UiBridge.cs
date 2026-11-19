@@ -334,7 +334,6 @@ namespace PSS790Player.Bridge
                         }
                         break;
                     case "load_file":
-                    case "load_midi_metadata":
                         var path = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : (root.TryGetProperty("path", out var p) ? p.GetString() : null);
                         if (!string.IsNullOrEmpty(path))
                         {
@@ -345,6 +344,16 @@ namespace PSS790Player.Bridge
 
                             bool shouldPlay = _player.IsPlaying;
                             LoadFile(path, autoPlay: shouldPlay);
+                        }
+                        break;
+                    case "load_midi_metadata":
+                        var metaPath = root.TryGetProperty("filePath", out var mfp) ? mfp.GetString() : (root.TryGetProperty("path", out var mp) ? mp.GetString() : null);
+                        if (!string.IsNullOrEmpty(metaPath))
+                        {
+                            if (!_player.IsPlaying)
+                            {
+                                LoadFile(metaPath, autoPlay: false);
+                            }
                         }
                         break;
                     case "load_midi_and_play":

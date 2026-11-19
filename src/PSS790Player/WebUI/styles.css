@@ -256,29 +256,6 @@ body.is-resizing-sidebar {
     transition: background-color 0.1s ease, border-color 0.1s ease;
 }
 
-.btn-song-play {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    background: transparent;
-    border: none;
-    outline: none;
-}
-
-.btn-song-play:hover {
-    transform: scale(1.15);
-}
-
-.btn-song-play:active {
-    transform: scale(0.95);
-}
-
-body.handheld-touch-mode .btn-song-play {
-    min-width: 28px;
-    min-height: 28px;
-}
-
 .tree-song-item:hover {
     background: rgba(30, 41, 59, 0.7);
 }
@@ -913,14 +890,6 @@ body.theme-light #recordingsSearchInput::placeholder {
 #vecCanvas {
     box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.8), 0 0 20px rgba(99, 102, 241, 0.25);
     background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
-}
-
-/* Gamepad Cursor Focus Highlight (Asus ROG Ally) */
-.tree-song-item.gamepad-focused {
-    outline: 2px solid #06b6d4 !important;
-    outline-offset: -1px;
-    background: rgba(6, 182, 212, 0.2) !important;
-    box-shadow: 0 0 12px rgba(6, 182, 212, 0.35);
 }
 
 /* Handheld Touch Mode - Enlarged Targets for 7" Asus ROG Ally Touchscreen */
