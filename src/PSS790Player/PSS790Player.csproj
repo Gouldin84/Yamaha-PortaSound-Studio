@@ -15,9 +15,9 @@
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     
     <!-- Standalone Single-File Configuration -->
-    <Version>2.5.0</Version>
-    <AssemblyVersion>2.5.0</AssemblyVersion>
-    <FileVersion>2.5.0</FileVersion>
+    <Version>2.5.1</Version>
+    <AssemblyVersion>2.5.1</AssemblyVersion>
+    <FileVersion>2.5.1</FileVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

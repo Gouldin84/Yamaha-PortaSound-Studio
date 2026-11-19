@@ -34,7 +34,7 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-ASUS ROG ALLY GAMEPAD & HANDHELD NAVIGATION (v2.5.0)
+ASUS ROG ALLY GAMEPAD & HANDHELD NAVIGATION (v2.5.1)
 ------------------------------------------------------------------------
 Yamaha PortaSound Studio features full native Gamepad API integration
 designed specifically for the Asus ROG Ally Z1 Extreme handheld:
