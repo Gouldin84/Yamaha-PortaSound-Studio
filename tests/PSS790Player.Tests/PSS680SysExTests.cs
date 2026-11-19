@@ -1,6 +1,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using Melanchall.DryWetMidi.Common;
+using Melanchall.DryWetMidi.Core;
 using PSS790Player.Core;
 using Xunit;
 
@@ -312,6 +314,144 @@ namespace PSS790Player.Tests
 
             Assert.True(Pss680Constants.DrumMap.ContainsKey(63)); // Ride Cymbal
             Assert.Equal("Ride Cymbal", Pss680Constants.DrumMap[63].Name);
+        }
+
+        [Fact]
+        public void Remapper_MasterTranspose_ShiftsMelodicChannels_LeavesDrumsIntact()
+        {
+            var midi = new MidiFile();
+            var trMelodic = new TrackChunk();
+            trMelodic.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            trMelodic.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+
+            var trDrum = new TrackChunk();
+            trDrum.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { Channel = (FourBitNumber)9 });
+            midi.Chunks.Add(trMelodic);
+            midi.Chunks.Add(trDrum);
+
+            var options = new RemapperOptions
+            {
+                TargetModel = "pss680",
+                MasterTranspose = 3 // Transpose up 3 semitones (e.g. C -> Eb)
+            };
+
+            var remapped = Remapper.Remap(midi, options);
+            var melodicNotes = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<NoteOnEvent>()
+                .Where(n => n.Channel == (FourBitNumber)0)
+                .ToList();
+
+            var drumNotes = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<NoteOnEvent>()
+                .Where(n => n.Channel == (FourBitNumber)15) // drums mapped to ch 15 on PSS-680
+                .ToList();
+
+            Assert.Single(melodicNotes);
+            Assert.Equal(63, (int)melodicNotes[0].NoteNumber); // 60 + 3 = 63
+            Assert.Single(drumNotes);
+            // Drum note should be remapped to PSS drum note (Bass Drum 45), not transposed by MasterTranspose!
+            Assert.Equal(45, (int)drumNotes[0].NoteNumber);
+        }
+
+        [Fact]
+        public void Remapper_ChannelOctaveShift_AppliesIndependentlyPerChannel()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)32) { Channel = (FourBitNumber)1 }); // Acoustic Bass
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)48, (SevenBitNumber)90) { Channel = (FourBitNumber)1 });
+            midi.Chunks.Add(tr);
+
+            var options = new RemapperOptions { TargetModel = "pss680" };
+            options.ChannelOctaveShifts[1] = -12; // Shift bass down 1 octave
+
+            var remapped = Remapper.Remap(midi, options);
+            var notes = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<NoteOnEvent>()
+                .Where(n => n.Channel == (FourBitNumber)1)
+                .ToList();
+
+            Assert.Single(notes);
+            Assert.Equal(36, (int)notes[0].NoteNumber); // 48 - 12 = 36
+        }
+
+        [Fact]
+        public void Remapper_Pss680_ContourPreservation_ShiftsEntireChannelUpWhenMinNoteBelow24()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)33) { Channel = (FourBitNumber)2 }); // Fingered Bass
+            // Descending bassline: 26 (D1), 24 (C1), 22 (Bb0 - below 24 floor)
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)26, (SevenBitNumber)90) { Channel = (FourBitNumber)2 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)24, (SevenBitNumber)90) { Channel = (FourBitNumber)2 });
+            tr.Events.Add(new NoteOnEvent((SevenBitNumber)22, (SevenBitNumber)90) { Channel = (FourBitNumber)2 });
+            midi.Chunks.Add(tr);
+
+            var options = new RemapperOptions { TargetModel = "pss680" };
+            var remapped = Remapper.Remap(midi, options);
+
+            var notes = remapped.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<NoteOnEvent>()
+                .Where(n => n.Channel == (FourBitNumber)2)
+                .Select(n => (int)n.NoteNumber)
+                .ToList();
+
+            // All notes are shifted up by 12 st so the descending contour is preserved:
+            // 26 -> 38, 24 -> 36, 22 -> 34
+            Assert.Equal(3, notes.Count);
+            Assert.Equal(38, notes[0]);
+            Assert.Equal(36, notes[1]);
+            Assert.Equal(34, notes[2]);
+            // Descending order is preserved!
+            Assert.True(notes[0] > notes[1]);
+            Assert.True(notes[1] > notes[2]);
+        }
+
+        [Fact]
+        public void Remapper_Pss680_PitchBendBypassesAcousticNeutralization()
+        {
+            var midi = new MidiFile();
+            var tr = new TrackChunk();
+            // Piano on Channel 0 (normally acoustic neutralized on PSS-790 AWM)
+            tr.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            tr.Events.Add(new PitchBendEvent(9000) { Channel = (FourBitNumber)0 });
+            midi.Chunks.Add(tr);
+
+            var options680 = new RemapperOptions
+            {
+                TargetModel = "pss680",
+                NeutralizeAcousticPitchBends = true
+            };
+
+            // Remap for PSS-680
+            var remapped680 = Remapper.Remap(midi, options680);
+            var bends680 = remapped680.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<PitchBendEvent>()
+                .Where(b => b.PitchValue != 8192)
+                .ToList();
+
+            // Pitch bends are kept for 2-op FM synthesis
+            Assert.NotEmpty(bends680);
+
+            // In contrast, on PSS-790 AWM, acoustic pitch bend neutralization strips piano pitch bend to 8192
+            var options790 = new RemapperOptions
+            {
+                TargetModel = "pss790",
+                NeutralizeAcousticPitchBends = true
+            };
+            var remapped790 = Remapper.Remap(midi, options790);
+            var bends790 = remapped790.GetTrackChunks()
+                .SelectMany(t => t.Events)
+                .OfType<PitchBendEvent>()
+                .Where(b => b.PitchValue != 8192)
+                .ToList();
+
+            Assert.Empty(bends790);
         }
     }
 }

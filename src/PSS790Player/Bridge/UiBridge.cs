@@ -98,6 +98,31 @@ namespace PSS790Player.Bridge
 
             _sysexManager = new SysExManager(_player, _recorder);
 
+            // Real-time bidirectional capture of PSS-680 Format 00H FM Voice Dumps
+            _recorder.SysExReceived += (s, sysexEvent) =>
+            {
+                try
+                {
+                    var data = sysexEvent.Data;
+                    if (data != null && data.Length >= 68 &&
+                        data[0] == Pss680Constants.ManufacturerYamaha &&
+                        data[1] == Pss680Constants.InstrumentClassPss &&
+                        data[2] == Pss680Constants.FormatFmVoice)
+                    {
+                        byte[] full72 = new byte[data.Length + 2];
+                        full72[0] = 0xF0;
+                        Buffer.BlockCopy(data, 0, full72, 1, data.Length);
+                        full72[^1] = 0xF7;
+
+                        var incomingVoice = PSS680Voice.FromSysExMessage(full72);
+                        SendToJs("fm_voice_dump_received", VoiceToObject(incomingVoice));
+                        SendToJs("fm_active_bank_changed", new { bank = incomingVoice.BankNumber, voiceNumber = 100 + incomingVoice.BankNumber });
+                        SendToJs("notification", new { message = $"Captured FM Voice Dump from PSS-680: Bank {incomingVoice.BankNumber + 1}" });
+                    }
+                }
+                catch { }
+            };
+
             _sysexManager.CaptureProgress += (s, e) =>
             {
                 SendToJs("sysex_capture_progress", new
@@ -413,9 +438,44 @@ namespace PSS790Player.Bridge
                             {
                                 VoiceOverrideStore.Instance.SetOverride(_currentFilePath, fmCh, voiceNumber, _activeModel);
                             }
-                            _player.SendVoiceOverride(fmCh, voiceNumber, "pss680");
+                            _ = Task.Run(async () =>
+                            {
+                                await Task.Delay(35);
+                                _player.SendVoiceOverride(fmCh, voiceNumber, "pss680");
+                            });
                             ReapplyRemapping(preservePosition: true);
                             SendToJs("channel_voice_overridden", new { channel = fmCh, voice = voiceNumber, voiceName = fmVoice.Name });
+                        }
+                        break;
+                    case "set_master_transpose":
+                        {
+                            var transpose = root.TryGetProperty("transpose", out var tP) ? Math.Clamp(tP.GetInt32(), -12, 12) : 0;
+                            _options.MasterTranspose = transpose;
+                            ReapplyRemapping(preservePosition: true);
+                            SendToJs("master_transpose_changed", new { transpose });
+                        }
+                        break;
+                    case "set_channel_octave":
+                        {
+                            var octCh = root.GetProperty("channel").GetInt32();
+                            var octShift = root.TryGetProperty("octaveShift", out var oP) ? Math.Clamp(oP.GetInt32(), -24, 24) : 0;
+                            _options.ChannelOctaveShifts[octCh] = octShift;
+                            ReapplyRemapping(preservePosition: true);
+                            SendToJs("channel_octave_changed", new { channel = octCh, octaveShift = octShift });
+                        }
+                        break;
+                    case "set_pitch_bend_mode":
+                        {
+                            var modeStr = root.TryGetProperty("mode", out var mP) ? mP.GetString() : "auto";
+                            _options.PitchBendMode = modeStr?.ToLowerInvariant() switch
+                            {
+                                "preserve1to1" => PitchBendScaleMode.Preserve1to1,
+                                "divideby6" => PitchBendScaleMode.DivideBy6,
+                                "disable" => PitchBendScaleMode.Disable,
+                                _ => PitchBendScaleMode.Auto
+                            };
+                            ReapplyRemapping(preservePosition: true);
+                            SendToJs("pitch_bend_mode_changed", new { mode = _options.PitchBendMode.ToString() });
                         }
                         break;
                     case "set_channel_volume":
@@ -790,24 +850,61 @@ namespace PSS790Player.Bridge
                             byte[] sysex = fmVoice.ToSysExMessage();
                             _player.SendSysEx(sysex);
                             var isSilent = root.TryGetProperty("silent", out var s) && s.GetBoolean();
+
+                            // 35ms pacing delay for RAM write, then activate Bank X on Channel 1
+                            _ = Task.Run(async () =>
+                            {
+                                await Task.Delay(35);
+                                _player.SendVoiceOverride(0, 100 + fmVoice.BankNumber, "pss680");
+                            });
+
+                            SendToJs("fm_active_bank_changed", new { bank = fmVoice.BankNumber, voiceNumber = 100 + fmVoice.BankNumber });
                             if (!isSilent)
                             {
                                 SendToJs("notification", new { message = $"Transmitted FM Voice '{fmVoice.Name}' to PSS-680 (Bank {fmVoice.BankNumber + 1})" });
                             }
                         }
                         break;
+                    case "select_fm_bank":
+                        {
+                            var bank = root.TryGetProperty("bank", out var bP) ? Math.Clamp(bP.GetInt32(), 0, 4) : 0;
+                            _player.SendVoiceOverride(0, 100 + bank, "pss680");
+                            SendToJs("fm_active_bank_changed", new { bank, voiceNumber = 100 + bank });
+                            SendToJs("notification", new { message = $"Switched PSS-680 to Bank {bank + 1} (Voice {100 + bank})" });
+                        }
+                        break;
                     case "audition_fm_voice_note":
                         {
                             var note = root.TryGetProperty("note", out var nP) ? Math.Clamp(nP.GetInt32(), 24, 108) : 60;
                             var bank = root.TryGetProperty("bank", out var bP) ? Math.Clamp(bP.GetInt32(), 0, 4) : 0;
+                            var isChord = root.TryGetProperty("isChord", out var cP) && cP.GetBoolean();
                             _ = Task.Run(async () =>
                             {
                                 try
                                 {
                                     _player.SendVoiceOverride(0, 100 + bank, "pss680");
-                                    _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
-                                    await Task.Delay(800);
-                                    _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                    // 35ms settling delay for vintage FM tone generator chip registers
+                                    await Task.Delay(35);
+
+                                    if (isChord)
+                                    {
+                                        int n1 = note;
+                                        int n2 = Math.Clamp(note + 4, 24, 108);
+                                        int n3 = Math.Clamp(note + 7, 24, 108);
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n1, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n2, (Melanchall.DryWetMidi.Common.SevenBitNumber)95) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n3, (Melanchall.DryWetMidi.Common.SevenBitNumber)95) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        await Task.Delay(850);
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n1, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n2, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)n3, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                    }
+                                    else
+                                    {
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOnEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)100) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                        await Task.Delay(800);
+                                        _player.SendEvent(new Melanchall.DryWetMidi.Core.NoteOffEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)note, (Melanchall.DryWetMidi.Common.SevenBitNumber)0) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)0 });
+                                    }
                                 }
                                 catch { }
                             });
@@ -842,7 +939,15 @@ namespace PSS790Player.Bridge
                                 var fmVoice = PSS680Voice.FromSysExMessage(bytes);
                                 fmVoice.Name = Path.GetFileNameWithoutExtension(vPath);
                                 _player.SendSysEx(bytes);
+
+                                _ = Task.Run(async () =>
+                                {
+                                    await Task.Delay(35);
+                                    _player.SendVoiceOverride(0, 100 + fmVoice.BankNumber, "pss680");
+                                });
+
                                 SendToJs("fm_voice_loaded", VoiceToObject(fmVoice));
+                                SendToJs("fm_active_bank_changed", new { bank = fmVoice.BankNumber, voiceNumber = 100 + fmVoice.BankNumber });
                                 SendToJs("notification", new { message = $"Loaded & Transmitted FM Voice: {fmVoice.Name} (Bank {fmVoice.BankNumber + 1})" });
                             }
                         }
@@ -1044,6 +1149,9 @@ namespace PSS790Player.Bridge
                     defaultBatchTarget680 = AppPaths.Pss680MidiDir,
                     midiThru = _recorder.MidiThruEnabled,
                     recorderBpm = _recorder.Bpm,
+                    masterTranspose = _options.MasterTranspose,
+                    pitchBendMode = _options.PitchBendMode.ToString().ToLowerInvariant(),
+                    channelOctaveShifts = _options.ChannelOctaveShifts,
                     sysexLibrary = _sysexManager.GetSysExLibrary(),
                     recordingsLibrary = _recorder.GetRecordingsLibrary(),
                     fmVoiceLibrary = GetFmVoiceLibraryData(),
@@ -2244,6 +2352,9 @@ namespace PSS790Player.Bridge
                         durationSeconds = duration.TotalSeconds,
                         durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                         channels = channelInfo,
+                        masterTranspose = _options.MasterTranspose,
+                        channelOctaveShifts = _options.ChannelOctaveShifts,
+                        pitchBendMode = _options.PitchBendMode.ToString().ToLowerInvariant(),
                         hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath),
                         health = BuildHealthPayload(health)
                     });
@@ -2514,7 +2625,8 @@ namespace PSS790Player.Bridge
                     detectedInstrument,
                     defaultPssVoice,
                     defaultPssVoiceName,
-                    voiceOverride
+                    voiceOverride,
+                    octaveShift = _options.ChannelOctaveShifts.TryGetValue(ch, out var os) ? os : 0
                 });
             }
 

@@ -2,11 +2,11 @@
 
 A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for classic **Yamaha PortaSound** keyboard synthesizers.
 
-[![Release](https://img.shields.io/github/v/release/Gouldin84/Yamaha-PortaSound-Studio)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
+[![Release](https://img.shields.io/badge/release-v2.3.1-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-175%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-182%20Passing-brightgreen.svg)]()
 
 ---
 

@@ -493,7 +493,8 @@ namespace PSS790Player.Core
                 byte programNumber;
                 if (is680)
                 {
-                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 107);
+                    // PSS-680: Voices 00-99 are factory presets; 100-104 are User Banks 1-5
+                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 104);
                 }
                 else if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
                 {

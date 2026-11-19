@@ -15,12 +15,21 @@ namespace PSS790Player.Core
         Pss680Native
     }
 
+    public enum PitchBendScaleMode
+    {
+        Auto,
+        Preserve1to1,
+        DivideBy6,
+        Disable
+    }
+
     public class RemapperOptions
     {
         public string TargetModel { get; set; } = "pss790"; // "pss790" or "pss680"
         public bool EnablePolyphonyGuard { get; set; } = true;
         public bool ScalePitchBend { get; set; } = true;
-        public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments (Pianos, Organs, Strings, Bells, Choirs, Brass sections) so they don't detune on PSS-790 hardware
+        public PitchBendScaleMode PitchBendMode { get; set; } = PitchBendScaleMode.Auto;
+        public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments on PSS-790 hardware PCM
         public bool AutoCenterDanglingPitchBends { get; set; } = true; // Guarantees all channels return to pitch 8192 (center) at track end and during silences
         public bool EmulateSustainPedal { get; set; } = true; // Extends staccato note durations while CC 64 (Damper Pedal) is held, preventing dry/empty sound on piano/keyboard tracks
         public bool FoldExpressionPedal { get; set; } = true; // Folds CC 11 (Expression) into CC 7 (Volume) so swells, crescendos, and track balance play on PSS-790
@@ -31,7 +40,9 @@ namespace PSS790Player.Core
         public bool ForceRemap { get; set; } = false;
         public double TempoMultiplier { get; set; } = 1.0; // Optional tempo multiplier (e.g. 1.25x, 1.35x, 1.5x)
         public bool AutoNormalizeSluggishTempo { get; set; } = false; // When true, doubles tempo if detected average BPM < 68 BPM
-        public Dictionary<int, int?> ChannelVoiceOverrides { get; set; } = new(); // Channel (0-15) -> VoiceNumber (0-99) or null (auto)
+        public int MasterTranspose { get; set; } = 0; // Master pitch transposition in semitones (-12 to +12)
+        public Dictionary<int, int> ChannelOctaveShifts { get; set; } = new(); // Channel (0-15) -> Semitone shift (-24 to +24)
+        public Dictionary<int, int?> ChannelVoiceOverrides { get; set; } = new(); // Channel (0-15) -> VoiceNumber (0-104) or null (auto)
     }
 
     public class Remapper
@@ -346,6 +357,37 @@ namespace PSS790Player.Core
                 }
             }
 
+            // Pre-scan for low melodic notes to prevent individual note folding from inverting basslines on PSS-680
+            var autoChannelOctaveShifts = new Dictionary<int, int>();
+            if (is680)
+            {
+                var channelMinNote = new Dictionary<int, int>();
+                foreach (var trackChunk in remapped.GetTrackChunks())
+                {
+                    foreach (var evt in trackChunk.Events)
+                    {
+                        if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0 && !drumChannels.Contains(noteOn.Channel))
+                        {
+                            int ch = noteOn.Channel;
+                            if (!channelMinNote.TryGetValue(ch, out var curMin) || noteOn.NoteNumber < curMin)
+                            {
+                                channelMinNote[ch] = noteOn.NoteNumber;
+                            }
+                        }
+                    }
+                }
+
+                foreach (var (ch, minN) in channelMinNote)
+                {
+                    if (minN < 24)
+                    {
+                        // Shift entire melodic channel up by octave(s) so descending bass phrases preserve intervals
+                        int neededOctaves = (int)Math.Ceiling((24 - minN) / 12.0);
+                        autoChannelOctaveShifts[ch] = neededOctaves * 12;
+                    }
+                }
+            }
+
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 var bentChannels = new HashSet<int>();
@@ -400,10 +442,21 @@ namespace PSS790Player.Core
                         {
                             int gmProg = channelGmPrograms.TryGetValue(originalChannel, out var gp) ? gp : -1;
 
-                            // Melodic octave folding for hardware multisample range
+                            // Melodic octave folding for hardware multisample range, master transposition, and channel octave shifts
+                            int transposeShift = options.MasterTranspose;
+                            if (options.ChannelOctaveShifts.TryGetValue(currentChannel, out var chShift))
+                            {
+                                transposeShift += chShift;
+                            }
+                            else if (autoChannelOctaveShifts.TryGetValue(originalChannel, out var autoShift))
+                            {
+                                transposeShift += autoShift;
+                            }
+
                             if (chEvt is NoteOnEvent melodicNoteOn)
                             {
-                                melodicNoteOn.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOn.NoteNumber, gmProg, is680);
+                                int shifted = melodicNoteOn.NoteNumber + transposeShift;
+                                melodicNoteOn.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)Math.Clamp(shifted, 0, 127), gmProg, is680);
                                 if (!is680 && options.NormalizeAwmVelocities && melodicNoteOn.Velocity > 0)
                                 {
                                     byte v = (byte)melodicNoteOn.Velocity;
@@ -413,7 +466,8 @@ namespace PSS790Player.Core
                             }
                             else if (chEvt is NoteOffEvent melodicNoteOff)
                             {
-                                melodicNoteOff.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)melodicNoteOff.NoteNumber, gmProg, is680);
+                                int shifted = melodicNoteOff.NoteNumber + transposeShift;
+                                melodicNoteOff.NoteNumber = (SevenBitNumber)ClampMelodicNote((byte)Math.Clamp(shifted, 0, 127), gmProg, is680);
                             }
 
                             if (chEvt is ProgramChangeEvent pc)
@@ -422,7 +476,7 @@ namespace PSS790Player.Core
                                 {
                                     if (is680)
                                     {
-                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 107);
+                                        pc.ProgramNumber = (SevenBitNumber)Math.Clamp(overrideVoice.Value, 0, 104);
                                     }
                                     else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var voiceInfo))
                                     {
@@ -449,16 +503,33 @@ namespace PSS790Player.Core
                             {
                                 bool isAcoustic = gmProg >= 0 && IsAcousticOrKeyboardInstrument((byte)gmProg);
 
-                                if (options.NeutralizeAcousticPitchBends && isAcoustic)
+                                if (options.NeutralizeAcousticPitchBends && isAcoustic && !is680)
                                 {
-                                    // Acoustic instruments (piano, strings, organ) must not have micro-bends detuning hardware voices
+                                    // Acoustic instruments (piano, strings, organ) must not have micro-bends detuning hardware voices on PSS-790 PCM.
+                                    // Bypassed on PSS-680 (FM tone generator handles pitch bends smoothly without PCM artifacts).
+                                    pb.PitchValue = 8192;
+                                }
+                                else if (options.PitchBendMode == PitchBendScaleMode.Disable)
+                                {
                                     pb.PitchValue = 8192;
                                 }
                                 else if (options.ScalePitchBend)
                                 {
-                                    double scaleFactor = channelBendRange.TryGetValue(originalChannel, out var range) && range > 0
-                                        ? Math.Clamp((double)range / 12.0, 0.05, 1.0)
-                                        : Constants.PitchBendScaleFactor;
+                                    double scaleFactor;
+                                    if (options.PitchBendMode == PitchBendScaleMode.Preserve1to1)
+                                    {
+                                        scaleFactor = 1.0;
+                                    }
+                                    else if (options.PitchBendMode == PitchBendScaleMode.DivideBy6)
+                                    {
+                                        scaleFactor = 1.0 / 6.0;
+                                    }
+                                    else // Auto
+                                    {
+                                        scaleFactor = channelBendRange.TryGetValue(originalChannel, out var range) && range > 0
+                                            ? Math.Clamp((double)range / 12.0, 0.05, 1.0)
+                                            : Constants.PitchBendScaleFactor;
+                                    }
 
                                     int centered = pb.PitchValue - 8192;
                                     int scaled = (int)Math.Round(centered * scaleFactor);
@@ -702,12 +773,9 @@ namespace PSS790Player.Core
             // PSS-790 tone generator natively receives MIDI notes 12 to 108 (C0 to C8).
             // Acoustic piano, organ, and strings voices above Note 88 (E6) exhibit harsh multisample aliasing on AWM.
             // On PSS-680 (2-Op FM synthesis), there are no PCM multisamples or aliasing artifacts; all voices play up to 108.
-            // All other voices (synth leads, brass, bells, piccolos, flutes, guitars, bass) play cleanly up to Note 108 (C8).
+            // Minimum note threshold on PSS-680 Mode 99 is Note 24 (C1, Manual p. 35). Floor 24 preserves bass fundamentals.
             bool isSensitive = !is680 && gmProg >= 0 && IsAliasingSensitiveAcousticVoice((byte)gmProg);
             byte maxNote = isSensitive ? (byte)88 : (byte)108;
-
-            // Bass instruments and keyboards play naturally in Octave 1 (C1=24 to B1=35).
-            // Minimum note threshold is Note 24 (C1), preserving all 4-string (E1=28) and 5-string (B0/C1) bass notes.
             byte minNote = 24;
 
             while (note < minNote) note += 12;

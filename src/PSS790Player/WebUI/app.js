@@ -46,8 +46,13 @@ let state = {
         selectedVoice: null,
         volume: 100,
         isMuted: false,
-        isSolo: false
+        isSolo: false,
+        octaveShift: 0
     })),
+    // Master Pitch & Transpose
+    masterTranspose: 0,
+    pitchBendMode: "auto",
+    activeFmBank: 0,
     // Studio / Recorder State
     recorderState: "idle",
     recorderBpm: 120,
@@ -284,6 +289,13 @@ function handleHostMessage(msg) {
                 if (bpmIn) bpmIn.value = state.recorderBpm;
                 if (bpmSlide) bpmSlide.value = state.recorderBpm;
             }
+            if (msg.data.masterTranspose !== undefined) {
+                state.masterTranspose = msg.data.masterTranspose;
+                updateMasterTransposeDisplay();
+            }
+            if (msg.data.pitchBendMode) {
+                state.pitchBendMode = msg.data.pitchBendMode;
+            }
             if (msg.data.midiThru !== undefined) {
                 const chk = document.getElementById("chkMidiThru");
                 if (chk) chk.checked = msg.data.midiThru;
@@ -400,6 +412,11 @@ function handleHostMessage(msg) {
             state.currentHealth = msg.data.health;
             renderHealthBadge(msg.data.health);
 
+            if (msg.data.masterTranspose !== undefined) {
+                state.masterTranspose = msg.data.masterTranspose;
+                updateMasterTransposeDisplay();
+            }
+
             // Update channel analysis & restored voice overrides
             if (msg.data.channels) {
                 msg.data.channels.forEach(chInfo => {
@@ -411,11 +428,33 @@ function handleHostMessage(msg) {
                         ch.defaultPssVoice = chInfo.defaultPssVoice;
                         ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
                         ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                        ch.octaveShift = chInfo.octaveShift !== undefined ? chInfo.octaveShift : 0;
                     }
                 });
                 renderMixer();
             }
             highlightActiveSongInTree();
+            break;
+
+        case "master_transpose_changed":
+            state.masterTranspose = msg.data.transpose;
+            updateMasterTransposeDisplay();
+            break;
+
+        case "channel_octave_changed":
+            if (state.channels[msg.data.channel]) {
+                state.channels[msg.data.channel].octaveShift = msg.data.octaveShift;
+                renderMixer();
+            }
+            break;
+
+        case "fm_active_bank_changed":
+            state.activeFmBank = msg.data.bank;
+            updateActiveFmBankDisplay(msg.data.bank, msg.data.voiceNumber);
+            break;
+
+        case "fm_voice_dump_received":
+            updateFmVoiceUI(msg.data);
             break;
 
         case "channel_activity":
@@ -2111,6 +2150,18 @@ function renderMixer() {
                 </select>
             </div>
 
+            ${!isDrum ? `
+            <!-- Channel Octave Transpose -->
+            <div class="flex items-center justify-between bg-slate-950/70 rounded px-1.5 py-0.5 border border-slate-800/80">
+                <span class="text-[8px] font-bold text-slate-400 uppercase" title="Channel Octave Shift">Octave</span>
+                <div class="flex items-center space-x-1">
+                    <button type="button" class="btn-ch-oct-down w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Down 1 Octave (-12 st)">-</button>
+                    <span class="font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none" title="Current octave shift">${(ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0')}</span>
+                    <button type="button" class="btn-ch-oct-up w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Up 1 Octave (+12 st)">+</button>
+                </div>
+            </div>
+            ` : ''}
+
             <!-- Fader & Controls -->
             <div class="flex items-center justify-between space-x-1.5 pt-0.5">
                 <div class="flex-1 space-y-0.5">
@@ -2185,7 +2236,37 @@ function renderMixer() {
                 sendToHost("set_channel_solo", { channel: ch.channel, solo: ch.isSolo });
             });
         }
+
+        const btnOctDown = card.querySelector(".btn-ch-oct-down");
+        if (btnOctDown) {
+            btnOctDown.addEventListener("click", () => {
+                const cur = ch.octaveShift || 0;
+                const next = Math.max(-24, cur - 12);
+                ch.octaveShift = next;
+                sendToHost("set_channel_octave", { channel: ch.channel, octaveShift: next });
+                renderMixer();
+            });
+        }
+
+        const btnOctUp = card.querySelector(".btn-ch-oct-up");
+        if (btnOctUp) {
+            btnOctUp.addEventListener("click", () => {
+                const cur = ch.octaveShift || 0;
+                const next = Math.min(24, cur + 12);
+                ch.octaveShift = next;
+                sendToHost("set_channel_octave", { channel: ch.channel, octaveShift: next });
+                renderMixer();
+            });
+        }
     });
+}
+
+function updateMasterTransposeDisplay() {
+    const lbl = document.getElementById("lblMasterTranspose");
+    if (!lbl) return;
+    const t = state.masterTranspose || 0;
+    lbl.textContent = t > 0 ? `+${t}` : `${t}`;
+    lbl.className = `font-mono text-[10px] font-bold min-w-[26px] text-center cursor-pointer select-none transition ${t !== 0 ? 'text-amber-400 font-extrabold' : 'text-cyan-400'}`;
 }
 
 const channelLedTimers = {};
@@ -2946,6 +3027,38 @@ document.getElementById("btnLoop").addEventListener("click", () => {
     }
     sendToHost("set_loop", { loop: state.isLooping });
 });
+
+// Master Transpose Controls
+const btnTransDown = document.getElementById("btnTransposeDown");
+if (btnTransDown) {
+    btnTransDown.addEventListener("click", () => {
+        const cur = state.masterTranspose || 0;
+        const next = Math.max(-12, cur - 1);
+        state.masterTranspose = next;
+        updateMasterTransposeDisplay();
+        sendToHost("set_master_transpose", { transpose: next });
+    });
+}
+
+const btnTransUp = document.getElementById("btnTransposeUp");
+if (btnTransUp) {
+    btnTransUp.addEventListener("click", () => {
+        const cur = state.masterTranspose || 0;
+        const next = Math.min(12, cur + 1);
+        state.masterTranspose = next;
+        updateMasterTransposeDisplay();
+        sendToHost("set_master_transpose", { transpose: next });
+    });
+}
+
+const lblTrans = document.getElementById("lblMasterTranspose");
+if (lblTrans) {
+    lblTrans.addEventListener("click", () => {
+        state.masterTranspose = 0;
+        updateMasterTransposeDisplay();
+        sendToHost("set_master_transpose", { transpose: 0 });
+    });
+}
 
 document.getElementById("polyphonyGuardToggle").addEventListener("change", (e) => {
     state.polyphonyGuard = e.target.checked;
@@ -5286,11 +5399,38 @@ function sendFmVoiceLiveThrottled() {
     const chkLive = document.getElementById("chkFmLiveSend");
     if (!chkLive || !chkLive.checked) return;
 
+    const statusPill = document.getElementById("fmLiveStatusPill");
+    if (statusPill) {
+        statusPill.textContent = "Updating...";
+        statusPill.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-400 border border-amber-800/60 transition";
+    }
+
     if (fmLiveSendTimer) clearTimeout(fmLiveSendTimer);
     fmLiveSendTimer = setTimeout(() => {
         const voice = collectFmVoiceFromUI();
         sendToHost("transmit_fm_voice", { voice, silent: true });
-    }, 75);
+        if (statusPill) {
+            statusPill.textContent = "Synced";
+            statusPill.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 transition";
+        }
+    }, 120);
+}
+
+function updateActiveFmBankDisplay(bank, voiceNumber) {
+    selectedFmBank = Math.max(0, Math.min(4, bank));
+    const voiceNum = voiceNumber || (100 + selectedFmBank);
+    const lbl = document.getElementById("lblActiveFmBank");
+    if (lbl) {
+        lbl.textContent = `Bank ${selectedFmBank + 1} (Prog ${voiceNum})`;
+    }
+    document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
+        const b = parseInt(btn.dataset.bank, 10);
+        if (b === selectedFmBank) {
+            btn.className = "fm-bank-btn active px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white border border-indigo-400 shadow-sm transition";
+        } else {
+            btn.className = "fm-bank-btn px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
+        }
+    });
 }
 
 function setSliderAndVal(sliderId, valId, val, formatter) {
@@ -5309,15 +5449,7 @@ function updateFmVoiceUI(voice) {
     }
 
     if (voice.bankNumber !== undefined) {
-        selectedFmBank = Math.max(0, Math.min(4, voice.bankNumber));
-        document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
-            const b = parseInt(btn.dataset.bank, 10);
-            if (b === selectedFmBank) {
-                btn.className = "fm-bank-btn active px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white border border-indigo-400 shadow-sm transition";
-            } else {
-                btn.className = "fm-bank-btn px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
-            }
-        });
+        updateActiveFmBankDisplay(voice.bankNumber, 100 + voice.bankNumber);
     }
 
     // Modulator
@@ -5526,14 +5658,8 @@ function initFmSynthEditor() {
     document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             selectedFmBank = parseInt(btn.dataset.bank, 10);
-            document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(b => {
-                const bNum = parseInt(b.dataset.bank, 10);
-                if (bNum === selectedFmBank) {
-                    b.className = "fm-bank-btn active px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white border border-indigo-400 shadow-sm transition";
-                } else {
-                    b.className = "fm-bank-btn px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition";
-                }
-            });
+            updateActiveFmBankDisplay(selectedFmBank, 100 + selectedFmBank);
+            sendToHost("select_fm_bank", { bank: selectedFmBank });
             sendFmVoiceLiveThrottled();
         });
     });
@@ -5644,9 +5770,17 @@ function initFmSynthEditor() {
     const btnAud = document.getElementById("btnFmAudition");
     if (btnAud) {
         btnAud.addEventListener("click", () => {
-            sendToHost("audition_fm_voice_note", { note: 60, bank: selectedFmBank });
+            sendToHost("audition_fm_voice_note", { note: 60, bank: selectedFmBank, isChord: false });
         });
     }
+
+    document.querySelectorAll(".btn-fm-audition-note").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const note = parseInt(btn.dataset.note || "60", 10);
+            const isChord = btn.dataset.chord === "true";
+            sendToHost("audition_fm_voice_note", { note, bank: selectedFmBank, isChord });
+        });
+    });
 
     // Transmit to Synth
     const btnTrans = document.getElementById("btnFmTransmit");
