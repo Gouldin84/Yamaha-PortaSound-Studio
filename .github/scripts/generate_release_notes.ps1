@@ -1,5 +1,5 @@
 param(
-    [string]$RefName = "v2.3.1"
+    [string]$RefName = "v2.4.0"
 )
 
 $tag = $RefName.TrimStart('v')
