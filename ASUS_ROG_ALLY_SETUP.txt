@@ -34,19 +34,32 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
+ASUS ROG ALLY GAMEPAD & HANDHELD NAVIGATION (v2.5.0)
+------------------------------------------------------------------------
+Yamaha PortaSound Studio features full native Gamepad API integration
+designed specifically for the Asus ROG Ally Z1 Extreme handheld:
+
+- D-Pad (or Left Stick): Smoothly step up/down through songs in the library.
+- Button A (South): Play / Pause highlighted track (or expand folder).
+- Button B (East): Stop playback / Dismiss open dialogs.
+- Button X (West): Toggle Favourite (★) with tactile haptic rumble!
+- Button Y (North): Toggle Handheld Touch Mode (enlarges all UI targets).
+- LB / RB (Bumpers): Skip to Previous / Next track with haptic feedback.
+- LT / RT (Triggers): Master Volume Down / Up.
+- View / Select (Back): Toggle Library Sidebar (Ctrl+B) to maximize mixer deck.
+- Menu / Start: Open the visual Shortcuts & Controller Guide modal (?).
+
 TOUCHSCREEN FEATURES FOR ASUS ROG ALLY
 ------------------------------------------------------------------------
-- Fixed Viewport: The app locks cleanly to the 720p screen without
-  awkward window scrolling or cropped headers.
-- Multi-Select: Tap checkboxes on song rows or tap the [x] Select button
-  in the sidebar to select multiple songs.
-- Docked Batch Bar: When songs are selected, [Move] and [Delete] buttons
-  remain docked at the bottom of the sidebar at all times.
-- 120Hz Touch Scrolling: Smooth, native kinetic scrolling on the Ally's
-  touchscreen.
-- 22px Slider Thumbs: Volume and tempo slider handles are enlarged for
-  easy finger dragging.
+- Handheld Touch Mode: Tap the 🖐️ Touch button in the header to enlarge
+  slider handles, buttons, and song rows to 42px+ for effortless thumb use.
+- Continuous Auto-Advance: When track finishes, the player automatically
+  starts the next song in the folder (tap [Next] to toggle).
+- Fixed Viewport: The app locks cleanly to 720p/1080p without window scrolling.
+- Multi-Select: Tap checkboxes on song rows to select multiple songs.
+- Docked Batch Bar: [Move] and [Delete] remain docked at bottom of sidebar.
+- 120Hz Touch Scrolling: Native kinetic scrolling on the Ally's touchscreen.
 
-Enjoy making music with your Yamaha PortaSound PSS-790!
-GitHub: https://github.com/Gouldin84/Yamaha-PSS-790-Midi-Player-Converter
+Enjoy making music with your Yamaha PortaSound PSS-790 and PSS-680!
+GitHub: https://github.com/Gouldin84/Yamaha-PortaSound-Studio
 ========================================================================

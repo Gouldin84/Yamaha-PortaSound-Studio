@@ -825,3 +825,42 @@ body.theme-light #recordingsSearchInput::placeholder {
     box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.8), 0 0 20px rgba(99, 102, 241, 0.25);
     background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
 }
+
+/* Gamepad Cursor Focus Highlight (Asus ROG Ally) */
+.tree-song-item.gamepad-focused {
+    outline: 2px solid #06b6d4 !important;
+    outline-offset: -1px;
+    background: rgba(6, 182, 212, 0.2) !important;
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.35);
+}
+
+/* Handheld Touch Mode - Enlarged Targets for 7" Asus ROG Ally Touchscreen */
+body.handheld-touch-mode .tree-song-item {
+    padding-top: 0.45rem !important;
+    padding-bottom: 0.45rem !important;
+    min-height: 38px !important;
+}
+
+body.handheld-touch-mode input[type="range"]::-webkit-slider-thumb {
+    width: 26px !important;
+    height: 26px !important;
+    transform: scale(1.2);
+}
+
+body.handheld-touch-mode #btnPlayPause {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+}
+
+body.handheld-touch-mode #btnStop,
+body.handheld-touch-mode #btnPrevTrack,
+body.handheld-touch-mode #btnNextTrack {
+    width: 2.35rem !important;
+    height: 2.35rem !important;
+}
+
+body.handheld-touch-mode .tab-btn {
+    padding: 0.45rem 0.75rem !important;
+    font-size: 0.825rem !important;
+}
+
