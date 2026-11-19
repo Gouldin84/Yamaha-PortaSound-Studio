@@ -338,7 +338,13 @@ namespace PSS790Player.Bridge
                         var path = root.TryGetProperty("filePath", out var fp) ? fp.GetString() : (root.TryGetProperty("path", out var p) ? p.GetString() : null);
                         if (!string.IsNullOrEmpty(path))
                         {
-                            LoadFile(path, autoPlay: false);
+                            if (string.Equals(_currentFilePath, path, StringComparison.OrdinalIgnoreCase) && _player.IsPlaying)
+                            {
+                                break;
+                            }
+
+                            bool shouldPlay = _player.IsPlaying;
+                            LoadFile(path, autoPlay: shouldPlay);
                         }
                         break;
                     case "load_midi_and_play":
@@ -2322,6 +2328,11 @@ namespace PSS790Player.Bridge
                         if (!File.Exists(resolvedPath))
                         {
                             SendToJs("error", new { message = $"File not found: {pathOrName}" });
+                            return;
+                        }
+
+                        if (string.Equals(_currentFilePath, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && _loadedOriginalMidi != null)
+                        {
                             return;
                         }
 

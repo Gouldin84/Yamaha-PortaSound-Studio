@@ -909,7 +909,7 @@ function autoFitSidebarWidth(force = false) {
     if (!sidebar) return;
 
     const baseMin = 280;
-    const maxAllowed = Math.min(720, Math.floor(window.innerWidth * 0.50));
+    const maxAllowed = Math.min(760, Math.floor(window.innerWidth * 0.55));
 
     // If no songs are rendered/visible or library empty, smoothly shrink to baseMin
     if (!state.visibleSongList || state.visibleSongList.length === 0) {
@@ -937,12 +937,6 @@ function autoFitSidebarWidth(force = false) {
         if (w > maxTextWidth) maxTextWidth = w;
     });
 
-    // Required width chrome calculation:
-    // Sidebar padding (p-2.5 = 20px) + Category container padding (6px) + folder group margin (10px) = 36px
-    // Song item padding px-2 (16px) + Checkbox (16px) + Star (16px) + Music icon (16px) + Spacings (18px) = 82px
-    // Badge (GM/680/REC/PSS ~42px) + ml-1.5 margin (6px) = 48px
-    // Scrollbar (17px) + safe breathing margin (18px) = 35px
-    // Total base chrome = 36 + 82 + 48 + 35 = 201px (~205px)
     let maxFolderDepth = 0;
     for (const file of state.visibleSongList) {
         if (file.subFolder) {
@@ -951,7 +945,7 @@ function autoFitSidebarWidth(force = false) {
         }
     }
     const folderIndentAllowance = Math.min(maxFolderDepth * 16, 64);
-    const requiredTotalWidth = Math.ceil(maxTextWidth + 205 + folderIndentAllowance);
+    const requiredTotalWidth = Math.ceil(maxTextWidth + 215 + folderIndentAllowance);
 
     // Bidirectional clamping:
     // Automatically expands when long titles are visible, and automatically shrinks down to baseline (280px) when collapsed!
@@ -1974,7 +1968,7 @@ function createSongItemElement(file) {
     div.className = `group tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''} ${isChecked ? 'bg-cyan-950/40 border-cyan-800/50' : ''}`;
     div.dataset.fullPath = file.fullPath;
     div.dataset.fileName = file.fileName;
-    div.title = `${file.fileName}\nFolder: ${file.subFolder || '(Root)'}\nClick: Load & inspect\nDouble-click: Play immediately\nDrag: Move to folder`;
+    div.title = `${file.fileName}\nFolder: ${file.subFolder || '(Root)'}\nClick: ${state.isPlaying ? 'Switch and play' : 'Select & inspect'}\nDouble-click / Tap icon: Play immediately`;
 
     div.draggable = true;
 
@@ -1984,9 +1978,11 @@ function createSongItemElement(file) {
             <button type="button" class="btn-song-star shrink-0 text-[11px] px-0.5 hover:scale-125 transition ${isFav ? 'text-amber-400 font-bold' : 'text-slate-600 hover:text-amber-400'}" title="${isFav ? 'Remove from Favourites (F)' : 'Add to Favourites (F)'}">
                 ${isFav ? '★' : '☆'}
             </button>
-            <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}" title="${isPlaying ? 'Currently playing' : (isSelected ? 'Currently selected' : 'MIDI song file')}">
-                ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
-            </span>
+            <button type="button" class="btn-song-play shrink-0 text-[11px] px-0.5 hover:scale-125 transition text-left cursor-pointer focus:outline-none" title="Play ${escapeHtml(file.fileName)} immediately">
+                <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}">
+                    ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
+                </span>
+            </button>
             ${formatSongTitleHtml(file.fileName, file.subFolder)}
         </div>
         <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${badgeClass}" title="${badgeTitle}">
@@ -1999,6 +1995,16 @@ function createSongItemElement(file) {
         starBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             sendToHost("toggle_favorite", { path: file.fullPath });
+        });
+    }
+
+    const playBtn = div.querySelector(".btn-song-play");
+    if (playBtn) {
+        playBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            state.selectedSongPath = file.fullPath;
+            highlightActiveSongInTree();
+            sendToHost("load_midi_and_play", { path: file.fullPath });
         });
     }
 
@@ -2054,25 +2060,24 @@ function createSongItemElement(file) {
         });
     });
 
-    let clickTimer = null;
-
     div.addEventListener("click", (e) => {
-        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
+        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star") || e.target.closest(".btn-song-play")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
-        if (clickTimer) clearTimeout(clickTimer);
-        clickTimer = setTimeout(() => {
-            clickTimer = null;
+
+        if (state.isPlaying) {
+            // When already playing, clicking another song switches to it and plays immediately from 00:00!
+            if (file.fullPath !== state.currentFilePath) {
+                sendToHost("load_midi_and_play", { path: file.fullPath });
+            }
+        } else {
+            // Idle/stopped: load metadata onto player deck ready to play
             sendToHost("load_midi_metadata", { path: file.fullPath });
-        }, 180);
+        }
     });
 
     div.addEventListener("dblclick", (e) => {
-        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
-        if (clickTimer) {
-            clearTimeout(clickTimer);
-            clickTimer = null;
-        }
+        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star") || e.target.closest(".btn-song-play")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_and_play", { path: file.fullPath });
@@ -2136,16 +2141,31 @@ function navigateSongList(direction) {
     selectSongByIndex(targetIndex);
 }
 
+let metadataDebounceTimer = null;
+
 function selectSongByIndex(index) {
     if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
     const song = state.visibleSongList[index];
     state.selectedSongPath = song.fullPath;
     highlightActiveSongInTree();
-    sendToHost("load_midi_metadata", { path: song.fullPath });
 
     const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
     if (el) {
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.scrollIntoView({ block: "nearest", behavior: "auto" });
+        document.querySelectorAll(".tree-song-item.gamepad-focused").forEach(node => node.classList.remove("gamepad-focused"));
+        el.classList.add("gamepad-focused");
+    }
+
+    // When stopped: debounce metadata update by 100ms so moving across rows is instantaneous and never lags
+    // When playing: DO NOT call load_midi_metadata while browsing! Protects uninterrupted playback!
+    if (!state.isPlaying) {
+        if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer);
+        metadataDebounceTimer = setTimeout(() => {
+            metadataDebounceTimer = null;
+            if (!state.isPlaying && state.selectedSongPath === song.fullPath) {
+                sendToHost("load_midi_metadata", { path: song.fullPath });
+            }
+        }, 100);
     }
 }
 
@@ -2158,7 +2178,9 @@ function playSongByIndex(index) {
 
     const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
     if (el) {
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.scrollIntoView({ block: "nearest", behavior: "auto" });
+        document.querySelectorAll(".tree-song-item.gamepad-focused").forEach(node => node.classList.remove("gamepad-focused"));
+        el.classList.add("gamepad-focused");
     }
 }
 
@@ -2169,7 +2191,6 @@ function playNextSong() {
     else idx = (idx + 1) % state.visibleSongList.length;
 
     playSongByIndex(idx);
-    scrollToFocusedSong();
     triggerGamepadHaptic(45, 0.4, 0.2);
 }
 
@@ -2180,7 +2201,6 @@ function playPrevSong() {
     else idx = (idx - 1 + state.visibleSongList.length) % state.visibleSongList.length;
 
     playSongByIndex(idx);
-    scrollToFocusedSong();
     triggerGamepadHaptic(45, 0.4, 0.2);
 }
 
@@ -2188,7 +2208,7 @@ function scrollToFocusedSong() {
     if (!state.selectedSongPath) return;
     const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(state.selectedSongPath)}"]`);
     if (el) {
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        el.scrollIntoView({ block: "nearest", behavior: "auto" });
         document.querySelectorAll(".tree-song-item.gamepad-focused").forEach(node => node.classList.remove("gamepad-focused"));
         el.classList.add("gamepad-focused");
     }
@@ -2264,6 +2284,36 @@ function initHandheldMode() {
     updateAutoAdvanceUi();
 }
 
+function handleGamepadFolderCollapse() {
+    if (!state.selectedSongPath) return;
+    const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
+    if (!song || !song.subFolder) return;
+    const is680 = state.activeModel === "pss680";
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const folderKey = `${catKey}:${song.subFolder}`;
+    if (state.expandedFolders && state.expandedFolders.has(folderKey)) {
+        state.expandedFolders.delete(folderKey);
+        saveExpandedFolders();
+        renderLibraryTree();
+        triggerGamepadHaptic(30, 0.4, 0.2);
+    }
+}
+
+function handleGamepadFolderExpand() {
+    if (!state.selectedSongPath) return;
+    const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
+    if (!song || !song.subFolder) return;
+    const is680 = state.activeModel === "pss680";
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const folderKey = `${catKey}:${song.subFolder}`;
+    if (state.expandedFolders && !state.expandedFolders.has(folderKey)) {
+        state.expandedFolders.add(folderKey);
+        saveExpandedFolders();
+        renderLibraryTree();
+        triggerGamepadHaptic(30, 0.4, 0.2);
+    }
+}
+
 function initGamepadSupport() {
     window.addEventListener("gamepadconnected", (e) => {
         state.gamepadConnected = true;
@@ -2319,26 +2369,65 @@ function initGamepadSupport() {
             return isDown && !wasDown;
         }
 
-        // 1. D-Pad Navigation (or Left Analog Stick)
-        const upPressed = isJustPressed(12);
-        const downPressed = isJustPressed(13);
+        // 1. D-Pad & Left Stick Navigation (with initial delay + rapid auto-repeat)
+        const upDown = (b[12] && (b[12].pressed || b[12].value > 0.5)) ? -1 :
+                       ((b[13] && (b[13].pressed || b[13].value > 0.5)) ? 1 : 0);
 
-        const stickY = activeGp.axes && activeGp.axes.length > 1 ? activeGp.axes[1] : 0;
-        const stickThrottled = (now - state.lastGamepadAxisTime) > 220;
-
-        if (upPressed || (stickY < -0.55 && stickThrottled)) {
-            state.lastGamepadAxisTime = now;
-            navigateSongList(-1);
-            scrollToFocusedSong();
-            triggerGamepadHaptic(25, 0.3, 0.1);
-        } else if (downPressed || (stickY > 0.55 && stickThrottled)) {
-            state.lastGamepadAxisTime = now;
-            navigateSongList(1);
-            scrollToFocusedSong();
-            triggerGamepadHaptic(25, 0.3, 0.1);
+        const stickY = (activeGp.axes && activeGp.axes.length > 1) ? activeGp.axes[1] : 0;
+        let navDir = upDown;
+        if (navDir === 0) {
+            if (stickY < -0.45) navDir = -1;
+            else if (stickY > 0.45) navDir = 1;
         }
 
-        // 2. Button A (Index 0 / South): Play / Pause
+        if (navDir !== 0) {
+            if (state.gpNavDir !== navDir) {
+                // Initial discrete press: step immediately with a subtle haptic tap
+                state.gpNavDir = navDir;
+                state.gpFirstPressTime = now;
+                state.gpLastRepeatTime = now;
+                navigateSongList(navDir);
+                triggerGamepadHaptic(18, 0.25, 0.1);
+            } else {
+                // Held down: 200ms initial pause, then fast auto-repeat every 70ms!
+                const elapsed = now - (state.gpFirstPressTime || now);
+                if (elapsed > 200 && (now - (state.gpLastRepeatTime || 0)) > 70) {
+                    state.gpLastRepeatTime = now;
+                    navigateSongList(navDir);
+                }
+            }
+        } else {
+            state.gpNavDir = 0;
+        }
+
+        // 2. Right Analog Stick (Fluid kinetic scrolling of library list)
+        const rStickY = (activeGp.axes && activeGp.axes.length > 3) ? activeGp.axes[3] : 0;
+        if (Math.abs(rStickY) > 0.15) {
+            const container = document.getElementById("treeContainer");
+            if (container) {
+                container.scrollTop += rStickY * 20;
+            }
+        }
+
+        // 3. LT & RT Triggers (Buttons 6 & 7) - Page Up / Page Down (jump 8 tracks)
+        if (isJustPressed(6)) {
+            navigateSongList(-8);
+            triggerGamepadHaptic(30, 0.4, 0.2);
+        }
+        if (isJustPressed(7)) {
+            navigateSongList(8);
+            triggerGamepadHaptic(30, 0.4, 0.2);
+        }
+
+        // 4. D-Pad Left & Right (Buttons 14 & 15) - Collapse / Expand current folder
+        if (isJustPressed(14)) {
+            handleGamepadFolderCollapse();
+        }
+        if (isJustPressed(15)) {
+            handleGamepadFolderExpand();
+        }
+
+        // 5. Button A (Index 0 / South): Play / Pause
         if (isJustPressed(0)) {
             if (state.selectedSongPath && state.selectedSongPath !== state.currentFilePath) {
                 sendToHost("load_midi_and_play", { path: state.selectedSongPath });
@@ -2347,10 +2436,10 @@ function initGamepadSupport() {
             } else {
                 sendToHost("play");
             }
-            triggerGamepadHaptic(45, 0.5, 0.3);
+            triggerGamepadHaptic(40, 0.5, 0.3);
         }
 
-        // 3. Button B (Index 1 / East): Stop / Close modal
+        // 6. Button B (Index 1 / East): Stop / Close modal
         if (isJustPressed(1)) {
             const shortcutsModal = document.getElementById("shortcutsModal");
             const syncModal = document.getElementById("syncModal");
@@ -2364,24 +2453,24 @@ function initGamepadSupport() {
             } else {
                 sendToHost("stop");
             }
-            triggerGamepadHaptic(40, 0.4, 0.2);
+            triggerGamepadHaptic(35, 0.4, 0.2);
         }
 
-        // 4. Button X (Index 2 / West): Toggle Favourite
+        // 7. Button X (Index 2 / West): Toggle Favourite
         if (isJustPressed(2)) {
             const target = state.selectedSongPath || state.currentFilePath;
             if (target) {
                 sendToHost("toggle_favorite", { path: target });
-                triggerGamepadHaptic(55, 0.7, 0.4);
+                triggerGamepadHaptic(50, 0.7, 0.4);
             }
         }
 
-        // 5. Button Y (Index 3 / North): Toggle Handheld Touch Mode
+        // 8. Button Y (Index 3 / North): Toggle Handheld Touch Mode
         if (isJustPressed(3)) {
             toggleHandheldMode();
         }
 
-        // 6. LB / RB (Buttons 4 & 5): Previous / Next Track
+        // 9. LB / RB (Buttons 4 & 5): Previous / Next Track
         if (isJustPressed(4)) {
             playPrevSong();
         }
@@ -2389,19 +2478,19 @@ function initGamepadSupport() {
             playNextSong();
         }
 
-        // 7. View / Back (Button 8): Toggle Sidebar
+        // 10. View / Back (Button 8): Toggle Sidebar
         if (isJustPressed(8)) {
             toggleSidebar();
-            triggerGamepadHaptic(35, 0.4, 0.2);
+            triggerGamepadHaptic(30, 0.4, 0.2);
         }
 
-        // 8. Menu / Start (Button 9): Toggle Shortcuts Guide Modal
+        // 11. Menu / Start (Button 9): Toggle Shortcuts Guide Modal
         if (isJustPressed(9)) {
             const modal = document.getElementById("shortcutsModal");
             if (modal) {
                 modal.classList.toggle("hidden");
             }
-            triggerGamepadHaptic(35, 0.4, 0.2);
+            triggerGamepadHaptic(30, 0.4, 0.2);
         }
     }
 
@@ -2565,7 +2654,6 @@ function setupKeyboardShortcuts() {
             case "J": // Next song in visible list
                 e.preventDefault();
                 navigateSongList(1);
-                scrollToFocusedSong();
                 break;
 
             case "ArrowUp":
@@ -2573,7 +2661,28 @@ function setupKeyboardShortcuts() {
             case "K": // Previous song in visible list
                 e.preventDefault();
                 navigateSongList(-1);
-                scrollToFocusedSong();
+                break;
+
+            case "PageDown":
+                e.preventDefault();
+                navigateSongList(8);
+                break;
+
+            case "PageUp":
+                e.preventDefault();
+                navigateSongList(-8);
+                break;
+
+            case "Home":
+                e.preventDefault();
+                selectSongByIndex(0);
+                break;
+
+            case "End":
+                e.preventDefault();
+                if (state.visibleSongList && state.visibleSongList.length > 0) {
+                    selectSongByIndex(state.visibleSongList.length - 1);
+                }
                 break;
 
             case "[": // Transpose pitch down 1 semitone
