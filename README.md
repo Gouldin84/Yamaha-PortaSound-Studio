@@ -6,7 +6,7 @@ A standalone MIDI workstation, real-time voice remapper, and multi-tab sound des
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-183%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-185%20Passing-brightgreen.svg)]()
 
 ---
 

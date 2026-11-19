@@ -23,6 +23,7 @@ namespace PSS790Player.Core
         public bool ConvertMissing { get; set; } = true;
         public bool UpdateOutdated { get; set; } = true;
         public bool RemoveOrphans { get; set; } = true;
+        public bool PruneEmptyDirectories { get; set; } = true;
         public bool ForceReconvertAll { get; set; } = false;
         public RemapperOptions? RemapperOptions { get; set; }
     }
@@ -32,7 +33,8 @@ namespace PSS790Player.Core
         public int ConvertedCount { get; set; }
         public int UpdatedCount { get; set; }
         public int RemovedOrphansCount { get; set; }
-        public int TotalOperations => ConvertedCount + UpdatedCount + RemovedOrphansCount;
+        public int PrunedDirectoriesCount { get; set; }
+        public int TotalOperations => ConvertedCount + UpdatedCount + RemovedOrphansCount + PrunedDirectoriesCount;
         public bool Success { get; set; } = true;
         public string? ErrorMessage { get; set; }
     }
@@ -427,33 +429,58 @@ namespace PSS790Player.Core
                     progress?.Report((completedOps, totalOps, orphanRel, "delete_orphan"));
                 }
 
-                // 3. Clean up empty directories in targetDir that do not exist in sourceDir
-                try
+                // 3. Clean up empty directories across target and source
+                if (options?.PruneEmptyDirectories ?? true)
                 {
-                    var targetDirs = Directory.GetDirectories(targetDir, "*", SearchOption.AllDirectories)
-                        .OrderByDescending(d => d.Length) // deepest first
-                        .ToList();
-
-                    foreach (var td in targetDirs)
-                    {
-                        var relDir = Path.GetRelativePath(targetDir, td);
-                        var srcMatchingDir = Path.Combine(sourceDir, relDir);
-                        if (!Directory.Exists(srcMatchingDir))
-                        {
-                            if (Directory.GetFiles(td, "*", SearchOption.AllDirectories).Length == 0)
-                            {
-                                Directory.Delete(td, true);
-                            }
-                        }
-                    }
-                }
-                catch
-                {
-                    // Non-critical directory cleanup error
+                    result.PrunedDirectoriesCount += PruneEmptyDirectories(targetDir);
+                    result.PrunedDirectoriesCount += PruneEmptyDirectories(sourceDir);
                 }
             }, cancellationToken);
 
             return result;
+        }
+
+        /// <summary>
+        /// Recursively removes all empty subdirectories in bottom-up order across a library folder.
+        /// A directory is pruned if it contains zero files and zero remaining subdirectories.
+        /// </summary>
+        public static int PruneEmptyDirectories(string directoryPath)
+        {
+            if (string.IsNullOrWhiteSpace(directoryPath) || !Directory.Exists(directoryPath))
+                return 0;
+
+            int pruned = 0;
+            try
+            {
+                var dirs = Directory.GetDirectories(directoryPath, "*", SearchOption.AllDirectories)
+                    .OrderByDescending(d => d.Length) // Deepest first
+                    .ToList();
+
+                foreach (var dir in dirs)
+                {
+                    try
+                    {
+                        if (Directory.Exists(dir))
+                        {
+                            if (Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length == 0)
+                            {
+                                Directory.Delete(dir, recursive: true);
+                                pruned++;
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Ignore permission or file-lock issues on individual directory
+                    }
+                }
+            }
+            catch
+            {
+                // Non-critical traversal error
+            }
+
+            return pruned;
         }
 
         public static DualLibrarySyncAnalysis AnalyzeDualSync(string sourceDir, string target790Dir, string target680Dir)
@@ -482,6 +509,7 @@ namespace PSS790Player.Core
                 ConvertMissing = options?.ConvertMissing ?? true,
                 UpdateOutdated = options?.UpdateOutdated ?? true,
                 RemoveOrphans = options?.RemoveOrphans ?? true,
+                PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
                 RemapperOptions = new RemapperOptions { TargetModel = "pss790" }
             };
@@ -490,6 +518,7 @@ namespace PSS790Player.Core
             combinedResult.ConvertedCount += res790.ConvertedCount;
             combinedResult.UpdatedCount += res790.UpdatedCount;
             combinedResult.RemovedOrphansCount += res790.RemovedOrphansCount;
+            combinedResult.PrunedDirectoriesCount += res790.PrunedDirectoriesCount;
 
             if (cancellationToken.IsCancellationRequested) return combinedResult;
 
@@ -499,6 +528,7 @@ namespace PSS790Player.Core
                 ConvertMissing = options?.ConvertMissing ?? true,
                 UpdateOutdated = options?.UpdateOutdated ?? true,
                 RemoveOrphans = options?.RemoveOrphans ?? true,
+                PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
                 RemapperOptions = new RemapperOptions { TargetModel = "pss680" }
             };
@@ -507,6 +537,15 @@ namespace PSS790Player.Core
             combinedResult.ConvertedCount += res680.ConvertedCount;
             combinedResult.UpdatedCount += res680.UpdatedCount;
             combinedResult.RemovedOrphansCount += res680.RemovedOrphansCount;
+            combinedResult.PrunedDirectoriesCount += res680.PrunedDirectoriesCount;
+
+            // 3. Final bottom-up pruning sweep across all 3 library directories
+            if (options?.PruneEmptyDirectories ?? true)
+            {
+                combinedResult.PrunedDirectoriesCount += PruneEmptyDirectories(sourceDir);
+                combinedResult.PrunedDirectoriesCount += PruneEmptyDirectories(target790Dir);
+                combinedResult.PrunedDirectoriesCount += PruneEmptyDirectories(target680Dir);
+            }
 
             return combinedResult;
         }

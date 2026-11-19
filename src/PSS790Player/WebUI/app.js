@@ -1298,6 +1298,16 @@ function closeAboutModal() {
     if (modal) modal.classList.add("hidden");
 }
 
+function openShortcutsModal() {
+    const modal = document.getElementById("shortcutsModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeShortcutsModal() {
+    const modal = document.getElementById("shortcutsModal");
+    if (modal) modal.classList.add("hidden");
+}
+
 function closeActionModal() {
     const modal = document.getElementById("fileActionModal");
     if (modal) modal.classList.add("hidden");
@@ -1425,6 +1435,9 @@ function renderFolderNode(folder, depth, catKey, query) {
     }
 
     const count = folder.totalCount !== undefined ? folder.totalCount : (folder.files ? folder.files.length : 0);
+    if (count === 0 && !query) {
+        return document.createDocumentFragment();
+    }
 
     folderHeader.innerHTML = `
         <div class="flex items-center space-x-1.5 truncate">
@@ -1924,11 +1937,69 @@ function setupKeyboardShortcuts() {
             return;
         }
 
+        // Shortcuts modal keyboard shortcuts
+        const shortcutsModal = document.getElementById("shortcutsModal");
+        if (shortcutsModal && !shortcutsModal.classList.contains("hidden")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeShortcutsModal();
+                return;
+            }
+            return;
+        }
+
+        // Global shortcut: ? or F1 to open DAW hotkeys modal
+        if (!isInputFocused && (e.key === "?" || e.key === "F1")) {
+            e.preventDefault();
+            if (shortcutsModal && !shortcutsModal.classList.contains("hidden")) {
+                closeShortcutsModal();
+            } else {
+                openShortcutsModal();
+            }
+            return;
+        }
+
+        // Global shortcut: Ctrl+F to focus library search
+        if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+            e.preventDefault();
+            const searchInput = document.getElementById("sidebarSearchInput");
+            if (searchInput) {
+                if (state.sidebarCollapsed) {
+                    toggleSidebar();
+                }
+                searchInput.focus();
+                searchInput.select();
+            }
+            return;
+        }
+
         // Global shortcut: Ctrl+B to toggle quick-pick sidebar anywhere
         if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
             e.preventDefault();
             toggleSidebar();
             return;
+        }
+
+        // Global shortcut: 1, 2, 3 to switch main tabs, L to toggle loop
+        if (!isInputFocused && !e.ctrlKey && !e.altKey && !e.metaKey) {
+            if (e.key === "1") {
+                e.preventDefault();
+                switchTab("player");
+                return;
+            } else if (e.key === "2") {
+                e.preventDefault();
+                switchTab("recorder");
+                return;
+            } else if (e.key === "3") {
+                e.preventDefault();
+                switchTab("sysex");
+                return;
+            } else if (e.key === "l" || e.key === "L") {
+                e.preventDefault();
+                const loopBtn = document.getElementById("btnLoop");
+                if (loopBtn) loopBtn.click();
+                return;
+            }
         }
 
         // If user is focused on an input element
@@ -2068,9 +2139,11 @@ function renderMixer() {
             ? 'border-t-2 border-t-amber-400'
             : (isVectorQuad ? 'border-t-2 border-t-indigo-400' : (ch.hasNotes ? 'border-t-2 border-t-cyan-400' : 'border-t-2 border-t-slate-800/80'));
 
-        const cardBorder = isVectorQuad
-            ? 'border-2 border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30 shadow-md'
-            : (ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90');
+        const cardBorder = isDrum
+            ? 'border-2 border-amber-500/50 bg-gradient-to-b from-amber-950/30 via-slate-900/70 to-slate-950/80 shadow-md ring-1 ring-amber-500/30'
+            : (isVectorQuad
+                ? 'border-2 border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30 shadow-md'
+                : (ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90'));
 
         card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${cardBorder}`;
 
@@ -2089,6 +2162,10 @@ function renderMixer() {
             ? `Voice Override: Force Channel ${ch.channelDisplay} to play one of the FM presets (00-99), Digital Synthesizer banks (100-104), or FM library voices`
             : `Voice Override: Force Channel ${ch.channelDisplay} to play one of the 100 built-in Yamaha PSS-790 AWM preset voices`;
         const selectTitle = isDrum ? drumTooltip : `Override Channel ${ch.channelDisplay} voice`;
+
+        const drumBadgeHtml = isDrum
+            ? `<span class="px-1 py-0.5 rounded text-[8px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">🥁 PERCUSSION</span>`
+            : '';
 
         const quadBadgeHtml = isVectorQuad
             ? `<span class="px-1 py-0.5 rounded text-[8px] font-bold bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 uppercase">Quad ${quadPoleNames[ch.channel]}</span>`
@@ -2128,6 +2205,7 @@ function renderMixer() {
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
                 <div class="flex items-center space-x-1">
                     <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : (isVectorQuad ? 'text-indigo-400' : 'text-cyan-400')}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
+                    ${drumBadgeHtml}
                     ${quadBadgeHtml}
                 </div>
                 <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : (isVectorQuad ? 'bg-indigo-950' : 'bg-emerald-950')} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
@@ -3005,6 +3083,32 @@ document.getElementById("timeScrubber").addEventListener("change", (e) => {
     sendToHost("seek", { seconds: parseFloat(e.target.value) });
 });
 
+// Timeline Scrubber Hover Tooltip
+const scrubberEl = document.getElementById("timeScrubber");
+const scrubTooltip = document.getElementById("scrubTooltip");
+if (scrubberEl && scrubTooltip) {
+    const updateScrubTooltip = (e) => {
+        if (!state.durationSeconds || state.durationSeconds <= 0) return;
+        const rect = scrubberEl.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        const targetSec = frac * state.durationSeconds;
+        const mins = Math.floor(targetSec / 60);
+        const secs = Math.floor(targetSec % 60);
+        scrubTooltip.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        scrubTooltip.style.left = `${(frac * 100).toFixed(1)}%`;
+        scrubTooltip.classList.remove("hidden");
+    };
+
+    scrubberEl.addEventListener("mouseenter", () => {
+        if (state.durationSeconds > 0) scrubTooltip.classList.remove("hidden");
+    });
+    scrubberEl.addEventListener("mousemove", updateScrubTooltip);
+    scrubberEl.addEventListener("mouseleave", () => {
+        scrubTooltip.classList.add("hidden");
+    });
+}
+
 // Speed Controls
 document.querySelectorAll(".speed-btn").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -3070,8 +3174,57 @@ document.getElementById("btnSaveRemapped").addEventListener("click", () => {
     sendToHost("save_remapped");
 });
 
-document.getElementById("btnResetOverrides").addEventListener("click", () => {
+document.getElementById("btnResetOverrides")?.addEventListener("click", () => {
     sendToHost("reset_voice_overrides");
+});
+
+document.getElementById("btnSoloDrums")?.addEventListener("click", () => {
+    const drumCh = state.channels[15];
+    if (!drumCh) return;
+    const isSoloed = drumCh.isSolo;
+    state.channels.forEach(ch => {
+        if (ch.channel === 15) {
+            ch.isSolo = !isSoloed;
+            ch.isMuted = false;
+            sendToHost("set_channel_mute", { channel: ch.channel, mute: false });
+        } else {
+            ch.isSolo = false;
+            ch.isMuted = !isSoloed;
+            sendToHost("set_channel_mute", { channel: ch.channel, mute: !isSoloed });
+        }
+    });
+    renderMixer();
+    showToast(!isSoloed ? "Soloed Percussion (Channel 16)" : "Restored full mixer playback");
+});
+
+document.getElementById("btnMuteMelodic")?.addEventListener("click", () => {
+    const melodicChannels = state.channels.filter(ch => ch.channel !== 15);
+    const allMuted = melodicChannels.every(ch => ch.isMuted);
+    melodicChannels.forEach(ch => {
+        ch.isMuted = !allMuted;
+        sendToHost("set_channel_mute", { channel: ch.channel, mute: !allMuted });
+    });
+    renderMixer();
+    showToast(!allMuted ? "Muted Melodic Channels 1-15 (Drums only)" : "Unmuted Melodic Channels");
+});
+
+document.getElementById("btnUnmuteAll")?.addEventListener("click", () => {
+    state.channels.forEach(ch => {
+        ch.isMuted = false;
+        ch.isSolo = false;
+        sendToHost("set_channel_mute", { channel: ch.channel, mute: false });
+    });
+    renderMixer();
+    showToast("Unmuted all 16 channels");
+});
+
+document.getElementById("btnResetAllFaders")?.addEventListener("click", () => {
+    state.channels.forEach(ch => {
+        ch.volume = 100;
+        sendToHost("set_channel_volume", { channel: ch.channel, volume: 100 });
+    });
+    renderMixer();
+    showToast("Reset all 16 channel faders to 100");
 });
 
 // --- Quick-Pick Sidebar Event Listeners ---
@@ -3183,6 +3336,14 @@ document.getElementById("btnCloseAboutModal")?.addEventListener("click", closeAb
 document.getElementById("btnDismissAboutModal")?.addEventListener("click", closeAboutModal);
 document.getElementById("aboutModal")?.addEventListener("click", (e) => {
     if (e.target.id === "aboutModal") closeAboutModal();
+});
+
+// DAW Keyboard Shortcuts Modal Event Listeners
+document.getElementById("btnShortcuts")?.addEventListener("click", openShortcutsModal);
+document.getElementById("btnCloseShortcutsModal")?.addEventListener("click", closeShortcutsModal);
+document.getElementById("btnDismissShortcutsModal")?.addEventListener("click", closeShortcutsModal);
+document.getElementById("shortcutsModal")?.addEventListener("click", (e) => {
+    if (e.target.id === "shortcutsModal") closeShortcutsModal();
 });
 
 // Dismiss context menu on click outside, blur, or resize
@@ -3413,7 +3574,12 @@ function handleSyncCompleted(data) {
     if (btnStart) btnStart.disabled = false;
     if (syncModal) syncModal.classList.add("hidden");
 
-    showToast(`Dual Sync complete! ${data.convertedCount} converted, ${data.updatedCount} updated, ${data.removedOrphansCount} orphans cleaned across both PSS-790 and PSS-680 libraries.`);
+    let toast = `Dual Sync complete! ${data.convertedCount} converted, ${data.updatedCount} updated, ${data.removedOrphansCount} orphans cleaned`;
+    if (data.prunedDirectoriesCount && data.prunedDirectoriesCount > 0) {
+        toast += `, ${data.prunedDirectoriesCount} empty folders pruned`;
+    }
+    toast += ` across both PSS-790 and PSS-680 libraries.`;
+    showToast(toast);
 }
 
 btnSidebarSync?.addEventListener("click", openSyncModal);
@@ -3424,6 +3590,7 @@ document.getElementById("btnStartSync")?.addEventListener("click", () => {
     const convertMissing = document.getElementById("chkSyncMissing")?.checked ?? true;
     const updateOutdated = document.getElementById("chkSyncOutdated")?.checked ?? true;
     const removeOrphans = document.getElementById("chkSyncOrphans")?.checked ?? true;
+    const pruneEmpty = document.getElementById("chkSyncPruneEmpty")?.checked ?? true;
     const forceReconvertAll = document.getElementById("chkSyncForceAll")?.checked ?? false;
 
     const btnStart = document.getElementById("btnStartSync");
@@ -3443,6 +3610,7 @@ document.getElementById("btnStartSync")?.addEventListener("click", () => {
         convertMissing,
         updateOutdated,
         removeOrphans,
+        pruneEmpty,
         forceReconvertAll
     });
 });
@@ -4099,6 +4267,12 @@ function applyActiveModel(modelKey, syncHost = true) {
         badge.className = is680
             ? "px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-amber-950 text-amber-400 border border-amber-800/60 hidden md:inline-block"
             : "px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800/60 hidden md:inline-block";
+    }
+    const activeSub = document.getElementById("activeModelSubtitle");
+    if (activeSub) {
+        activeSub.textContent = is680
+            ? "PSS-680 • 12-Voice 2-Op FM • Mode 99"
+            : "PSS-790 • 28-Voice AWM PCM • Vector Synth";
     }
 
     if (check790) check790.classList.toggle("hidden", is680);
@@ -5441,6 +5615,93 @@ function setSliderAndVal(sliderId, valId, val, formatter) {
     if (label) label.textContent = formatter ? formatter(val) : val;
 }
 
+function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColor) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+
+    // ViewBox: 0 0 200 60
+    const yZero = 50;
+    const yPeak = 6;
+    const height = yZero - yPeak; // 44 px
+
+    const normAr = Math.min(63, Math.max(0, parseInt(ar, 10) || 0));
+    const normD1r = Math.min(63, Math.max(0, parseInt(d1r, 10) || 0));
+    const normD1l = Math.min(15, Math.max(0, parseInt(d1l, 10) || 0));
+    const normD2r = Math.min(31, Math.max(0, parseInt(d2r, 10) || 0));
+    const normRr = Math.min(15, Math.max(0, parseInt(rr, 10) || 0));
+
+    // Attack segment width (4px to 45px)
+    const attWidth = Math.max(4, Math.round(45 * (1 - (normAr / 63)) + 4));
+
+    // D1 segment width (8px to 50px)
+    const d1Width = Math.max(8, Math.round(50 * (1 - (normD1r / 63)) + 8));
+
+    // D1 level Y: level 15 is peak (yPeak), level 0 is yZero
+    const d1LevelFraction = normD1l / 15;
+    const d1Y = yZero - (d1LevelFraction * height);
+
+    // D2 segment width (8px to 45px)
+    const d2Width = Math.max(8, Math.round(45 * (1 - (normD2r / 31)) + 8));
+    const d2LevelFraction = d1LevelFraction * 0.5;
+    const d2Y = yZero - (d2LevelFraction * height);
+
+    // Release segment width (6px to 45px)
+    const rrWidth = Math.max(6, Math.round(45 * (1 - (normRr / 15)) + 6));
+
+    const p0 = { x: 8, y: yZero };
+    const p1 = { x: p0.x + attWidth, y: yPeak };
+    const p2 = { x: p1.x + d1Width, y: d1Y };
+    const p3 = { x: p2.x + d2Width, y: d2Y };
+    const p4 = { x: Math.min(192, p3.x + rrWidth), y: yZero };
+
+    const gradId = `${svgId}_grad`;
+    svg.innerHTML = `
+        <defs>
+            <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.4" />
+                <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.02" />
+            </linearGradient>
+        </defs>
+        <!-- Grid baseline & guides -->
+        <line x1="8" y1="${yZero}" x2="192" y2="${yZero}" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
+        <line x1="8" y1="${yPeak}" x2="192" y2="${yPeak}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,2" />
+        <!-- Key Off vertical marker -->
+        <line x1="${p3.x}" y1="4" x2="${p3.x}" y2="54" stroke="#475569" stroke-width="1" stroke-dasharray="1,2" />
+        <text x="${p3.x + 2}" y="13" fill="#64748b" font-size="7" font-family="monospace">KEY OFF</text>
+        <!-- Area fill under envelope curve -->
+        <path d="M ${p0.x} ${p0.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} Z" fill="url(#${gradId})" />
+        <!-- Curve stroke -->
+        <path d="M ${p0.x} ${p0.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        <!-- Stage Nodes -->
+        <circle cx="${p1.x}" cy="${p1.y}" r="2" fill="${strokeColor}" />
+        <circle cx="${p2.x}" cy="${p2.y}" r="1.5" fill="${strokeColor}" />
+        <circle cx="${p3.x}" cy="${p3.y}" r="1.5" fill="${strokeColor}" />
+        <!-- Phase Labels -->
+        <text x="${Math.max(10, (p0.x + p1.x)/2 - 3)}" y="48" fill="${strokeColor}" font-size="7" font-weight="bold" font-family="monospace">A</text>
+        <text x="${(p1.x + p2.x)/2 - 4}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">D1</text>
+        <text x="${(p2.x + p3.x)/2 - 4}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">D2</text>
+        <text x="${Math.min(185, (p3.x + p4.x)/2 - 3)}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">R</text>
+    `;
+}
+
+function updateFmEnvelopes() {
+    // Modulator
+    const mAr = document.getElementById("fmModAr")?.value || 63;
+    const mD1r = document.getElementById("fmModD1r")?.value || 25;
+    const mD1l = document.getElementById("fmModD1l")?.value || 0;
+    const mD2r = document.getElementById("fmModD2r")?.value || 0;
+    const mRr = document.getElementById("fmModRr")?.value || 6;
+    renderFmEnvelopeSvg("svgFmModEnv", mAr, mD1r, mD1l, mD2r, mRr, "#22d3ee", "#0891b2");
+
+    // Carrier
+    const cAr = document.getElementById("fmCarAr")?.value || 63;
+    const cD1r = document.getElementById("fmCarD1r")?.value || 20;
+    const cD1l = document.getElementById("fmCarD1l")?.value || 0;
+    const cD2r = document.getElementById("fmCarD2r")?.value || 0;
+    const cRr = document.getElementById("fmCarRr")?.value || 6;
+    renderFmEnvelopeSvg("svgFmCarEnv", cAr, cD1r, cD1l, cD2r, cRr, "#10b981", "#059669");
+}
+
 function updateFmVoiceUI(voice) {
     if (!voice) return;
     if (voice.name) {
@@ -5532,6 +5793,7 @@ function updateFmVoiceUI(voice) {
     if (chkSus) chkSus.checked = !!voice.sustain;
 
     sendFmVoiceLiveThrottled();
+    updateFmEnvelopes();
 }
 
 function randomizeFmVoice() {
@@ -5737,6 +5999,9 @@ function initFmSynthEditor() {
             slider.addEventListener("input", () => {
                 if (label) label.textContent = def.fmt ? def.fmt(slider.value) : slider.value;
                 sendFmVoiceLiveThrottled();
+                if (def.id.startsWith("fmMod") || def.id.startsWith("fmCar")) {
+                    updateFmEnvelopes();
+                }
             });
         }
     });
@@ -5807,6 +6072,7 @@ function initFmSynthEditor() {
     }
 
     renderFmVoiceLibrary();
+    updateFmEnvelopes();
 }
 
 // -------------------------------------------------------------------------

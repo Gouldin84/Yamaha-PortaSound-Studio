@@ -159,5 +159,61 @@ namespace PSS790Player.Tests
             Assert.True(File.Exists(Path.Combine(_pssDir, "Song1.mid")));
             Assert.True(File.Exists(Path.Combine(_pssDir, "Song2.mid")));
         }
+
+        [Fact]
+        public void PruneEmptyDirectories_RemovesNestedEmptyDirectoriesBottomUp()
+        {
+            var nestedEmpty1 = Path.Combine(_gmDir, "EmptyParent", "EmptyChild", "EmptyGrandchild");
+            var nestedEmpty2 = Path.Combine(_gmDir, "AnotherEmptyFolder");
+            var populatedFolder = Path.Combine(_gmDir, "PopulatedFolder");
+            Directory.CreateDirectory(nestedEmpty1);
+            Directory.CreateDirectory(nestedEmpty2);
+            Directory.CreateDirectory(populatedFolder);
+            CreateDummyMidi(Path.Combine(populatedFolder, "Test.mid"));
+
+            var count = BatchConverter.PruneEmptyDirectories(_gmDir);
+
+            Assert.True(count >= 4); // EmptyGrandchild, EmptyChild, EmptyParent, AnotherEmptyFolder
+            Assert.False(Directory.Exists(Path.Combine(_gmDir, "EmptyParent")));
+            Assert.False(Directory.Exists(nestedEmpty2));
+            Assert.True(Directory.Exists(populatedFolder));
+            Assert.True(File.Exists(Path.Combine(populatedFolder, "Test.mid")));
+        }
+
+        [Fact]
+        public async Task ExecuteDualSync_WithPruneEmpty_CleansAcrossAllThreeRoots()
+        {
+            var pss680Dir = Path.Combine(_tempRoot, "PSS-680 Midi");
+            Directory.CreateDirectory(pss680Dir);
+
+            // Create populated song
+            CreateDummyMidi(Path.Combine(_gmDir, "Synthwave", "Song1.mid"));
+
+            // Create empty ghost directories in all 3 roots
+            var emptyGm = Path.Combine(_gmDir, "Ghost1");
+            var empty790 = Path.Combine(_pssDir, "Ghost2", "SubGhost");
+            var empty680 = Path.Combine(pss680Dir, "Ghost3");
+            Directory.CreateDirectory(emptyGm);
+            Directory.CreateDirectory(empty790);
+            Directory.CreateDirectory(empty680);
+
+            var options = new LibrarySyncOptions
+            {
+                ConvertMissing = true,
+                UpdateOutdated = true,
+                RemoveOrphans = true,
+                PruneEmptyDirectories = true
+            };
+
+            var result = await BatchConverter.ExecuteDualSyncAsync(_gmDir, _pssDir, pss680Dir, options, _store);
+
+            Assert.True(result.Success);
+            Assert.True(result.PrunedDirectoriesCount >= 4); // Ghost1, SubGhost, Ghost2, Ghost3
+            Assert.False(Directory.Exists(emptyGm));
+            Assert.False(Directory.Exists(Path.Combine(_pssDir, "Ghost2")));
+            Assert.False(Directory.Exists(empty680));
+            Assert.True(File.Exists(Path.Combine(_pssDir, "Synthwave", "Song1.mid")));
+            Assert.True(File.Exists(Path.Combine(pss680Dir, "Synthwave", "Song1.mid")));
+        }
     }
 }

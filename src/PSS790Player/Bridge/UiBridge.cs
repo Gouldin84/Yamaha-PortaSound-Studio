@@ -298,6 +298,16 @@ namespace PSS790Player.Bridge
                     case "cancel_library_sync":
                         _syncCts?.Cancel();
                         break;
+                    case "prune_empty_folders":
+                        {
+                            int pruned = 0;
+                            pruned += BatchConverter.PruneEmptyDirectories(AppPaths.GmMidiDir);
+                            pruned += BatchConverter.PruneEmptyDirectories(AppPaths.Pss790MidiDir);
+                            pruned += BatchConverter.PruneEmptyDirectories(AppPaths.Pss680MidiDir);
+                            SendLibraryUpdate();
+                            SendToJs("notification", new { message = $"Pruned {pruned} empty folders across all 3 libraries." });
+                        }
+                        break;
                     case "rescan_devices":
                         _deviceMonitor.TriggerRescan(0);
                         SendDevicesUpdated();
@@ -2122,6 +2132,7 @@ namespace PSS790Player.Bridge
             }
 
             var legacyFoldersList = folderGroups
+                .Where(kvp => kvp.Value.Count > 0)
                 .OrderBy(kvp => kvp.Key)
                 .Select(kvp => new
                 {
@@ -2189,7 +2200,11 @@ namespace PSS790Player.Bridge
 
                 foreach (var subDir in subDirs)
                 {
-                    subFolderNodes.Add(BuildDirectoryNode(subDir, rootDir, categoryName, format, flatCollector));
+                    var child = BuildDirectoryNode(subDir, rootDir, categoryName, format, flatCollector);
+                    if (child.totalCount > 0)
+                    {
+                        subFolderNodes.Add(child);
+                    }
                 }
             }
 
@@ -2873,6 +2888,7 @@ namespace PSS790Player.Bridge
             var convertMissing = !root.TryGetProperty("convertMissing", out var cm) || cm.GetBoolean();
             var updateOutdated = !root.TryGetProperty("updateOutdated", out var uo) || uo.GetBoolean();
             var removeOrphans = !root.TryGetProperty("removeOrphans", out var ro) || ro.GetBoolean();
+            var pruneEmpty = !root.TryGetProperty("pruneEmpty", out var pe) || pe.GetBoolean();
             var forceReconvertAll = root.TryGetProperty("forceReconvertAll", out var fr) && fr.GetBoolean();
 
             var syncOptions = new LibrarySyncOptions
@@ -2880,6 +2896,7 @@ namespace PSS790Player.Bridge
                 ConvertMissing = convertMissing,
                 UpdateOutdated = updateOutdated,
                 RemoveOrphans = removeOrphans,
+                PruneEmptyDirectories = pruneEmpty,
                 ForceReconvertAll = forceReconvertAll,
                 RemapperOptions = _options
             };
@@ -2915,6 +2932,7 @@ namespace PSS790Player.Bridge
                         convertedCount = result.ConvertedCount,
                         updatedCount = result.UpdatedCount,
                         removedOrphansCount = result.RemovedOrphansCount,
+                        prunedDirectoriesCount = result.PrunedDirectoriesCount,
                         totalOps = result.TotalOperations
                     });
 
