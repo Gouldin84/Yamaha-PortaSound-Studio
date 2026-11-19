@@ -554,15 +554,18 @@ function handleHostMessage(msg) {
                     clearAllChannelLeds();
                     if (state.activePreviewRecordingPath) {
                         handleRecordingPreviewStopped();
-                    } else if (state.autoAdvance && !state.isLooping && state.currentSeconds >= Math.max(0, state.durationSeconds - 2) && state.durationSeconds > 0) {
-                        // Song completed naturally! Auto-advance to next song in list
-                        setTimeout(() => {
-                            if (!state.isPlaying) {
-                                playNextSong();
-                            }
-                        }, 350);
                     }
                 }
+            }
+            break;
+
+        case "playback_finished":
+            if (state.autoAdvance && !state.isLooping) {
+                setTimeout(() => {
+                    if (!state.isPlaying) {
+                        playNextSong();
+                    }
+                }, 350);
             }
             break;
 
@@ -2051,15 +2054,25 @@ function createSongItemElement(file) {
         });
     });
 
+    let clickTimer = null;
+
     div.addEventListener("click", (e) => {
         if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
-        sendToHost("load_midi_metadata", { path: file.fullPath });
+        if (clickTimer) clearTimeout(clickTimer);
+        clickTimer = setTimeout(() => {
+            clickTimer = null;
+            sendToHost("load_midi_metadata", { path: file.fullPath });
+        }, 180);
     });
 
     div.addEventListener("dblclick", (e) => {
         if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
+        if (clickTimer) {
+            clearTimeout(clickTimer);
+            clickTimer = null;
+        }
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
         sendToHost("load_midi_and_play", { path: file.fullPath });
@@ -2128,9 +2141,7 @@ function selectSongByIndex(index) {
     const song = state.visibleSongList[index];
     state.selectedSongPath = song.fullPath;
     highlightActiveSongInTree();
-    if (!state.isPlaying) {
-        sendToHost("load_midi_metadata", { path: song.fullPath });
-    }
+    sendToHost("load_midi_metadata", { path: song.fullPath });
 
     const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
     if (el) {

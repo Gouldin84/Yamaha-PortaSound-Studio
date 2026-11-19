@@ -42,6 +42,7 @@ namespace PSS790Player.Core
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
         public event EventHandler<PlaybackStateEventArgs>? PlaybackStateChanged;
         public event EventHandler<string>? OutputDeviceDisconnected;
+        public event EventHandler? PlaybackFinished;
 
         public bool IsPlaying => _playback?.IsRunning ?? false;
         public bool IsPaused => (!IsPlaying) && (_playback?.GetCurrentTime<MetricTimeSpan>().TotalMilliseconds > 0);
@@ -182,10 +183,21 @@ namespace PSS790Player.Core
         {
             if (_currentFile == null || _outputDevice == null) return;
 
+            if (_filteringDevice != null)
+            {
+                _filteringDevice.Dispose();
+                _filteringDevice = null;
+            }
+
             if (_playback != null)
             {
                 _playback.EventPlayed -= OnPlaybackEventPlayed;
-                _playback.Dispose();
+                try
+                {
+                    _playback.Stop();
+                    _playback.Dispose();
+                }
+                catch { }
                 _playback = null;
             }
 
@@ -206,6 +218,7 @@ namespace PSS790Player.Core
                 _progressTimer.Stop();
                 SendPanicNoteOff();
                 NotifyState();
+                PlaybackFinished?.Invoke(this, EventArgs.Empty);
             };
 
             _playback.RepeatStarted += (s, e) =>
@@ -397,10 +410,22 @@ namespace PSS790Player.Core
             lock (_lock)
             {
                 _progressTimer.Stop();
+                if (_filteringDevice != null)
+                {
+                    _filteringDevice.Dispose();
+                    _filteringDevice = null;
+                }
                 if (_playback != null)
                 {
-                    _playback.Stop();
-                    _playback.MoveToStart();
+                    _playback.EventPlayed -= OnPlaybackEventPlayed;
+                    try
+                    {
+                        _playback.Stop();
+                        _playback.MoveToStart();
+                        _playback.Dispose();
+                    }
+                    catch { }
+                    _playback = null;
                 }
 
                 SendPanicNoteOff();
@@ -688,9 +713,10 @@ namespace PSS790Player.Core
             GC.SuppressFinalize(this);
         }
 
-        private sealed class FilteringOutputDevice : IOutputDevice
+        private sealed class FilteringOutputDevice : IOutputDevice, IDisposable
         {
             private readonly MidiPlayer _player;
+            private volatile bool _isDisposed;
 
             public event EventHandler<MidiEventSentEventArgs>? EventSent;
 
@@ -699,10 +725,16 @@ namespace PSS790Player.Core
                 _player = player;
             }
 
+            public void Dispose()
+            {
+                _isDisposed = true;
+            }
+
             public void SendEvent(MidiEvent midiEvent)
             {
+                if (_isDisposed) return;
                 var target = _player._outputDevice;
-                if (target == null) return;
+                if (target == null || _isDisposed) return;
 
                 if (midiEvent is ChannelEvent channelEvent)
                 {
@@ -783,11 +815,6 @@ namespace PSS790Player.Core
             public void PrepareForEventsSending()
             {
                 _player._outputDevice?.PrepareForEventsSending();
-            }
-
-            public void Dispose()
-            {
-                // MidiPlayer manages the lifecycle of the underlying target device
             }
         }
     }
