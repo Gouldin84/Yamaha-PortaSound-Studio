@@ -2030,6 +2030,15 @@
                 </div>
             </div>
 
+            <!-- Yamaha XG Engine Upgrade Banner -->
+            <div id="syncXgBanner" class="p-3 rounded-xl border flex items-center space-x-3 bg-cyan-950/40 border-cyan-800/60 text-xs text-cyan-200 hidden">
+                <div class="text-xl">⚡</div>
+                <div class="min-w-0 flex-1">
+                    <div id="syncXgBannerHeadline" class="font-bold text-cyan-300 text-xs">Yamaha XG Upgrades Detected</div>
+                    <div id="syncXgBannerSubtext" class="text-[11px] text-cyan-400/80">Legacy converted XG songs will be automatically upgraded to the latest conversion engine (extended percussion &amp; SFX).</div>
+                </div>
+            </div>
+
             <!-- Metrics Card Grid -->
             <div class="grid grid-cols-3 gap-2">
                 <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of General MIDI songs that do not yet have converted PSS-790 or PSS-680 versions">
@@ -2037,10 +2046,10 @@
                     <div id="syncMetricMissing" class="text-lg font-black text-cyan-400">0</div>
                     <div class="text-[10px] text-slate-500">Need conversion</div>
                 </div>
-                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of PSS files whose original GM source file has a newer modification date">
+                <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Number of PSS files whose original GM source file has a newer modification date or legacy conversion algorithm">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Outdated</div>
                     <div id="syncMetricOutdated" class="text-lg font-black text-amber-400">0</div>
-                    <div class="text-[10px] text-slate-500">GM file is newer</div>
+                    <div id="syncMetricOutdatedSubtext" class="text-[10px] text-slate-500">Need engine update</div>
                 </div>
                 <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center" title="Files in PSS-790/PSS-680 folders that no longer correspond to any existing GM file">
                     <div class="text-[10px] uppercase font-bold text-slate-400">Orphan PSS</div>
@@ -2313,7 +2322,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.4.2</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.4.3</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">

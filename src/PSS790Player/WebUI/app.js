@@ -3888,10 +3888,23 @@ function handleLibrarySyncAnalysis(data) {
     const icon = document.getElementById("syncStatusIcon");
     const banner = document.getElementById("syncStatusBanner");
     const btnStart = document.getElementById("btnStartSync");
+    const xgBanner = document.getElementById("syncXgBanner");
+    const xgText = document.getElementById("syncXgBannerSubtext");
 
     if (missingEl) missingEl.textContent = data.missingCount || 0;
     if (outdatedEl) outdatedEl.textContent = data.outdatedCount || 0;
     if (orphansEl) orphansEl.textContent = data.orphanCount || 0;
+
+    if (xgBanner) {
+        if (data.xgUpgradesAvailable && data.xgUpgradesAvailable > 0) {
+            xgBanner.classList.remove("hidden");
+            if (xgText) {
+                xgText.textContent = `${data.xgUpgradesAvailable} legacy converted Yamaha XG song(s) will be upgraded to the latest conversion engine (extended percussion & SFX).`;
+            }
+        } else {
+            xgBanner.classList.add("hidden");
+        }
+    }
 
     if (data.isInSync) {
         if (icon) icon.textContent = "✅";
@@ -3901,7 +3914,19 @@ function handleLibrarySyncAnalysis(data) {
         if (btnStart) btnStart.textContent = "Re-Verify / Force Sync";
     } else {
         if (icon) icon.textContent = "⚡";
-        if (headline) headline.textContent = `${data.missingCount} missing, ${data.outdatedCount} outdated, ${data.orphanCount} orphan files`;
+        let titleParts = [];
+        if (data.missingCount > 0) titleParts.push(`${data.missingCount} missing`);
+        if (data.outdatedCount > 0) {
+            if (data.xgUpgradesAvailable && data.xgUpgradesAvailable > 0) {
+                titleParts.push(`${data.outdatedCount} outdated (${data.xgUpgradesAvailable} XG upgrades)`);
+            } else {
+                titleParts.push(`${data.outdatedCount} outdated`);
+            }
+        }
+        if (data.orphanCount > 0) titleParts.push(`${data.orphanCount} orphan`);
+        if (titleParts.length === 0) titleParts.push("Updates needed");
+
+        if (headline) headline.textContent = titleParts.join(", ") + " files";
         if (subtext) subtext.textContent = "Review options below and click Align & Sync to synchronize both PSS-790 and PSS-680 libraries.";
         if (banner) banner.className = "p-3 rounded-xl border flex items-center space-x-3 bg-cyan-950/40 border-cyan-500/40 text-xs text-cyan-200";
         if (btnStart) btnStart.textContent = "Align & Sync Now";

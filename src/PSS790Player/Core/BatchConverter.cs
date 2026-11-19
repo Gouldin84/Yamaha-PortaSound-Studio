@@ -13,8 +13,10 @@ namespace PSS790Player.Core
         public List<string> MissingInTarget { get; set; } = new();
         public List<string> OutdatedInTarget { get; set; } = new();
         public List<string> OrphanInTarget { get; set; } = new();
+        public List<string> XgUpgradesInTarget { get; set; } = new();
         public int TotalGmFiles { get; set; }
         public int TotalPssFiles { get; set; }
+        public int TotalXgFiles { get; set; }
         public bool IsInSync => MissingInTarget.Count == 0 && OutdatedInTarget.Count == 0 && OrphanInTarget.Count == 0;
     }
 
@@ -50,6 +52,8 @@ namespace PSS790Player.Core
         public int TotalMissing => Analysis790.MissingInTarget.Count + Analysis680.MissingInTarget.Count;
         public int TotalOutdated => Analysis790.OutdatedInTarget.Count + Analysis680.OutdatedInTarget.Count;
         public int TotalOrphans => Analysis790.OrphanInTarget.Count + Analysis680.OrphanInTarget.Count;
+        public int TotalXgFiles => Math.Max(Analysis790.TotalXgFiles, Analysis680.TotalXgFiles);
+        public int TotalXgUpgrades => Analysis790.XgUpgradesInTarget.Count + Analysis680.XgUpgradesInTarget.Count;
         public bool IsInSync => Analysis790.IsInSync && Analysis680.IsInSync;
     }
 
@@ -245,7 +249,7 @@ namespace PSS790Player.Core
                 cancellationToken);
         }
 
-        public static LibrarySyncAnalysis AnalyzeSync(string sourceDir, string targetDir)
+        public static LibrarySyncAnalysis AnalyzeSync(string sourceDir, string targetDir, string? targetModel = null)
         {
             var analysis = new LibrarySyncAnalysis();
             if (!Directory.Exists(sourceDir))
@@ -255,6 +259,8 @@ namespace PSS790Player.Core
             {
                 Directory.CreateDirectory(targetDir);
             }
+
+            string resolvedModel = targetModel ?? (targetDir.Contains("680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
 
             var sourceFiles = Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
@@ -282,7 +288,26 @@ namespace PSS790Player.Core
                 {
                     var srcTime = File.GetLastWriteTimeUtc(srcFullPath);
                     var tgtTime = File.GetLastWriteTimeUtc(tgtFullPath);
-                    if (srcTime > tgtTime)
+
+                    bool isOutdated = srcTime > tgtTime;
+
+                    // Intelligent Algorithm Version Check:
+                    // If source is a Yamaha XG file and target was converted with legacy algorithm (lacking v2 marker),
+                    // flag as outdated for the new XG conversion engine!
+                    if (!isOutdated)
+                    {
+                        if (Remapper.IsXgMidiFile(srcFullPath))
+                        {
+                            analysis.TotalXgFiles++;
+                            if (!Remapper.HasAlgorithmV2MarkerFile(tgtFullPath, resolvedModel))
+                            {
+                                isOutdated = true;
+                                analysis.XgUpgradesInTarget.Add(relPath);
+                            }
+                        }
+                    }
+
+                    if (isOutdated)
                     {
                         analysis.OutdatedInTarget.Add(relPath);
                     }
@@ -321,7 +346,7 @@ namespace PSS790Player.Core
 
             AppPaths.SyncMirroredDirectories();
 
-            var analysis = AnalyzeSync(sourceDir, targetDir);
+            var analysis = AnalyzeSync(sourceDir, targetDir, options.RemapperOptions?.TargetModel);
 
             var filesToConvert = new List<(string RelPath, string Action)>();
 
@@ -378,7 +403,7 @@ namespace PSS790Player.Core
 
                     try
                     {
-                        var targetModel = options.RemapperOptions?.TargetModel ?? (targetDir.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
+                        var targetModel = options.RemapperOptions?.TargetModel ?? (targetDir.Contains("680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
                         var modelOpts = new RemapperOptions
                         {
                             TargetModel = targetModel,
@@ -487,8 +512,8 @@ namespace PSS790Player.Core
         {
             return new DualLibrarySyncAnalysis
             {
-                Analysis790 = AnalyzeSync(sourceDir, target790Dir),
-                Analysis680 = AnalyzeSync(sourceDir, target680Dir)
+                Analysis790 = AnalyzeSync(sourceDir, target790Dir, "pss790"),
+                Analysis680 = AnalyzeSync(sourceDir, target680Dir, "pss680")
             };
         }
 

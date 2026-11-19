@@ -47,9 +47,9 @@ namespace PSS790Player.Core
 
     public class Remapper
     {
-        public const string Pss790MarkerText = "PSS790_REMAPPED:v1";
+        public const string Pss790MarkerText = "PSS790_REMAPPED:v2";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
-        public const string Pss680MarkerText = "PSS680_REMAPPED:v1";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v2";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         public static bool HasPss790Marker(MidiFile midiFile)
@@ -81,6 +81,122 @@ namespace PSS790Player.Core
                     if (evt is MarkerEvent markerEvent && (markerEvent.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
                                                           markerEvent.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase)))
                         return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool HasAlgorithmV2Marker(MidiFile midiFile, string targetModel = "pss790")
+        {
+            bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+            string expected = is680 ? Pss680MarkerText : Pss790MarkerText;
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is TextEvent t && t.Text.Contains(expected, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                    if (evt is MarkerEvent m && m.Text.Contains(expected, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool HasAlgorithmV2MarkerFile(string filePath, string targetModel = "pss790")
+        {
+            if (!File.Exists(filePath)) return false;
+            try
+            {
+                bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                byte[] markerBytes = System.Text.Encoding.ASCII.GetBytes(is680 ? Pss680MarkerText : Pss790MarkerText);
+                byte[] fileBytes = File.ReadAllBytes(filePath);
+
+                // Track 0 header/events are always located in the first few kilobytes
+                int searchLen = Math.Min(fileBytes.Length, 4096);
+                for (int i = 0; i <= searchLen - markerBytes.Length; i++)
+                {
+                    bool match = true;
+                    for (int j = 0; j < markerBytes.Length; j++)
+                    {
+                        if (fileBytes[i + j] != markerBytes[j])
+                        {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) return true;
+                }
+                return false;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool IsXgMidiFile(string filePath)
+        {
+            if (!File.Exists(filePath)) return false;
+            try
+            {
+                byte[] bytes = File.ReadAllBytes(filePath);
+                return IsXgMidiBytes(bytes);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static bool IsXgMidiBytes(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length < 14) return false;
+
+            // Fast scan for:
+            // 1. Yamaha XG SysEx: 0xF0 followed within 8 bytes by 0x43 [dev] 0x4C
+            // 2. Bank Select CC 0 == 64 (XG SFX) or CC 0 == 127/128 (XG/GS Drums)
+            for (int i = 0; i < bytes.Length - 4; i++)
+            {
+                if (bytes[i] == 0xF0)
+                {
+                    int maxLook = Math.Min(bytes.Length - 1, i + 8);
+                    for (int j = i + 1; j < maxLook - 1; j++)
+                    {
+                        if (bytes[j] == 0x43 && bytes[j + 2] == 0x4C)
+                            return true;
+                    }
+                }
+
+                if ((bytes[i] & 0xF0) == 0xB0 && bytes[i + 1] == 0x00)
+                {
+                    byte ccVal = bytes[i + 2];
+                    if (ccVal is 64 or 127 or 128)
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
+        public static bool IsXgMidi(MidiFile midiFile)
+        {
+            foreach (var track in midiFile.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length >= 3)
+                    {
+                        var d = sysex.Data;
+                        if (d[0] == 0x43 && d[2] == 0x4C)
+                            return true;
+                    }
+                    if (evt is ControlChangeEvent cc && (byte)cc.ControlNumber == 0)
+                    {
+                        byte val = (byte)cc.ControlValue;
+                        if (val == 64 || val == 126 || val == 127)
+                            return true;
+                    }
                 }
             }
             return false;
@@ -710,20 +826,21 @@ namespace PSS790Player.Core
             }
 
             bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
-            if (is680)
+            string markerText = is680 ? Pss680MarkerText : Pss790MarkerText;
+
+            if (HasAlgorithmV2Marker(midi, targetModel))
             {
-                if (!HasPss680Marker(midi))
-                {
-                    firstTrack.Events.Insert(0, new TextEvent(Pss680MarkerText) { DeltaTime = 0 });
-                }
+                return;
             }
-            else
-            {
-                if (!HasPss790Marker(midi))
-                {
-                    firstTrack.Events.Insert(0, new TextEvent(Pss790MarkerText) { DeltaTime = 0 });
-                }
-            }
+
+            // Remove legacy v1 markers so the file is cleanly upgraded to v2
+            firstTrack.Events.RemoveAll(e =>
+                (e is TextEvent t && (t.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                      t.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))) ||
+                (e is MarkerEvent m && (m.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                        m.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))));
+
+            firstTrack.Events.Insert(0, new TextEvent(markerText) { DeltaTime = 0 });
         }
 
         public static byte TranslateDrumNote(byte gmNote)

@@ -2879,6 +2879,8 @@ namespace PSS790Player.Bridge
                     totalPss790 = dual.TotalPss790Files,
                     totalPss680 = dual.TotalPss680Files,
                     isInSync = dual.IsInSync,
+                    totalXg = dual.TotalXgFiles,
+                    xgUpgradesAvailable = dual.TotalXgUpgrades,
                     missingFiles = dual.Analysis790.MissingInTarget.Concat(dual.Analysis680.MissingInTarget).Distinct().Take(50).ToList(),
                     outdatedFiles = dual.Analysis790.OutdatedInTarget.Concat(dual.Analysis680.OutdatedInTarget).Distinct().Take(50).ToList(),
                     orphanFiles = dual.Analysis790.OrphanInTarget.Concat(dual.Analysis680.OrphanInTarget).Distinct().Take(50).ToList()
