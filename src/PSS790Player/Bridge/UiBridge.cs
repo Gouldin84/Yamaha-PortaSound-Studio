@@ -104,21 +104,12 @@ namespace PSS790Player.Bridge
                 try
                 {
                     var data = sysexEvent.Data;
-                    if (data != null && data.Length >= 68 &&
-                        data[0] == Pss680Constants.ManufacturerYamaha &&
-                        data[1] == Pss680Constants.InstrumentClassPss &&
-                        data[2] == Pss680Constants.FormatFmVoice)
-                    {
-                        byte[] full72 = new byte[data.Length + 2];
-                        full72[0] = 0xF0;
-                        Buffer.BlockCopy(data, 0, full72, 1, data.Length);
-                        full72[^1] = 0xF7;
+                    if (data == null || data.Length < 70) return;
 
-                        var incomingVoice = PSS680Voice.FromSysExMessage(full72);
-                        SendToJs("fm_voice_dump_received", VoiceToObject(incomingVoice));
-                        SendToJs("fm_active_bank_changed", new { bank = incomingVoice.BankNumber, voiceNumber = 100 + incomingVoice.BankNumber });
-                        SendToJs("notification", new { message = $"Captured FM Voice Dump from PSS-680: Bank {incomingVoice.BankNumber + 1}" });
-                    }
+                    var incomingVoice = PSS680Voice.FromSysExMessage(data);
+                    SendToJs("fm_voice_dump_received", VoiceToObject(incomingVoice));
+                    SendToJs("fm_active_bank_changed", new { bank = incomingVoice.BankNumber, voiceNumber = 100 + incomingVoice.BankNumber });
+                    SendToJs("notification", new { message = $"Captured FM Voice Dump from PSS-680: Bank {incomingVoice.BankNumber + 1}" });
                 }
                 catch { }
             };

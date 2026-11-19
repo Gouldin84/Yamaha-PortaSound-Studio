@@ -453,5 +453,49 @@ namespace PSS790Player.Tests
 
             Assert.Empty(bends790);
         }
+
+        [Fact]
+        public void PSS680Voice_FromSysExMessage_DefensivelyParsesAnyDriverFramingFormat()
+        {
+            var originalVoice = new PSS680Voice
+            {
+                Name = "Poly Synth",
+                BankNumber = 2 // Bank 3
+            };
+            originalVoice.Modulator.Multiplier = 3;
+            originalVoice.Carrier.Multiplier = 1;
+
+            byte[] canonical72 = originalVoice.ToSysExMessage();
+            Assert.Equal(72, canonical72.Length);
+            Assert.Equal(0xF0, canonical72[0]);
+            Assert.Equal(0xF7, canonical72[^1]);
+
+            // 1. Canonical 72-byte message (F0..F7)
+            var v72 = PSS680Voice.FromSysExMessage(canonical72);
+            Assert.Equal(2, v72.BankNumber);
+            Assert.Equal(3, v72.Modulator.Multiplier);
+            Assert.Equal(1, v72.Carrier.Multiplier);
+
+            // 2. 70-byte payload without F0 or F7 (DryWetMIDI NormalSysExEvent standard)
+            byte[] payload70 = canonical72.AsSpan(1, 70).ToArray();
+            var v70 = PSS680Voice.FromSysExMessage(payload70);
+            Assert.Equal(2, v70.BankNumber);
+            Assert.Equal(3, v70.Modulator.Multiplier);
+            Assert.Equal(1, v70.Carrier.Multiplier);
+
+            // 3. 71-byte stream with trailing F7 (some third-party USB interfaces)
+            byte[] stream71Trailing = canonical72.AsSpan(1, 71).ToArray();
+            var v71Trailing = PSS680Voice.FromSysExMessage(stream71Trailing);
+            Assert.Equal(2, v71Trailing.BankNumber);
+            Assert.Equal(3, v71Trailing.Modulator.Multiplier);
+            Assert.Equal(1, v71Trailing.Carrier.Multiplier);
+
+            // 4. 71-byte stream with leading F0 (no trailing F7)
+            byte[] stream71Leading = canonical72.AsSpan(0, 71).ToArray();
+            var v71Leading = PSS680Voice.FromSysExMessage(stream71Leading);
+            Assert.Equal(2, v71Leading.BankNumber);
+            Assert.Equal(3, v71Leading.Modulator.Multiplier);
+            Assert.Equal(1, v71Leading.Carrier.Multiplier);
+        }
     }
 }

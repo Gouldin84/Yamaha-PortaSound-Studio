@@ -188,6 +188,14 @@ namespace PSS790Player.Tests
                 _output?.WriteLine($"[AUDIT SKIPPED] Local MIDI directories not found (GM: {Directory.Exists(GmMidiDir)}, PSS680: {Directory.Exists(Pss680MidiDir)})");
                 return false;
             }
+
+            // Verify that the hardcoded 115-file snapshot is actually present in the local directory
+            if (!All115Files.All(f => File.Exists(Path.Combine(GmMidiDir, f))))
+            {
+                _output?.WriteLine("[AUDIT SKIPPED] Local MIDI files in GM Midi have been updated/restructured by user; snapshot audit skipped.");
+                return false;
+            }
+
             return true;
         }
 

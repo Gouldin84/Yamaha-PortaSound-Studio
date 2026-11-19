@@ -343,33 +343,38 @@ namespace PSS790Player.Core
         /// </summary>
         public static PSS680Voice FromSysExMessage(byte[] sysex)
         {
-            if (sysex == null || sysex.Length < Pss680Constants.Format00TotalSysExLength)
-                throw new ArgumentException($"SysEx message must be at least {Pss680Constants.Format00TotalSysExLength} bytes.", nameof(sysex));
+            if (sysex == null)
+                throw new ArgumentNullException(nameof(sysex));
 
-            if (sysex[0] != 0xF0 || sysex[^1] != 0xF7)
-                throw new FormatException("SysEx message must start with 0xF0 and end with 0xF7.");
+            // Defensively normalize framing: allow canonical 72-byte (F0..F7), 71-byte (..F7), or 70-byte payload
+            ReadOnlySpan<byte> span = sysex;
+            if (span.Length > 0 && span[0] == 0xF0) span = span.Slice(1);
+            if (span.Length > 0 && span[^1] == 0xF7) span = span.Slice(0, span.Length - 1);
 
-            if (sysex[1] != Pss680Constants.ManufacturerYamaha || sysex[2] != Pss680Constants.InstrumentClassPss)
-                throw new FormatException($"Invalid Yamaha PSS header: Expected 0x43 0x76, got 0x{sysex[1]:X2} 0x{sysex[2]:X2}.");
+            if (span.Length < 70)
+                throw new ArgumentException($"SysEx message payload must contain at least 70 bytes (got {span.Length}).", nameof(sysex));
 
-            if (sysex[3] != Pss680Constants.FormatFmVoice)
-                throw new FormatException($"Expected Format 00H (FM Voice), got 0x{sysex[3]:X2}.");
+            if (span[0] != Pss680Constants.ManufacturerYamaha || span[1] != Pss680Constants.InstrumentClassPss)
+                throw new FormatException($"Invalid Yamaha PSS header: Expected 0x43 0x76, got 0x{span[0]:X2} 0x{span[1]:X2}.");
+
+            if (span[2] != Pss680Constants.FormatFmVoice)
+                throw new FormatException($"Expected Format 00H (FM Voice), got 0x{span[2]:X2}.");
 
             byte[] decoded = new byte[Pss680Constants.Format00DecodedByteCount];
-            int inIdx = 4;
+            int inIdx = 3;
             int sum = 0;
 
             for (int i = 0; i < decoded.Length; i++)
             {
-                byte hi = (byte)(sysex[inIdx++] & 0x0F);
-                byte lo = (byte)(sysex[inIdx++] & 0x0F);
+                byte hi = (byte)(span[inIdx++] & 0x0F);
+                byte lo = (byte)(span[inIdx++] & 0x0F);
                 byte b = (byte)((hi << 4) | lo);
                 decoded[i] = b;
                 sum += b;
             }
 
             byte expectedChecksum = (byte)((128 - (sum & 0x7F)) & 0x7F);
-            byte actualChecksum = (byte)(sysex[inIdx] & 0x7F);
+            byte actualChecksum = (byte)(span[inIdx] & 0x7F);
 
             if (expectedChecksum != actualChecksum)
                 throw new InvalidOperationException($"SysEx checksum verification failed! Expected 0x{expectedChecksum:X2}, received 0x{actualChecksum:X2}.");
