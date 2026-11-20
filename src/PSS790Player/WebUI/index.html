@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.6.2">
+    <link rel="stylesheet" href="styles.css?v=2.6.3">
     <script>
         tailwind.config = {
             theme: {
@@ -984,23 +984,23 @@
                 </div>
 
                 <!-- 4-Strip FM Sound Designer Rack -->
-                <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 overflow-y-auto custom-scrollbar pr-0.5">
+                <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 xl:grid-rows-1 gap-3 overflow-y-auto xl:overflow-hidden custom-scrollbar pr-0.5">
                     
                     <!-- Strip 1: FM Voice Patch Library (Leftmost) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-indigo-400 flex flex-col justify-between space-y-2">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <div id="fmVoiceLibraryStrip" class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-indigo-400 flex flex-col min-h-0 h-[480px] xl:h-full overflow-hidden space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
                             <span class="text-xs font-bold text-indigo-400">FM Voice Library</span>
                             <span id="fmVoiceCountBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">0 patches</span>
                         </div>
 
                         <!-- Search Bar -->
-                        <div class="relative">
+                        <div class="relative shrink-0">
                             <input type="text" id="fmSearchInput" placeholder="Filter patches..." class="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
                             <span class="absolute left-2 top-1.5 text-slate-500 text-[10px]">🔍</span>
                         </div>
 
                         <!-- Scrollable Patch List -->
-                        <div id="fmPatchList" class="flex-1 min-h-[220px] overflow-y-auto custom-scrollbar space-y-1.5 pr-0.5">
+                        <div id="fmPatchList" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1.5 pr-0.5">
                             <div class="p-6 text-center text-slate-500 text-[11px]">
                                 No saved FM patches. Edit parameters and click "Save Patch" above!
                             </div>
@@ -1008,13 +1008,13 @@
                     </div>
 
                     <!-- Strip 2: Operator 1 (Modulator) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-cyan-400 flex flex-col justify-between space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-cyan-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
                             <span class="text-xs font-bold text-cyan-400">OP 1: Modulator</span>
                             <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">Timbre / Harmonics</span>
                         </div>
 
-                        <div class="space-y-2 flex-1">
+                        <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
                             <!-- Multiplier -->
                             <div class="space-y-0.5">
                                 <div class="flex justify-between text-[10px] font-medium text-slate-300">
@@ -1163,13 +1163,13 @@
                     </div>
 
                     <!-- Strip 3: Operator 2 (Carrier) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-emerald-400 flex flex-col justify-between space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-emerald-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
                             <span class="text-xs font-bold text-emerald-400">OP 2: Carrier</span>
                             <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">Pitch / Audio Output</span>
                         </div>
 
-                        <div class="space-y-2 flex-1">
+                        <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
                             <!-- Multiplier -->
                             <div class="space-y-0.5">
                                 <div class="flex justify-between text-[10px] font-medium text-slate-300">
@@ -1321,13 +1321,13 @@
                     </div>
 
                     <!-- Strip 4: Pitch & Modulation (Global/LFO) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-amber-400 flex flex-col justify-between space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-amber-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
                             <span class="text-xs font-bold text-amber-400">Modulation & LFO</span>
                             <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/50">Global Parameters</span>
                         </div>
 
-                        <div class="space-y-2.5 flex-1">
+                        <div class="space-y-2.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
                             <!-- Feedback -->
                             <div class="space-y-0.5">
                                 <div class="flex justify-between text-[10px] font-medium text-slate-300">
@@ -2485,7 +2485,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.2</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.3</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2631,6 +2631,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.6.2"></script>
+    <script src="app.js?v=2.6.3"></script>
 </body>
 </html>
