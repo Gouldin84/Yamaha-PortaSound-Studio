@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.6.1">
+    <link rel="stylesheet" href="styles.css?v=2.6.2">
     <script>
         tailwind.config = {
             theme: {
@@ -960,7 +960,7 @@
                         <div class="h-4 w-px bg-slate-700/60 mx-0.5"></div>
 
                         <!-- Multi-Register Audition Strip -->
-                        <div class="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-cyan-800/40 space-x-0.5">
+                        <div id="fmAuditionStrip" class="flex items-center bg-slate-800/90 rounded-lg p-0.5 border border-cyan-800/40 space-x-0.5">
                             <span class="text-[9px] font-bold text-cyan-400 px-1">AUDITION</span>
                             <button type="button" class="btn-fm-audition-note px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white transition" data-note="36" title="Audition Low (C2 / Note 36)">Low</button>
                             <button type="button" class="btn-fm-audition-note px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-700 hover:bg-cyan-600 text-slate-200 hover:text-white transition" data-note="48" title="Audition Bass (C3 / Note 48)">Bass</button>
@@ -1500,31 +1500,58 @@
 
                         <!-- Section B: 4-Channel Live Volume Ladders -->
                         <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2">
-                            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block border-b border-slate-800 pb-1">Vector Volume Balance (CC 7)</span>
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vector Volume Balance</span>
+                                <span class="text-[9px] font-mono text-cyan-400">CC 7 Volume (0-127)</span>
+                            </div>
                             <div class="grid grid-cols-4 gap-2 text-center text-[10px]">
                                 <div class="space-y-1">
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center">
+                                    <div class="text-[10px] font-mono font-bold text-cyan-300">
+                                        <span id="meterVecVal1">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
                                         <div id="meterVecCh1" class="w-full bg-cyan-400 rounded transition-all duration-75" style="height: 25%"></div>
                                     </div>
-                                    <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
+                                        <span id="meterVecCc1" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
                                 </div>
                                 <div class="space-y-1">
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center">
+                                    <div class="text-[10px] font-mono font-bold text-emerald-300">
+                                        <span id="meterVecVal2">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
                                         <div id="meterVecCh2" class="w-full bg-emerald-400 rounded transition-all duration-75" style="height: 25%"></div>
                                     </div>
-                                    <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
+                                        <span id="meterVecCc2" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
                                 </div>
                                 <div class="space-y-1">
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center">
+                                    <div class="text-[10px] font-mono font-bold text-amber-300">
+                                        <span id="meterVecVal3">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
                                         <div id="meterVecCh3" class="w-full bg-amber-400 rounded transition-all duration-75" style="height: 25%"></div>
                                     </div>
-                                    <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
+                                        <span id="meterVecCc3" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
                                 </div>
                                 <div class="space-y-1">
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center">
+                                    <div class="text-[10px] font-mono font-bold text-rose-300">
+                                        <span id="meterVecVal4">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
                                         <div id="meterVecCh4" class="w-full bg-rose-400 rounded transition-all duration-75" style="height: 25%"></div>
                                     </div>
-                                    <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
+                                        <span id="meterVecCc4" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1551,9 +1578,18 @@
                                 <span class="text-sm">🕹️</span>
                                 <h3 class="text-xs font-bold uppercase tracking-wider text-white">2D Vector Synthesizer Touchpad</h3>
                             </div>
-                            <div class="flex items-center space-x-2 font-mono text-[10px] text-slate-400">
-                                <span>X: <strong id="vecCoordX" class="text-emerald-400">+0.00</strong></span>
-                                <span>Y: <strong id="vecCoordY" class="text-cyan-400">+0.00</strong></span>
+                            <div class="flex items-center space-x-2">
+                                <button id="btnVecCenter" title="Center Joystick (Zero Values): Reset joystick coordinates to (0, 0) and balance all 4 voice levels to 25%" class="flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 text-[11px] font-semibold shadow-sm transition active:scale-95 cursor-pointer">
+                                    <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <circle cx="12" cy="12" r="9" stroke-width="2"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8"/>
+                                    </svg>
+                                    <span>Centre (0, 0)</span>
+                                </button>
+                                <div class="flex items-center space-x-2 font-mono text-[10px] text-slate-400">
+                                    <span>X: <strong id="vecCoordX" class="text-emerald-400">+0.00</strong></span>
+                                    <span>Y: <strong id="vecCoordY" class="text-cyan-400">+0.00</strong></span>
+                                </div>
                             </div>
                         </div>
 
@@ -1658,8 +1694,11 @@
                     <!-- SysEx Dump Cards Container -->
                     <div id="sysexLibraryList" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1">
                         <!-- Dynamically populated SysEx file cards -->
-                        <div class="p-8 text-center text-slate-500 text-xs">
-                            No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and trigger a Memory Bulk Dump on your keyboard.
+                        <div class="p-8 text-center text-slate-500 text-xs flex flex-col items-center justify-center space-y-2">
+                            <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                            </svg>
+                            <p id="sysexLibraryEmptyMsg">No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and press MEMORY BULK DUMP on your PSS-790.</p>
                         </div>
                     </div>
                 </aside>
@@ -1681,9 +1720,9 @@
                         <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] space-y-1.5">
                             <div class="flex items-center space-x-1.5 text-cyan-400 font-semibold">
                                 <span>💡</span>
-                                <span>PSS-790 Memory Bulk Dump Instructions:</span>
+                                <span id="sysexInstructionsTitle">PSS-790 Memory Bulk Dump Instructions:</span>
                             </div>
-                            <ol class="list-decimal list-inside text-slate-300 space-y-1 pl-1">
+                            <ol id="sysexInstructionsList" class="list-decimal list-inside text-slate-300 space-y-1 pl-1">
                                 <li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
                                 <li>On keyboard, press <strong class="text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">MEMORY BULK DUMP</strong> (display flashes <code class="text-amber-400 font-bold">b-8</code>).</li>
                                 <li>Press it a <strong>second time</strong> to transmit memory to PC.</li>
@@ -1776,7 +1815,7 @@
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                 </svg>
-                                <span>Transmit to PSS-790</span>
+                                <span id="btnTransmitSysexLabel">Transmit to PSS-790</span>
                             </button>
                             <button id="btnCancelSysexTransmit" title="Cancel Transmission: Abort active SysEx packet transmission immediately" class="hidden px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs border border-slate-700 transition active:scale-95">
                                 <span>Cancel</span>
@@ -2446,7 +2485,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.1</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.2</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2592,6 +2631,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.6.1"></script>
+    <script src="app.js?v=2.6.2"></script>
 </body>
 </html>

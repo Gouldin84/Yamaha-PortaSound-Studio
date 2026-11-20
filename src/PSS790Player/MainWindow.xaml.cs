@@ -98,7 +98,7 @@ namespace PSS790Player
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to initialize WebView2: {ex.Message}", "PSS-790 Player Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Failed to initialize WebView2: {ex.Message}", "Yamaha PortaSound Studio Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

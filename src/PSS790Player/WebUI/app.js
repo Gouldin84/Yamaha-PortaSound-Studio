@@ -4551,12 +4551,16 @@ function renderSysExLibrary(dumps) {
     if (countEl) countEl.textContent = `${items.length} dump${items.length === 1 ? '' : 's'}`;
 
     if (items.length === 0) {
+        const emptyHint = state.activeModel === "pss680"
+            ? 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and transmit a Voice or Memory dump from your PSS-680.'
+            : 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and press MEMORY BULK DUMP on your PSS-790.';
+
         listEl.innerHTML = `
             <div class="p-8 text-center text-slate-500 text-xs flex flex-col items-center justify-center space-y-2">
                 <svg class="w-8 h-8 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
                 </svg>
-                <p>${state.sysexSearchQuery ? 'No SysEx dumps match your search.' : 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and press MEMORY BULK DUMP on your PSS-790.'}</p>
+                <p id="sysexLibraryEmptyMsg">${state.sysexSearchQuery ? 'No SysEx dumps match your search.' : emptyHint}</p>
             </div>
         `;
         return;
@@ -5109,9 +5113,38 @@ function applyActiveModel(modelKey, syncHost = true) {
         btnTransmit.title = is680
             ? "Transmit SysEx: Send the selected bulk dump snapshot back into the PSS-680 to restore its memory banks"
             : "Transmit SysEx: Send the selected bulk dump snapshot back into the PSS-790 to restore its memory banks";
-        const btnTransmitSpan = btnTransmit.querySelector("span");
+        const btnTransmitSpan = document.getElementById("btnTransmitSysexLabel") || btnTransmit.querySelector("span");
         if (btnTransmitSpan) btnTransmitSpan.textContent = is680 ? "Transmit to PSS-680" : "Transmit to PSS-790";
     }
+
+    // Update SysEx Capture Instructions Callout
+    const sysexInstTitle = document.getElementById("sysexInstructionsTitle");
+    const sysexInstList = document.getElementById("sysexInstructionsList");
+    if (sysexInstTitle) {
+        sysexInstTitle.textContent = is680 
+            ? "PSS-680 Voice & Memory Bulk Dump Instructions:" 
+            : "PSS-790 Memory Bulk Dump Instructions:";
+    }
+    if (sysexInstList) {
+        sysexInstList.innerHTML = is680
+            ? `<li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
+               <li>Click <strong class="text-amber-400">"Req Voices"</strong> (or Melody / Chord / Drummer) in the toolbar above, or trigger a dump on your keyboard.</li>
+               <li>Keyboard transmits 72-byte FM voice parameter packets or bulk memory via MIDI.</li>
+               <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file immediately!</li>`
+            : `<li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
+               <li>On keyboard, press <strong class="text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">MEMORY BULK DUMP</strong> (display flashes <code class="text-amber-400 font-bold">b-8</code>).</li>
+               <li>Press it a <strong>second time</strong> to transmit memory to PC.</li>
+               <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file immediately!</li>`;
+    }
+
+    // Update SysEx library empty message if present
+    const emptyMsgEl = document.getElementById("sysexLibraryEmptyMsg");
+    if (emptyMsgEl && !state.sysexSearchQuery) {
+        emptyMsgEl.textContent = is680
+            ? 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and transmit a Voice or Memory dump from your PSS-680.'
+            : 'No SysEx bulk dumps in library. Click "Listen for Bulk Dump" and press MEMORY BULK DUMP on your PSS-790.';
+    }
+    renderSysExLibrary();
 
     // Update Batch Remapper Health Audit Polyphony Card tooltip & label
     const auditCard = document.getElementById("auditPolyphonyCard");
@@ -7287,10 +7320,33 @@ function setVectorPosition(x, y, notifyHost = true) {
     const m3 = document.getElementById("meterVecCh3");
     const m4 = document.getElementById("meterVecCh4");
 
-    if (m1) m1.style.height = Math.round(weights.wA * 100) + "%";
-    if (m2) m2.style.height = Math.round(weights.wB * 100) + "%";
-    if (m3) m3.style.height = Math.round(weights.wC * 100) + "%";
-    if (m4) m4.style.height = Math.round(weights.wD * 100) + "%";
+    const pctA = Math.round(weights.wA * 100);
+    const pctB = Math.round(weights.wB * 100);
+    const pctC = Math.round(weights.wC * 100);
+    const pctD = Math.round(weights.wD * 100);
+
+    if (m1) m1.style.height = pctA + "%";
+    if (m2) m2.style.height = pctB + "%";
+    if (m3) m3.style.height = pctC + "%";
+    if (m4) m4.style.height = pctD + "%";
+
+    const v1 = document.getElementById("meterVecVal1");
+    const v2 = document.getElementById("meterVecVal2");
+    const v3 = document.getElementById("meterVecVal3");
+    const v4 = document.getElementById("meterVecVal4");
+    if (v1) v1.textContent = pctA + "%";
+    if (v2) v2.textContent = pctB + "%";
+    if (v3) v3.textContent = pctC + "%";
+    if (v4) v4.textContent = pctD + "%";
+
+    const cc1 = document.getElementById("meterVecCc1");
+    const cc2 = document.getElementById("meterVecCc2");
+    const cc3 = document.getElementById("meterVecCc3");
+    const cc4 = document.getElementById("meterVecCc4");
+    if (cc1) cc1.textContent = "CC " + Math.round(weights.wA * 127);
+    if (cc2) cc2.textContent = "CC " + Math.round(weights.wB * 127);
+    if (cc3) cc3.textContent = "CC " + Math.round(weights.wC * 127);
+    if (cc4) cc4.textContent = "CC " + Math.round(weights.wD * 127);
 
     drawVectorCanvas();
 
@@ -7358,6 +7414,23 @@ function setupVectorTouchpad() {
 
     canvas.addEventListener("pointerup", stopDragging);
     canvas.addEventListener("pointercancel", stopDragging);
+
+    const btnCenter = document.getElementById("btnVecCenter");
+    if (btnCenter) {
+        btnCenter.addEventListener("click", () => {
+            if (vectorState.isOrbiting) {
+                stopVectorOrbit();
+            }
+            setVectorPosition(0, 0, true);
+        });
+    }
+
+    canvas.addEventListener("dblclick", () => {
+        if (vectorState.isOrbiting) {
+            stopVectorOrbit();
+        }
+        setVectorPosition(0, 0, true);
+    });
 }
 
 function startVectorOrbit() {
