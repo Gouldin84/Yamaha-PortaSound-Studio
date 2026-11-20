@@ -1012,6 +1012,98 @@ namespace PSS790Player.Bridge
                             _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)7, (Melanchall.DryWetMidi.Common.SevenBitNumber)volD) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)3 });
                         }
                         break;
+                    case "set_vector_channel_effect":
+                        {
+                            var targetVecCh = root.TryGetProperty("channel", out var chProp) ? Math.Clamp(chProp.GetInt32(), 0, 3) : 0;
+                            if (root.TryGetProperty("reverb", out var vRevProp))
+                            {
+                                var rev = Math.Clamp(vRevProp.GetInt32(), 0, 3);
+                                byte cc91Val = rev switch { 1 => 42, 2 => 85, 3 => 127, _ => 0 };
+                                _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)91, (Melanchall.DryWetMidi.Common.SevenBitNumber)cc91Val) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)targetVecCh });
+                            }
+                            if (root.TryGetProperty("vibrato", out var vVibProp))
+                            {
+                                var vib = Math.Clamp(vVibProp.GetInt32(), 0, 7);
+                                byte cc1Val = (byte)Math.Clamp(vib * 18, 0, 127);
+                                _player.SendEvent(new Melanchall.DryWetMidi.Core.ControlChangeEvent((Melanchall.DryWetMidi.Common.SevenBitNumber)1, (Melanchall.DryWetMidi.Common.SevenBitNumber)cc1Val) { Channel = (Melanchall.DryWetMidi.Common.FourBitNumber)targetVecCh });
+                            }
+                        }
+                        break;
+                    case "get_settings":
+                        SendToJs("settings_data", new
+                        {
+                            libraryRoot = AppPaths.BaseMidiDir,
+                            defaultLibraryRoot = AppPaths.DefaultBaseMidiDir,
+                            isCustom = !string.IsNullOrWhiteSpace(AppSettings.CustomLibraryRoot)
+                        });
+                        break;
+                    case "browse_library_folder":
+                        {
+                            Application.Current.Dispatcher.Invoke(() =>
+                            {
+                                try
+                                {
+                                    var dlg = new Microsoft.Win32.OpenFolderDialog
+                                    {
+                                        Title = "Select Yamaha PortaSound Studio Library Root Folder",
+                                        InitialDirectory = Directory.Exists(AppPaths.BaseMidiDir) ? AppPaths.BaseMidiDir : AppPaths.DefaultBaseMidiDir
+                                    };
+                                    if (dlg.ShowDialog() == true)
+                                    {
+                                        SendToJs("library_folder_selected", new { path = dlg.FolderName });
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    SendToJs("notification", new { message = $"Folder selection error: {ex.Message}" });
+                                }
+                            });
+                        }
+                        break;
+                    case "save_settings":
+                        {
+                            var newRoot = root.TryGetProperty("libraryRoot", out var lrProp) ? lrProp.GetString() : null;
+                            if (!string.IsNullOrWhiteSpace(newRoot))
+                            {
+                                AppPaths.SetCustomLibraryRoot(newRoot.Trim());
+                                AppPaths.EnsureDirectoriesExist();
+                                AppPaths.SyncMirroredDirectories();
+                                SendLibraryUpdate();
+                                SendSysExLibraryUpdate();
+                                SendFmVoiceLibraryUpdate();
+                                SendVectorLibraryUpdate();
+                                SendRecordingsLibraryUpdate();
+                                SendToJs("settings_saved", new
+                                {
+                                    success = true,
+                                    libraryRoot = AppPaths.BaseMidiDir,
+                                    defaultLibraryRoot = AppPaths.DefaultBaseMidiDir,
+                                    isCustom = !string.IsNullOrWhiteSpace(AppSettings.CustomLibraryRoot),
+                                    message = $"Library storage location updated to: {AppPaths.BaseMidiDir}"
+                                });
+                            }
+                        }
+                        break;
+                    case "reset_library_path":
+                        {
+                            AppPaths.SetCustomLibraryRoot(null);
+                            AppPaths.EnsureDirectoriesExist();
+                            AppPaths.SyncMirroredDirectories();
+                            SendLibraryUpdate();
+                            SendSysExLibraryUpdate();
+                            SendFmVoiceLibraryUpdate();
+                            SendVectorLibraryUpdate();
+                            SendRecordingsLibraryUpdate();
+                            SendToJs("settings_saved", new
+                            {
+                                success = true,
+                                libraryRoot = AppPaths.BaseMidiDir,
+                                defaultLibraryRoot = AppPaths.DefaultBaseMidiDir,
+                                isCustom = false,
+                                message = $"Library storage location reset to default: {AppPaths.BaseMidiDir}"
+                            });
+                        }
+                        break;
                     case "audition_vector_chord":
                         {
                             var note = root.TryGetProperty("note", out var nP) ? Math.Clamp(nP.GetInt32(), 24, 108) : 60;
@@ -1172,6 +1264,9 @@ namespace PSS790Player.Bridge
                     defaultBatchTarget = AppPaths.Pss790MidiDir,
                     defaultBatchTarget790 = AppPaths.Pss790MidiDir,
                     defaultBatchTarget680 = AppPaths.Pss680MidiDir,
+                    libraryRoot = AppPaths.BaseMidiDir,
+                    defaultLibraryRoot = AppPaths.DefaultBaseMidiDir,
+                    isCustomLibraryRoot = !string.IsNullOrWhiteSpace(AppSettings.CustomLibraryRoot),
                     midiThru = _recorder.MidiThruEnabled,
                     recorderBpm = _recorder.Bpm,
                     masterTranspose = _options.MasterTranspose,

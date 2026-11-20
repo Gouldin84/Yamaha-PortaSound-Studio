@@ -26,6 +26,9 @@ let state = {
     vectorPresets: [],
     vectorQuadActive: false,
     selectedVectorPresetKey: null,
+    libraryRoot: "",
+    defaultLibraryRoot: "",
+    isCustomLibraryRoot: false,
     // Jukebox & Quick-Pick Tree State
     isSidebarCollapsed: false,
     selectedSongPath: null,
@@ -337,6 +340,11 @@ function handleHostMessage(msg) {
             state.pss680Drums = msg.data.pss680Drums || [];
             state.library = msg.data.library || { gmFiles: [], pssFiles: [], flatFiles: [], hasFiles: false };
             applyActiveModel(state.activeModel, false);
+            if (msg.data.libraryRoot) {
+                state.libraryRoot = msg.data.libraryRoot;
+                state.defaultLibraryRoot = msg.data.defaultLibraryRoot || msg.data.libraryRoot;
+                state.isCustomLibraryRoot = !!msg.data.isCustomLibraryRoot;
+            }
             if (msg.data.recorderBpm) {
                 state.recorderBpm = msg.data.recorderBpm;
                 const bpmIn = document.getElementById("recorderBpmInput");
@@ -695,6 +703,43 @@ function handleHostMessage(msg) {
         case "model_changed":
             if (msg.data && msg.data.model) {
                 applyActiveModel(msg.data.model, false);
+            }
+            break;
+
+        case "settings_data":
+            state.libraryRoot = msg.data.libraryRoot || "";
+            state.defaultLibraryRoot = msg.data.defaultLibraryRoot || "";
+            state.isCustomLibraryRoot = !!msg.data.isCustom;
+            {
+                const inPath = document.getElementById("settingsLibraryRootInput");
+                const bdg = document.getElementById("settingsPathTypeBadge");
+                if (inPath) inPath.value = state.libraryRoot;
+                if (bdg) {
+                    bdg.textContent = state.isCustomLibraryRoot ? "Custom Storage" : "Default Path";
+                    bdg.className = state.isCustomLibraryRoot
+                        ? "px-2 py-0.5 rounded-full text-[9px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800"
+                        : "px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700";
+                }
+            }
+            break;
+
+        case "library_folder_selected":
+            {
+                const inPathSel = document.getElementById("settingsLibraryRootInput");
+                if (inPathSel && msg.data.path) {
+                    inPathSel.value = msg.data.path;
+                }
+            }
+            break;
+
+        case "settings_saved":
+            state.libraryRoot = msg.data.libraryRoot || state.libraryRoot;
+            state.defaultLibraryRoot = msg.data.defaultLibraryRoot || state.defaultLibraryRoot;
+            state.isCustomLibraryRoot = !!msg.data.isCustom;
+            showToast(msg.data.message || "Settings saved successfully");
+            {
+                const modalSet = document.getElementById("settingsModal");
+                if (modalSet) modalSet.classList.add("hidden");
             }
             break;
 
@@ -2678,6 +2723,70 @@ function setupKeyboardShortcuts() {
     });
 }
 
+function applyVectorQuadPreset(presetKey) {
+    if (!state.vectorQuadActive) {
+        sendToHost("set_vector_playback_mode", { enabled: false });
+        return;
+    }
+
+    let vA = 0, vB = 34, vC = 16, vD = 56;
+    if (presetKey && presetKey !== "current" && typeof VECTOR_PRESETS !== "undefined" && VECTOR_PRESETS[presetKey]) {
+        const p = VECTOR_PRESETS[presetKey];
+        vA = p.voiceA;
+        vB = p.voiceB;
+        vC = p.voiceC;
+        vD = p.voiceD;
+        if (p.posX !== undefined && p.posY !== undefined && typeof setVectorPosition === "function") {
+            setVectorPosition(p.posX, p.posY, false);
+        }
+        if (p.orbitMode && p.orbitMode !== "manual") {
+            const selMode = document.getElementById("selVecOrbitMode");
+            if (selMode) selMode.value = p.orbitMode;
+            if (typeof startVectorOrbit === "function") startVectorOrbit();
+        } else {
+            if (typeof stopVectorOrbit === "function") stopVectorOrbit();
+        }
+    } else {
+        // Use current voices in Channels 1-4 if available, or fall back to vectorState
+        vA = (state.channels[0] && state.channels[0].selectedVoice !== null && state.channels[0].selectedVoice !== undefined) ? state.channels[0].selectedVoice : (vectorState.voiceA ?? 0);
+        vB = (state.channels[1] && state.channels[1].selectedVoice !== null && state.channels[1].selectedVoice !== undefined) ? state.channels[1].selectedVoice : (vectorState.voiceB ?? 34);
+        vC = (state.channels[2] && state.channels[2].selectedVoice !== null && state.channels[2].selectedVoice !== undefined) ? state.channels[2].selectedVoice : (vectorState.voiceC ?? 16);
+        vD = (state.channels[3] && state.channels[3].selectedVoice !== null && state.channels[3].selectedVoice !== undefined) ? state.channels[3].selectedVoice : (vectorState.voiceD ?? 56);
+    }
+
+    vectorState.voiceA = vA;
+    vectorState.voiceB = vB;
+    vectorState.voiceC = vC;
+    vectorState.voiceD = vD;
+
+    // Update voice selectors if present in Vector workspace
+    const selA = document.getElementById("vecVoiceA");
+    const selB = document.getElementById("vecVoiceB");
+    const selC = document.getElementById("vecVoiceC");
+    const selD = document.getElementById("vecVoiceD");
+    if (selA) selA.value = vA;
+    if (selB) selB.value = vB;
+    if (selC) selC.value = vC;
+    if (selD) selD.value = vD;
+
+    if (typeof updateVectorVoiceLabels === "function") {
+        updateVectorVoiceLabels();
+    }
+
+    const weights = calculateVectorWeights(vectorState.x, vectorState.y);
+    sendToHost("set_vector_playback_mode", {
+        enabled: true,
+        voiceA: vA,
+        voiceB: vB,
+        voiceC: vC,
+        voiceD: vD,
+        volA: Math.round(weights.wA * 127),
+        volB: Math.round(weights.wB * 127),
+        volC: Math.round(weights.wC * 127),
+        volD: Math.round(weights.wD * 127)
+    });
+}
+
 function renderMixer() {
     clearAllChannelLeds();
     const grid = document.getElementById("mixerGrid");
@@ -2691,12 +2800,19 @@ function renderMixer() {
         if (state.activeModel === "pss790") {
             vecQuadBox.classList.remove("hidden");
             if (selVecPreset && selVecPreset.options.length <= 1) {
-                Object.entries(VECTOR_PRESETS).forEach(([k, p]) => {
-                    const opt = document.createElement("option");
-                    opt.value = k;
-                    opt.textContent = p.name;
-                    selVecPreset.appendChild(opt);
-                });
+                selVecPreset.innerHTML = "";
+                const optCur = document.createElement("option");
+                optCur.value = "current";
+                optCur.textContent = "Current Channel 1-4 Voices";
+                selVecPreset.appendChild(optCur);
+                if (typeof VECTOR_PRESETS !== "undefined") {
+                    Object.entries(VECTOR_PRESETS).forEach(([k, p]) => {
+                        const opt = document.createElement("option");
+                        opt.value = k;
+                        opt.textContent = p.name;
+                        selVecPreset.appendChild(opt);
+                    });
+                }
             }
             if (btnVecQuad) {
                 if (state.vectorQuadActive) {
@@ -2715,7 +2831,7 @@ function renderMixer() {
                 btnVecQuad.onclick = () => {
                     state.vectorQuadActive = !state.vectorQuadActive;
                     if (state.vectorQuadActive && !state.selectedVectorPresetKey) {
-                        state.selectedVectorPresetKey = "aha_take_on_me";
+                        state.selectedVectorPresetKey = "current";
                     }
                     applyVectorQuadPreset(state.vectorQuadActive ? state.selectedVectorPresetKey : null);
                     renderMixer();
@@ -2724,11 +2840,9 @@ function renderMixer() {
 
             if (selVecPreset) {
                 selVecPreset.onchange = (e) => {
-                    if (e.target.value) {
-                        state.selectedVectorPresetKey = e.target.value;
-                        applyVectorQuadPreset(state.selectedVectorPresetKey);
-                        renderMixer();
-                    }
+                    state.selectedVectorPresetKey = e.target.value;
+                    applyVectorQuadPreset(state.selectedVectorPresetKey);
+                    renderMixer();
                 };
             }
         } else {
@@ -6910,6 +7024,12 @@ let vectorState = {
     voiceB: 34,
     voiceC: 16,
     voiceD: 56,
+    channelEffects: {
+        0: { rev: 1, vib: 0 },
+        1: { rev: 1, vib: 0 },
+        2: { rev: 1, vib: 0 },
+        3: { rev: 1, vib: 0 }
+    },
     orbitMode: "manual",
     orbitSpeed: 3.0,
     isOrbiting: false,
@@ -7250,6 +7370,129 @@ const VECTOR_PRESETS = {
         "orbitSpeed": 1.4
     }
 };
+
+const VEC_REV_LABELS = ["OFF", "RM", "HL", "PL"];
+
+function updateVectorVoiceLabels() {
+    const list = (state.pss790Voices && state.pss790Voices.length > 0) ? state.pss790Voices : (state.voices || []);
+    const getVoiceName = (num) => {
+        const found = list.find(v => v.number === num);
+        if (found) {
+            return `${num.toString().padStart(2, '0')}: ${found.name}`;
+        }
+        return `${num.toString().padStart(2, '0')}: VOICE ${num}`;
+    };
+
+    const vA = vectorState.voiceA !== undefined ? vectorState.voiceA : 0;
+    const vB = vectorState.voiceB !== undefined ? vectorState.voiceB : 34;
+    const vC = vectorState.voiceC !== undefined ? vectorState.voiceC : 16;
+    const vD = vectorState.voiceD !== undefined ? vectorState.voiceD : 56;
+
+    const el1 = document.getElementById("meterVecVoice1");
+    const el2 = document.getElementById("meterVecVoice2");
+    const el3 = document.getElementById("meterVecVoice3");
+    const el4 = document.getElementById("meterVecVoice4");
+
+    if (el1) {
+        const txt = getVoiceName(vA);
+        el1.textContent = txt;
+        el1.title = "Voice A (North • Ch 1): " + txt;
+    }
+    if (el2) {
+        const txt = getVoiceName(vB);
+        el2.textContent = txt;
+        el2.title = "Voice B (East • Ch 2): " + txt;
+    }
+    if (el3) {
+        const txt = getVoiceName(vC);
+        el3.textContent = txt;
+        el3.title = "Voice C (South • Ch 3): " + txt;
+    }
+    if (el4) {
+        const txt = getVoiceName(vD);
+        el4.textContent = txt;
+        el4.title = "Voice D (West • Ch 4): " + txt;
+    }
+}
+
+function updateVectorEffectButtons() {
+    if (!vectorState.channelEffects) {
+        vectorState.channelEffects = {
+            0: { rev: 1, vib: 0 },
+            1: { rev: 1, vib: 0 },
+            2: { rev: 1, vib: 0 },
+            3: { rev: 1, vib: 0 }
+        };
+    }
+
+    const colAccents = ["cyan", "emerald", "amber", "rose"];
+
+    for (let ch = 0; ch < 4; ch++) {
+        const eff = vectorState.channelEffects[ch] || { rev: 1, vib: 0 };
+        const btnRev = document.getElementById(`btnVecRev${ch + 1}`);
+        const btnVib = document.getElementById(`btnVecVib${ch + 1}`);
+
+        if (btnRev) {
+            btnRev.textContent = `REV: ${VEC_REV_LABELS[eff.rev] || eff.rev}`;
+            if (eff.rev > 0) {
+                btnRev.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-${colAccents[ch]}-300 border border-${colAccents[ch]}-700/80 transition active:scale-95 cursor-pointer shadow-sm`;
+            } else {
+                btnRev.className = "vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-900/80 hover:bg-slate-800 text-slate-500 border border-slate-800 transition active:scale-95 cursor-pointer opacity-70";
+            }
+        }
+
+        if (btnVib) {
+            btnVib.textContent = eff.vib === 0 ? "VIB: OFF" : `VIB: ${eff.vib}`;
+            if (eff.vib > 0) {
+                btnVib.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-${colAccents[ch]}-300 border border-${colAccents[ch]}-700/80 transition active:scale-95 cursor-pointer shadow-sm`;
+            } else {
+                btnVib.className = "vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-900/80 hover:bg-slate-800 text-slate-500 border border-slate-800 transition active:scale-95 cursor-pointer opacity-70";
+            }
+        }
+    }
+}
+
+function cycleVectorReverb(ch) {
+    if (!vectorState.channelEffects) {
+        vectorState.channelEffects = {
+            0: { rev: 1, vib: 0 },
+            1: { rev: 1, vib: 0 },
+            2: { rev: 1, vib: 0 },
+            3: { rev: 1, vib: 0 }
+        };
+    }
+    const current = vectorState.channelEffects[ch]?.rev ?? 1;
+    const next = (current + 1) % 4; // 0, 1, 2, 3 -> 0
+    vectorState.channelEffects[ch].rev = next;
+
+    sendToHost("set_vector_channel_effect", {
+        channel: ch,
+        reverb: next
+    });
+
+    updateVectorEffectButtons();
+}
+
+function cycleVectorVibrato(ch) {
+    if (!vectorState.channelEffects) {
+        vectorState.channelEffects = {
+            0: { rev: 1, vib: 0 },
+            1: { rev: 1, vib: 0 },
+            2: { rev: 1, vib: 0 },
+            3: { rev: 1, vib: 0 }
+        };
+    }
+    const current = vectorState.channelEffects[ch]?.vib ?? 0;
+    const next = (current + 1) % 8; // 0, 1, ..., 7 -> 0
+    vectorState.channelEffects[ch].vib = next;
+
+    sendToHost("set_vector_channel_effect", {
+        channel: ch,
+        vibrato: next
+    });
+
+    updateVectorEffectButtons();
+}
 
 function calculateVectorWeights(x, y) {
     const rawA = Math.max(0, y);
@@ -7746,6 +7989,8 @@ function initVectorVoiceDropdowns() {
             select.value = defaults[idx] !== undefined ? defaults[idx] : 0;
         }
     });
+
+    updateVectorVoiceLabels();
 }
 
 function onVectorVoiceChanged() {
@@ -7757,6 +8002,7 @@ function onVectorVoiceChanged() {
     vectorState.voiceB = vB;
     vectorState.voiceC = vC;
     vectorState.voiceD = vD;
+    updateVectorVoiceLabels();
     sendToHost("set_vector_voices", { voiceA: vA, voiceB: vB, voiceC: vC, voiceD: vD });
 }
 
@@ -7791,6 +8037,24 @@ function updateVectorPresetUI(preset) {
         const sel = document.getElementById("vecVoiceD");
         if (sel) sel.value = preset.voiceD;
         vectorState.voiceD = preset.voiceD;
+    }
+
+    updateVectorVoiceLabels();
+
+    if (preset.channelEffects || preset.effects) {
+        const effs = preset.channelEffects || preset.effects;
+        vectorState.channelEffects = JSON.parse(JSON.stringify(effs));
+        for (let ch = 0; ch < 4; ch++) {
+            const eff = vectorState.channelEffects[ch];
+            if (eff) {
+                sendToHost("set_vector_channel_effect", {
+                    channel: ch,
+                    reverb: eff.rev,
+                    vibrato: eff.vib
+                });
+            }
+        }
+        updateVectorEffectButtons();
     }
 
     sendToHost("set_vector_voices", {
@@ -7950,6 +8214,18 @@ function initVectorSynthesizer() {
         });
     }
 
+    // Per-channel Reverb & Vibrato buttons
+    for (let ch = 0; ch < 4; ch++) {
+        const revBtn = document.getElementById(`btnVecRev${ch + 1}`);
+        const vibBtn = document.getElementById(`btnVecVib${ch + 1}`);
+        if (revBtn) {
+            revBtn.addEventListener("click", () => cycleVectorReverb(ch));
+        }
+        if (vibBtn) {
+            vibBtn.addEventListener("click", () => cycleVectorVibrato(ch));
+        }
+    }
+
     const btnSave = document.getElementById("btnVecSave");
     if (btnSave) {
         btnSave.addEventListener("click", () => {
@@ -7970,11 +8246,14 @@ function initVectorSynthesizer() {
                 posX: vectorState.x,
                 posY: vectorState.y,
                 orbitMode: orbitMode,
-                orbitSpeed: orbitSpeed
+                orbitSpeed: orbitSpeed,
+                channelEffects: vectorState.channelEffects
             });
         });
     }
 
+    updateVectorVoiceLabels();
+    updateVectorEffectButtons();
     setVectorPosition(0, 0, false);
     renderVectorPresetLibrary();
 }
@@ -8120,6 +8399,72 @@ function initMoreToolsMenu() {
     });
 }
 
+function initSettingsModal() {
+    const modal = document.getElementById("settingsModal");
+    const btnOpen = document.getElementById("btnSettings");
+    const menuItemOpen = document.getElementById("menuItemSettings");
+    const btnClose = document.getElementById("btnCloseSettingsModal");
+    const btnCancel = document.getElementById("btnCancelSettingsModal");
+    const btnBrowse = document.getElementById("btnSettingsBrowseFolder");
+    const btnReset = document.getElementById("btnSettingsResetDefault");
+    const btnSave = document.getElementById("btnSaveSettingsModal");
+    const inPath = document.getElementById("settingsLibraryRootInput");
+    const statusText = document.getElementById("settingsStatusText");
+
+    function openModal() {
+        if (!modal) return;
+        modal.classList.remove("hidden");
+        if (inPath) inPath.value = state.libraryRoot || state.defaultLibraryRoot || "";
+        if (statusText) statusText.textContent = "";
+        sendToHost("get_settings");
+    }
+
+    function closeModal() {
+        if (!modal) return;
+        modal.classList.add("hidden");
+    }
+
+    if (btnOpen) btnOpen.addEventListener("click", openModal);
+    if (menuItemOpen) {
+        menuItemOpen.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openModal();
+        });
+    }
+    if (btnClose) btnClose.addEventListener("click", closeModal);
+    if (btnCancel) btnCancel.addEventListener("click", closeModal);
+
+    if (btnBrowse) {
+        btnBrowse.addEventListener("click", () => {
+            sendToHost("browse_library_folder");
+        });
+    }
+
+    if (btnReset) {
+        btnReset.addEventListener("click", () => {
+            if (confirm("Reset library storage location back to default (%USERPROFILE%\\Music\\Midi)?")) {
+                sendToHost("reset_library_path");
+            }
+        });
+    }
+
+    if (btnSave) {
+        btnSave.addEventListener("click", () => {
+            const pathVal = inPath ? inPath.value.trim() : "";
+            if (!pathVal) {
+                if (statusText) statusText.textContent = "Please specify a folder path or click Reset to Default.";
+                return;
+            }
+            if (statusText) statusText.textContent = "Applying library location...";
+            sendToHost("save_settings", { libraryRoot: pathVal });
+        });
+    }
+
+    modal?.addEventListener("click", (e) => {
+        if (e.target === modal) closeModal();
+    });
+}
+
 // Trigger initial handshake and keyboard shortcuts
 function startApp() {
     initTheme();
@@ -8130,6 +8475,7 @@ function startApp() {
     renderRecordingsLibrary();
     initModelSelector();
     initMoreToolsMenu();
+    initSettingsModal();
     initHandheldMode();
 
     // Sound Designer & SysEx Workstation initializers

@@ -6,10 +6,28 @@ namespace PSS790Player.Core
 {
     public static class AppPaths
     {
-        public static string BaseMidiDir => Path.Combine(
+        public static string DefaultBaseMidiDir => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
             "Midi"
         );
+
+        public static string BaseMidiDir
+        {
+            get
+            {
+                var custom = AppSettings.CustomLibraryRoot;
+                if (!string.IsNullOrWhiteSpace(custom))
+                {
+                    return custom;
+                }
+                return DefaultBaseMidiDir;
+            }
+        }
+
+        public static void SetCustomLibraryRoot(string? path)
+        {
+            AppSettings.CustomLibraryRoot = path;
+        }
 
         public static string GmMidiDir => Path.Combine(BaseMidiDir, "GM Midi");
         public static string Pss790MidiDir => Path.Combine(BaseMidiDir, "PSS-790 Midi");

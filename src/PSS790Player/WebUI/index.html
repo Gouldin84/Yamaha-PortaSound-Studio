@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.6.5">
+    <link rel="stylesheet" href="styles.css?v=2.6.6">
     <script>
         tailwind.config = {
             theme: {
@@ -211,6 +211,12 @@
                 <span>About</span>
             </button>
 
+            <!-- Studio Settings Button -->
+            <button id="btnSettings" title="Studio Settings: Configure custom library storage folder (local drive, mapped drive, or SMB network share)" class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
+                <span class="text-xs">⚙️</span>
+                <span>Settings</span>
+            </button>
+
             <!-- More Studio Tools Dropdown (Visible on handheld & compact screens < 1536px) -->
             <div class="relative shrink-0 2xl:hidden" id="moreToolsContainer">
                 <button id="btnMoreTools" type="button" aria-haspopup="true" aria-expanded="false" title="More Tools &amp; Options: Open MIDI Folder, Batch Remapper, Shortcuts Guide, and About" class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 cursor-pointer">
@@ -250,6 +256,11 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                         </svg>
                         <span>About &amp; Legal Notices</span>
+                    </button>
+
+                    <button type="button" id="menuItemSettings" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition-all text-left cursor-pointer">
+                        <span class="text-xs shrink-0">⚙️</span>
+                        <span>Library Storage Settings</span>
                     </button>
                 </div>
             </div>
@@ -1572,11 +1583,97 @@
                         <p class="text-[10px] text-slate-500 text-center shrink-0">Click and drag inside the circular touchpad or double-click to center. Clamped to a physical 360° circular gimbal.</p>
                     </div>
 
-                    <!-- Column 3 (Far Right): LFO Orbit Engine & 4-Channel Volume Balance -->
+                    <!-- Column 3 (Far Right): 4-Channel Volume Balance & LFO Orbit Engine -->
                     <div id="vecToolsDeck" class="w-full xl:w-80 2xl:w-96 shrink-0 flex flex-col space-y-3 h-full overflow-y-auto custom-scrollbar pr-0.5">
                         
-                        <!-- Section A: LFO Motion Orbit Engine -->
-                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2.5">
+                        <!-- Section A (Top): 4-Channel Live Volume Ladders & Voice Effects -->
+                        <div id="vecVolumeBalanceDeck" class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2.5 shrink-0">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                <span class="text-xs font-bold text-slate-200">Vector Volume Balance</span>
+                                <span class="text-[9px] font-mono text-cyan-400">CC 7 Volume (0-127)</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-[10px]">
+                                <!-- Voice A / CH 1 -->
+                                <div class="space-y-1 flex flex-col items-center">
+                                    <div id="meterVecVoice1" class="text-[9px] font-bold text-cyan-400 truncate max-w-[68px] text-center" title="Voice A Assigned Preset">00: PIANO 1</div>
+                                    <div class="text-[10px] font-mono font-bold text-cyan-300">
+                                        <span id="meterVecVal1">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh1" class="w-full bg-cyan-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
+                                        <span id="meterVecCc1" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                    <!-- Per-Channel Effects (Reverb & Vibrato) -->
+                                    <div class="w-full space-y-1 pt-1 border-t border-slate-800">
+                                        <button type="button" id="btnVecRev1" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-800/60 transition active:scale-95 cursor-pointer" title="Voice A Reverb: Cycles 0 (Off), 1 (Room), 2 (Hall), 3 (Plate)">REV: 1</button>
+                                        <button type="button" id="btnVecVib1" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition active:scale-95 cursor-pointer" title="Voice A Vibrato Depth: Cycles 0 (Off) to 7 (Deep)">VIB: 0</button>
+                                    </div>
+                                </div>
+
+                                <!-- Voice B / CH 2 -->
+                                <div class="space-y-1 flex flex-col items-center">
+                                    <div id="meterVecVoice2" class="text-[9px] font-bold text-emerald-400 truncate max-w-[68px] text-center" title="Voice B Assigned Preset">34: STRINGS 1</div>
+                                    <div class="text-[10px] font-mono font-bold text-emerald-300">
+                                        <span id="meterVecVal2">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh2" class="w-full bg-emerald-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
+                                        <span id="meterVecCc2" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                    <div class="w-full space-y-1 pt-1 border-t border-slate-800">
+                                        <button type="button" id="btnVecRev2" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-800/60 transition active:scale-95 cursor-pointer" title="Voice B Reverb: Cycles 0 (Off), 1 (Room), 2 (Hall), 3 (Plate)">REV: 1</button>
+                                        <button type="button" id="btnVecVib2" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition active:scale-95 cursor-pointer" title="Voice B Vibrato Depth: Cycles 0 (Off) to 7 (Deep)">VIB: 0</button>
+                                    </div>
+                                </div>
+
+                                <!-- Voice C / CH 3 -->
+                                <div class="space-y-1 flex flex-col items-center">
+                                    <div id="meterVecVoice3" class="text-[9px] font-bold text-amber-400 truncate max-w-[68px] text-center" title="Voice C Assigned Preset">16: SLAP BASS 1</div>
+                                    <div class="text-[10px] font-mono font-bold text-amber-300">
+                                        <span id="meterVecVal3">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh3" class="w-full bg-amber-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
+                                        <span id="meterVecCc3" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                    <div class="w-full space-y-1 pt-1 border-t border-slate-800">
+                                        <button type="button" id="btnVecRev3" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-800/60 transition active:scale-95 cursor-pointer" title="Voice C Reverb: Cycles 0 (Off), 1 (Room), 2 (Hall), 3 (Plate)">REV: 1</button>
+                                        <button type="button" id="btnVecVib3" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition active:scale-95 cursor-pointer" title="Voice C Vibrato Depth: Cycles 0 (Off) to 7 (Deep)">VIB: 0</button>
+                                    </div>
+                                </div>
+
+                                <!-- Voice D / CH 4 -->
+                                <div class="space-y-1 flex flex-col items-center">
+                                    <div id="meterVecVoice4" class="text-[9px] font-bold text-rose-400 truncate max-w-[68px] text-center" title="Voice D Assigned Preset">56: SYNTH LEAD</div>
+                                    <div class="text-[10px] font-mono font-bold text-rose-300">
+                                        <span id="meterVecVal4">25%</span>
+                                    </div>
+                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh4" class="w-full bg-rose-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
+                                        <span id="meterVecCc4" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                    <div class="w-full space-y-1 pt-1 border-t border-slate-800">
+                                        <button type="button" id="btnVecRev4" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-rose-300 border border-rose-800/60 transition active:scale-95 cursor-pointer" title="Voice D Reverb: Cycles 0 (Off), 1 (Room), 2 (Hall), 3 (Plate)">REV: 1</button>
+                                        <button type="button" id="btnVecVib4" class="vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition active:scale-95 cursor-pointer" title="Voice D Vibrato Depth: Cycles 0 (Off) to 7 (Deep)">VIB: 0</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Section B (Bottom): LFO Motion Orbit Engine -->
+                        <div id="vecOrbitDeck" class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2.5">
                             <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
                                 <span class="text-xs font-bold text-slate-200">LFO Motion Orbit Engine</span>
                                 <span id="vecOrbitStatusBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Manual</span>
@@ -1611,64 +1708,6 @@
                                 <span id="vecOrbitBtnIcon">▶</span>
                                 <span id="vecOrbitBtnLabel">Start Vector Orbit</span>
                             </button>
-                        </div>
-
-                        <!-- Section B: 4-Channel Live Volume Ladders -->
-                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2 flex-1 flex flex-col justify-between">
-                            <div class="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
-                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vector Volume Balance</span>
-                                <span class="text-[9px] font-mono text-cyan-400">CC 7 Volume (0-127)</span>
-                            </div>
-                            <div class="grid grid-cols-4 gap-2 text-center text-[10px] my-auto">
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-cyan-300">
-                                        <span id="meterVecVal1">25%</span>
-                                    </div>
-                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh1" class="w-full bg-cyan-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
-                                        <span id="meterVecCc1" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-emerald-300">
-                                        <span id="meterVecVal2">25%</span>
-                                    </div>
-                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh2" class="w-full bg-emerald-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
-                                        <span id="meterVecCc2" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-amber-300">
-                                        <span id="meterVecVal3">25%</span>
-                                    </div>
-                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh3" class="w-full bg-amber-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
-                                        <span id="meterVecCc3" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-rose-300">
-                                        <span id="meterVecVal4">25%</span>
-                                    </div>
-                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh4" class="w-full bg-rose-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
-                                        <span id="meterVecCc4" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
 
                     </div>
@@ -2513,7 +2552,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.5</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.6</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2652,6 +2691,94 @@
         </div>
     </div>
 
+    <!-- Studio Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden p-3">
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div class="flex items-center space-x-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-sm">
+                        ⚙️
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Studio Settings</h3>
+                        <p class="text-[11px] text-slate-400">Library Storage Location &amp; System Configuration</p>
+                    </div>
+                </div>
+                <button id="btnCloseSettingsModal" title="Close Settings" class="text-slate-400 hover:text-white transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+                <!-- Library Root Setting Card -->
+                <div class="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-bold text-white flex items-center space-x-1.5">
+                            <span>📁</span>
+                            <span>Library Storage Root</span>
+                        </label>
+                        <span id="settingsPathTypeBadge" class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Default Path</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-relaxed">
+                        Specify where your MIDI library, SysEx vaults, and recordings are stored. Supports local folders, mapped drives (e.g. <code class="text-cyan-300">Z:\Midi</code>), and network SMB shares (<code class="text-cyan-300">\\NAS\Music\Midi</code>).
+                    </p>
+
+                    <!-- Path Input with Browse Button -->
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="settingsLibraryRootInput" placeholder="C:\Users\...\Music\Midi" title="Full directory path for library root" class="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition">
+                        <button type="button" id="btnSettingsBrowseFolder" title="Browse for folder using Windows Explorer" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white border border-slate-700 transition active:scale-95 shrink-0 flex items-center space-x-1.5">
+                            <span>📂</span>
+                            <span>Browse...</span>
+                        </button>
+                    </div>
+
+                    <!-- Reset to Default Button -->
+                    <div class="flex items-center justify-between pt-1">
+                        <button type="button" id="btnSettingsResetDefault" title="Reset library location back to Windows Music\Midi" class="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium cursor-pointer">
+                            ↺ Reset to Default (%USERPROFILE%\Music\Midi)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Subfolder Structure Preview -->
+                <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 space-y-2">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Managed Directory Structure</span>
+                    <div class="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                        <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800/60 text-slate-300">
+                            <span class="text-emerald-400 font-bold block">/GM Midi</span>
+                            <span class="text-slate-500 text-[9px]">Original GM source files</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800/60 text-slate-300">
+                            <span class="text-cyan-400 font-bold block">/PSS-790 Midi</span>
+                            <span class="text-slate-500 text-[9px]">AWM optimized playback</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800/60 text-slate-300">
+                            <span class="text-amber-400 font-bold block">/PSS-680 Midi</span>
+                            <span class="text-slate-500 text-[9px]">2-Op FM remapped files</span>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800/60 text-slate-300">
+                            <span class="text-indigo-400 font-bold block">/SysEx Library</span>
+                            <span class="text-slate-500 text-[9px]">FM patches &amp; Vector presets</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between border-t border-slate-800 pt-3 shrink-0">
+                <span id="settingsStatusText" class="text-[11px] text-slate-400"></span>
+                <div class="flex items-center space-x-2">
+                    <button type="button" id="btnCancelSettingsModal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 transition">Cancel</button>
+                    <button type="button" id="btnSaveSettingsModal" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-xs font-bold text-white shadow-lg shadow-cyan-500/20 transition active:scale-95">Save &amp; Apply</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="notificationToast" class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl bg-slate-900 border border-cyan-500/40 text-xs text-white shadow-2xl flex items-center space-x-2 transform translate-y-20 opacity-0 transition-all duration-300">
         <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
@@ -2659,6 +2786,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.6.5"></script>
+    <script src="app.js?v=2.6.6"></script>
 </body>
 </html>

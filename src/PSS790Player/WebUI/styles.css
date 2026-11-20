@@ -1207,3 +1207,24 @@ body.handheld-touch-mode .btn-song-play {
     font-size: 0.85rem !important;
 }
 
+/* Vector Synthesizer Per-Channel Effect Buttons (Reverb & Vibrato) */
+.vec-effect-btn {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+body:not(.theme-light) .vec-effect-btn {
+    background-color: #121e36;
+}
+body:not(.theme-light) .vec-effect-btn:hover {
+    background-color: #1a2947;
+}
+body.theme-light .vec-effect-btn {
+    background-color: #ffffff !important;
+    color: #1e293b !important;
+    border-color: #cbd5e1 !important;
+}
+body.theme-light .vec-effect-btn:hover {
+    background-color: #f1f5f9 !important;
+    border-color: #94a3b8 !important;
+}
+
