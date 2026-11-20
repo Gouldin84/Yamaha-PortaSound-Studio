@@ -2233,6 +2233,34 @@ function initHandheldMode() {
     updateAutoAdvanceUi();
 }
 
+function collapseCurrentFolder() {
+    if (!state.selectedSongPath) return;
+    const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
+    if (!song || !song.subFolder) return;
+    const is680 = state.activeModel === "pss680";
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const folderKey = `${catKey}:${song.subFolder}`;
+    if (state.expandedFolders && state.expandedFolders.has(folderKey)) {
+        state.expandedFolders.delete(folderKey);
+        saveExpandedFolders();
+        renderLibraryTree();
+    }
+}
+
+function expandCurrentFolder() {
+    if (!state.selectedSongPath) return;
+    const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
+    if (!song || !song.subFolder) return;
+    const is680 = state.activeModel === "pss680";
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const folderKey = `${catKey}:${song.subFolder}`;
+    if (state.expandedFolders && !state.expandedFolders.has(folderKey)) {
+        state.expandedFolders.add(folderKey);
+        saveExpandedFolders();
+        renderLibraryTree();
+    }
+}
+
 function setupKeyboardShortcuts() {
     window.addEventListener("keydown", (e) => {
         const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
@@ -2438,14 +2466,40 @@ function setupKeyboardShortcuts() {
                 }
                 break;
 
-            case "ArrowLeft": // Seek backward 5s
+            case "n":
+            case "N": // Skip to Next Track
                 e.preventDefault();
-                sendToHost("seek", { seconds: Math.max(0, state.currentSeconds - 5) });
+                playNextSong();
                 break;
 
-            case "ArrowRight": // Seek forward 5s
+            case "p":
+            case "P": // Skip to Previous Track
                 e.preventDefault();
-                sendToHost("seek", { seconds: Math.min(state.durationSeconds, state.currentSeconds + 5) });
+                playPrevSong();
+                break;
+
+            case "t":
+            case "T": // Toggle Handheld Touch Mode
+                e.preventDefault();
+                toggleHandheldMode();
+                break;
+
+            case "ArrowLeft": // Seek backward 5s (or collapse folder when stopped)
+                e.preventDefault();
+                if (state.isPlaying && !e.altKey) {
+                    sendToHost("seek", { seconds: Math.max(0, state.currentSeconds - 5) });
+                } else {
+                    collapseCurrentFolder();
+                }
+                break;
+
+            case "ArrowRight": // Seek forward 5s (or expand folder when stopped)
+                e.preventDefault();
+                if (state.isPlaying && !e.altKey) {
+                    sendToHost("seek", { seconds: Math.min(state.durationSeconds, state.currentSeconds + 5) });
+                } else {
+                    expandCurrentFolder();
+                }
                 break;
         }
     });

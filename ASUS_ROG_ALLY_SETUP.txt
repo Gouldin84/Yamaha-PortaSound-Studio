@@ -34,11 +34,24 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-TOUCHSCREEN & HANDHELD NAVIGATION (v2.5.3)
+ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.5.4)
 ------------------------------------------------------------------------
-Yamaha PortaSound Studio is built for high-refresh handhelds like the
-Asus ROG Ally Z1 Extreme (7-inch 120Hz display):
+Yamaha PortaSound Studio works natively with the Asus ROG Ally Z1 Extreme
+when left in default "Auto Mode" (or "Desktop Mode"):
 
+- D-Pad / Left Stick: Step up/down cleanly through the song library.
+- D-Pad Left / Right: Instant folder collapse / expand (or seek when playing).
+- Button A (South): Play selected song (or left-click under cursor).
+- Button B (East): Stop playback / Dismiss open dialogs.
+- Right Stick: Smooth mouse cursor movement across the interface.
+- Right Bumper / Trigger: Left mouse click anywhere on screen.
+- Left Bumper / Trigger: Right click (opens song & folder context menu).
+- Button T (or Tap 🖐️): Toggle Handheld Touch Mode (42px enlarged targets).
+- Button N / P: Quick skip to Next / Previous track.
+- Button Space / Esc: Play/Pause and Emergency Hardware Stop.
+
+TOUCHSCREEN FEATURES FOR ASUS ROG ALLY
+------------------------------------------------------------------------
 - Clean Song Library: Instant tap to select, double-tap to play cleanly
   from 00:00 without intrusive popups or tooltips blocking your view.
 - Handheld Touch Mode: Tap the 🖐️ Touch button in the header to enlarge
@@ -49,8 +62,6 @@ Asus ROG Ally Z1 Extreme (7-inch 120Hz display):
 - Multi-Select: Tap checkboxes in select mode for batch moving and management.
 - Docked Batch Bar: [Move] and [Delete] remain docked at bottom of sidebar.
 - 120Hz Kinetic Scrolling: Native buttery-smooth touch flicking and scrolling.
-- Keyboard / Desktop Hotkeys: Full support for Space (Play/Pause), Esc (Stop),
-  Up/Down (Navigate list), Enter (Play), L (Loop), and [ / ] (Transpose).
 
 Enjoy making music with your Yamaha PortaSound PSS-790 and PSS-680!
 GitHub: https://github.com/Gouldin84/Yamaha-PortaSound-Studio

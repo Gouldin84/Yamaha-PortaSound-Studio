@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.5.3">
+    <link rel="stylesheet" href="styles.css?v=2.5.4">
     <script>
         tailwind.config = {
             theme: {
@@ -2263,6 +2263,43 @@
 
             <!-- Shortcuts Content -->
             <div class="space-y-4 text-xs text-slate-300 overflow-y-auto custom-scrollbar pr-1 flex-1">
+                <!-- Asus ROG Ally Handheld Guide (Desktop Mode) -->
+                <div class="space-y-2 p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center space-x-1.5">
+                            <span>🎮</span>
+                            <span>Asus ROG Ally (Auto / Desktop Mode)</span>
+                        </h4>
+                        <span class="text-[10px] text-emerald-400 font-mono bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/60">Plug &amp; Play • Zero Lag</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[11px]">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Navigate Songs</span>
+                            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300 font-bold">D-Pad / Left Stick</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Collapse / Expand Folder</span>
+                            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300 font-bold">D-Pad ◄ / ►</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Play Selected Song</span>
+                            <span class="w-5 h-5 rounded-full bg-emerald-900/80 border border-emerald-500 text-emerald-300 flex items-center justify-center font-bold text-[10px]">A</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Stop / Panic / Close</span>
+                            <span class="w-5 h-5 rounded-full bg-rose-900/80 border border-rose-500 text-rose-300 flex items-center justify-center font-bold text-[10px]">B</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Smooth Mouse &amp; Click</span>
+                            <span class="px-2 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300 font-bold">R-Stick + RB / RT</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-950/70 border border-slate-800">
+                            <span>Touch Mode / Large Hits</span>
+                            <span class="w-5 h-5 rounded-full bg-amber-900/80 border border-amber-500 text-amber-300 flex items-center justify-center font-bold text-[10px]">T</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Keyboard Transport & Playback -->
                 <div class="space-y-1.5">
                     <h4 class="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Transport &amp; Playback (Keyboard)</h4>
@@ -2276,7 +2313,11 @@
                             <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-rose-300">Esc</kbd>
                         </div>
                         <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                            <span>Seek -5s / +5s</span>
+                            <span>Seek -5s / +5s (When Playing)</span>
+                            <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300">← / →</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                            <span>Collapse / Expand Folder</span>
                             <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300">← / →</kbd>
                         </div>
                         <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
@@ -2288,8 +2329,12 @@
                             <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300">[ / ]</kbd>
                         </div>
                         <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                            <span>Prev / Next Song</span>
-                            <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300">J / K</kbd>
+                            <span>Skip Prev / Next Song</span>
+                            <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-cyan-300">P / N (or J/K)</kbd>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                            <span>Toggle Handheld Touch Targets</span>
+                            <kbd class="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-[10px] text-amber-300">T</kbd>
                         </div>
                     </div>
                 </div>
@@ -2361,7 +2406,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.5.3</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.5.4</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2507,6 +2552,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.5.3"></script>
+    <script src="app.js?v=2.5.4"></script>
 </body>
 </html>
