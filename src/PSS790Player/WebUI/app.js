@@ -2048,22 +2048,18 @@ function createSongItemElement(file) {
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
 
-        if (state.isPlaying) {
-            // When already playing, clicking another song switches to it and plays immediately from 00:00!
-            if (file.fullPath !== state.currentFilePath) {
-                sendToHost("load_midi_and_play", { path: file.fullPath });
-            }
-        } else {
-            // Idle/stopped: load metadata onto player deck ready to play
-            sendToHost("load_midi_metadata", { path: file.fullPath });
-        }
+        // Mouse clicks (and ROG Ally RB shoulder clicks) ONLY stage/load the song into the player deck.
+        // They NEVER auto-play; playback begins strictly when the user clicks Play, or presses Button A / Enter / Space.
+        sendToHost("load_file", { path: file.fullPath, autoPlay: false });
     });
 
     div.addEventListener("dblclick", (e) => {
         if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
+        e.preventDefault();
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
-        sendToHost("load_midi_and_play", { path: file.fullPath });
+        // Double-click also strictly loads without starting playback.
+        sendToHost("load_file", { path: file.fullPath, autoPlay: false });
     });
 
     div.addEventListener("contextmenu", (e) => {

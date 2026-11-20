@@ -342,8 +342,8 @@ namespace PSS790Player.Bridge
                                 break;
                             }
 
-                            bool shouldPlay = _player.IsPlaying;
-                            LoadFile(path, autoPlay: shouldPlay);
+                            bool autoPlay = root.TryGetProperty("autoPlay", out var ap) && ap.GetBoolean();
+                            LoadFile(path, autoPlay: autoPlay);
                         }
                         break;
                     case "load_midi_metadata":
