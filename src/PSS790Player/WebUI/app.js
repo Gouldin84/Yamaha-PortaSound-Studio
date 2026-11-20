@@ -6538,6 +6538,52 @@ function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColo
     const p3 = { x: p2.x + d2Width, y: d2Y };
     const p4 = { x: Math.min(xEnd, p3.x + rrWidth), y: yZero };
 
+    // Compute dynamic, non-overlapping label centers for the 4 stages
+    const lbl0 = `ATTACK (${normAr})`;
+    const lbl1 = `D1R:${normD1r} • L:${normD1l}`;
+    const lbl2 = `D2R:${normD2r}`;
+    const lbl3 = `RELEASE (${normRr})`;
+
+    // Monospace 8.5px character width estimation ~5.4px per char + margins
+    const hw0 = Math.round(lbl0.length * 2.7) + 4;
+    const hw1 = Math.round(lbl1.length * 2.7) + 4;
+    const hw2 = Math.round(lbl2.length * 2.7) + 4;
+    const hw3 = Math.round(lbl3.length * 2.7) + 4;
+
+    let x0 = (p0.x + p1.x) / 2;
+    let x1 = (p1.x + p2.x) / 2;
+    let x2 = (p2.x + p3.x) / 2;
+    let x3 = (p3.x + p4.x) / 2;
+
+    const minGap = 10;
+
+    // Left-to-right pass: resolve collisions
+    x0 = Math.max(xStart + hw0, x0);
+    if (x1 - hw1 < x0 + hw0 + minGap) {
+        x1 = x0 + hw0 + minGap + hw1;
+    }
+    if (x2 - hw2 < x1 + hw1 + minGap) {
+        x2 = x1 + hw1 + minGap + hw2;
+    }
+    if (x3 - hw3 < x2 + hw2 + minGap) {
+        x3 = x2 + hw2 + minGap + hw3;
+    }
+
+    // Right-to-left boundary clamping (keep within xEnd)
+    if (x3 + hw3 > xEnd) {
+        const overflow = (x3 + hw3) - xEnd;
+        x3 -= overflow;
+        if (x2 + hw2 + minGap > x3 - hw3) {
+            x2 = x3 - hw3 - minGap - hw2;
+        }
+        if (x1 + hw1 + minGap > x2 - hw2) {
+            x1 = x2 - hw2 - minGap - hw1;
+        }
+        if (x0 + hw0 + minGap > x1 - hw1) {
+            x0 = x1 - hw1 - minGap - hw0;
+        }
+    }
+
     const gradId = `${svgId}_grad`;
     const glowId = `${svgId}_glow`;
 
@@ -6593,23 +6639,37 @@ function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColo
         <path d="M ${p0.x} ${p0.y} Q ${p0.x + (p1.x - p0.x)*0.35} ${p0.y} ${p1.x} ${p1.y} Q ${p1.x + (p2.x - p1.x)*0.25} ${p2.y} ${p2.x} ${p2.y} L ${p3.x} ${p3.y} Q ${p3.x + (p4.x - p3.x)*0.3} ${p4.y} ${p4.x} ${p4.y}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
         <!-- Glowing Stage Nodes -->
-        <circle cx="${p1.x}" cy="${p1.y}" r="6" fill="${strokeColor}" fill-opacity="0.25" />
-        <circle cx="${p1.x}" cy="${p1.y}" r="3" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.5" />
+        <g id="${svgId}_node1" class="env-node-visual" data-node="1">
+            <circle cx="${p1.x}" cy="${p1.y}" r="6" fill="${strokeColor}" fill-opacity="0.25" class="env-node-halo" />
+            <circle cx="${p1.x}" cy="${p1.y}" r="3" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.5" />
+        </g>
 
-        <circle cx="${p2.x}" cy="${p2.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" />
-        <circle cx="${p2.x}" cy="${p2.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+        <g id="${svgId}_node2" class="env-node-visual" data-node="2">
+            <circle cx="${p2.x}" cy="${p2.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" class="env-node-halo" />
+            <circle cx="${p2.x}" cy="${p2.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+        </g>
 
-        <circle cx="${p3.x}" cy="${p3.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" />
-        <circle cx="${p3.x}" cy="${p3.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+        <g id="${svgId}_node3" class="env-node-visual" data-node="3">
+            <circle cx="${p3.x}" cy="${p3.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" class="env-node-halo" />
+            <circle cx="${p3.x}" cy="${p3.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+        </g>
 
-        <circle cx="${p4.x}" cy="${p4.y}" r="4" fill="${strokeColor}" fill-opacity="0.2" />
-        <circle cx="${p4.x}" cy="${p4.y}" r="2" fill="${strokeColor}" />
+        <g id="${svgId}_node4" class="env-node-visual" data-node="4">
+            <circle cx="${p4.x}" cy="${p4.y}" r="4" fill="${strokeColor}" fill-opacity="0.2" class="env-node-halo" />
+            <circle cx="${p4.x}" cy="${p4.y}" r="2" fill="${strokeColor}" />
+        </g>
 
-        <!-- Phase Footers with Rates and Stage Markers -->
-        <text x="${(p0.x + p1.x)/2}" y="123" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="bold" font-family="monospace">ATTACK (${normAr})</text>
-        <text x="${(p1.x + p2.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">D1R:${normD1r} • L:${normD1l}</text>
-        <text x="${(p2.x + p3.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">D2R:${normD2r}</text>
-        <text x="${(p3.x + p4.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">RELEASE (${normRr})</text>
+        <!-- Interactive Invisible Hit Targets (28px touch area) -->
+        <circle class="env-handle" data-node="1" cx="${p1.x}" cy="${p1.y}" r="14" fill="transparent" />
+        <circle class="env-handle" data-node="2" cx="${p2.x}" cy="${p2.y}" r="14" fill="transparent" />
+        <circle class="env-handle" data-node="3" cx="${p3.x}" cy="${p3.y}" r="14" fill="transparent" />
+        <circle class="env-handle" data-node="4" cx="${p4.x}" cy="${p4.y}" r="14" fill="transparent" />
+
+        <!-- Phase Footers with Guaranteed Non-Overlapping Coordinates -->
+        <text x="${x0}" y="123" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="bold" font-family="monospace">${lbl0}</text>
+        <text x="${x1}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">${lbl1}</text>
+        <text x="${x2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">${lbl2}</text>
+        <text x="${x3}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">${lbl3}</text>
     `;
 }
 
@@ -6638,6 +6698,137 @@ function updateFmEnvelopes() {
     const carBadge = document.getElementById("fmCarEnvBadge");
     if (carBadge) {
         carBadge.textContent = `A: ${cAr} (${estimateFmStageTime(cAr, true, 63)}) • D1: ${cD1r} • D2: ${cD2r} • R: ${cRr} (${estimateFmStageTime(cRr, false, 15)})`;
+    }
+}
+
+function setupFmEnvelopeDragging(svgId, opPrefix) {
+    const svg = document.getElementById(svgId);
+    if (!svg) return;
+
+    let activeNode = null;
+
+    function getSvgCoordinates(e) {
+        const rect = svg.getBoundingClientRect();
+        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+        const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+        const x = (clientX - rect.left) * (500 / Math.max(1, rect.width));
+        const y = (clientY - rect.top) * (130 / Math.max(1, rect.height));
+        return { x, y };
+    }
+
+    svg.addEventListener("pointerdown", (e) => {
+        const handle = e.target.closest(".env-handle");
+        if (!handle) return;
+        activeNode = parseInt(handle.dataset.node, 10);
+        try {
+            svg.setPointerCapture(e.pointerId);
+        } catch { }
+        e.preventDefault();
+        handlePointer(e);
+    });
+
+    svg.addEventListener("pointermove", (e) => {
+        if (!activeNode) return;
+        e.preventDefault();
+        handlePointer(e);
+    });
+
+    const stopDrag = (e) => {
+        if (!activeNode) return;
+        activeNode = null;
+        try {
+            if (svg.hasPointerCapture(e.pointerId)) {
+                svg.releasePointerCapture(e.pointerId);
+            }
+        } catch { }
+    };
+
+    svg.addEventListener("pointerup", stopDrag);
+    svg.addEventListener("pointercancel", stopDrag);
+
+    function handlePointer(e) {
+        const { x, y } = getSvgCoordinates(e);
+
+        const xStart = 36;
+        const yZero = 108;
+        const yPeak = 16;
+        const height = yZero - yPeak; // 92 px
+
+        const arInput = document.getElementById(`${opPrefix}Ar`);
+        const d1rInput = document.getElementById(`${opPrefix}D1r`);
+        const d1lInput = document.getElementById(`${opPrefix}D1l`);
+        const d2rInput = document.getElementById(`${opPrefix}D2r`);
+        const rrInput = document.getElementById(`${opPrefix}Rr`);
+
+        const curAr = parseInt(arInput?.value || 63, 10);
+        const curD1r = parseInt(d1rInput?.value || 25, 10);
+        const curD2r = parseInt(d2rInput?.value || 0, 10);
+
+        const attWidth = Math.max(16, Math.round(95 * (1 - (curAr / 63)) + 16));
+        const d1Width = Math.max(22, Math.round(105 * (1 - (curD1r / 63)) + 22));
+        const d2Width = Math.max(22, Math.round(105 * (1 - (curD2r / 31)) + 22));
+
+        const p0x = xStart;
+        const p1x = p0x + attWidth;
+        const p2x = p1x + d1Width;
+        const p3x = p2x + d2Width;
+
+        if (activeNode === 1) {
+            // Node 1: Attack Rate (AR 0..63)
+            const targetWidth = Math.max(16, Math.min(111, x - p0x));
+            const newAr = Math.round(63 * (1 - (targetWidth - 16) / 95));
+            const clampedAr = Math.max(0, Math.min(63, newAr));
+            if (arInput) {
+                arInput.value = clampedAr;
+                const valEl = document.getElementById(`${opPrefix}ArVal`);
+                if (valEl) valEl.textContent = clampedAr;
+            }
+        } else if (activeNode === 2) {
+            // Node 2: Decay 1 Rate (horizontal) & Decay 1 Level (vertical)
+            const targetD1Width = Math.max(22, Math.min(127, x - p1x));
+            const newD1r = Math.round(63 * (1 - (targetD1Width - 22) / 105));
+            const clampedD1r = Math.max(0, Math.min(63, newD1r));
+
+            const levelFrac = Math.max(0, Math.min(1, (yZero - y) / height));
+            const newD1l = Math.round(levelFrac * 15);
+            const clampedD1l = Math.max(0, Math.min(15, newD1l));
+
+            if (d1rInput) {
+                d1rInput.value = clampedD1r;
+                const valEl = document.getElementById(`${opPrefix}D1rVal`);
+                if (valEl) valEl.textContent = clampedD1r;
+            }
+            if (d1lInput) {
+                d1lInput.value = clampedD1l;
+                const valEl = document.getElementById(`${opPrefix}D1lVal`);
+                if (valEl) valEl.textContent = clampedD1l;
+            }
+        } else if (activeNode === 3) {
+            // Node 3: Decay 2 Rate (D2R 0..31)
+            const targetD2Width = Math.max(22, Math.min(127, x - p2x));
+            const newD2r = Math.round(31 * (1 - (targetD2Width - 22) / 105));
+            const clampedD2r = Math.max(0, Math.min(31, newD2r));
+
+            if (d2rInput) {
+                d2rInput.value = clampedD2r;
+                const valEl = document.getElementById(`${opPrefix}D2rVal`);
+                if (valEl) valEl.textContent = clampedD2r;
+            }
+        } else if (activeNode === 4) {
+            // Node 4: Release Rate (RR 0..15)
+            const targetRrWidth = Math.max(20, Math.min(115, x - p3x));
+            const newRr = Math.round(15 * (1 - (targetRrWidth - 20) / 95));
+            const clampedRr = Math.max(0, Math.min(15, newRr));
+
+            if (rrInput) {
+                rrInput.value = clampedRr;
+                const valEl = document.getElementById(`${opPrefix}RrVal`);
+                if (valEl) valEl.textContent = clampedRr;
+            }
+        }
+
+        updateFmEnvelopes();
+        sendFmVoiceLiveThrottled();
     }
 }
 
@@ -7009,6 +7200,10 @@ function initFmSynthEditor() {
     if (searchIn) {
         searchIn.addEventListener("input", renderFmVoiceLibrary);
     }
+
+    // Interactive ADSR Draggable Envelopes
+    setupFmEnvelopeDragging("svgFmModEnv", "fmMod");
+    setupFmEnvelopeDragging("svgFmCarEnv", "fmCar");
 
     renderFmVoiceLibrary();
     updateFmEnvelopes();

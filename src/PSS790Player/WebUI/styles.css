@@ -1228,3 +1228,28 @@ body.theme-light .vec-effect-btn:hover {
     border-color: #94a3b8 !important;
 }
 
+/* Interactive FM ADSR Envelope Draggable Nodes */
+.env-handle {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.env-handle[data-node="1"],
+.env-handle[data-node="3"],
+.env-handle[data-node="4"] {
+    cursor: ew-resize;
+}
+.env-handle[data-node="2"] {
+    cursor: move;
+}
+.env-node-halo {
+    transition: r 0.15s ease, fill-opacity 0.15s ease;
+    pointer-events: none;
+}
+.env-handle:hover + .env-node-visual .env-node-halo,
+.env-node-visual:hover .env-node-halo {
+    r: 9;
+    fill-opacity: 0.55;
+}
+
+
