@@ -2849,16 +2849,16 @@ function renderMixer() {
             ` : ''}
 
             <!-- Fader & Controls -->
-            <div class="flex items-center justify-between space-x-1.5 pt-0.5">
-                <div class="flex-1 space-y-0.5">
+            <div class="flex items-center justify-between space-x-2 pt-1">
+                <div class="flex-1 space-y-1">
                     <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800" title="Channel ${ch.channelDisplay} Volume (CC 7): Adjust playback level (0-127)">
-                    <div class="flex justify-between text-[8px] text-slate-500 font-mono">
+                    <div class="flex justify-between text-[8px] text-slate-400 font-mono select-none pt-0.5 px-0.5">
                         <span title="MIDI Channel Volume (CC 7)">VOL</span>
-                        <span id="vol-val-${ch.channel}" title="Current volume level (0-127)">${ch.volume}</span>
+                        <span id="vol-val-${ch.channel}" class="font-bold text-slate-300" title="Current volume level (0-127)">${ch.volume}</span>
                     </div>
                 </div>
 
-                <div class="flex space-x-1">
+                <div class="flex space-x-1 shrink-0">
                     <button id="mute-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${muteClass}" title="Mute Channel ${ch.channelDisplay}: Silence this channel during playback">M</button>
                     <button id="solo-${ch.channel}" class="w-5 h-5 rounded text-[9px] font-bold ${soloClass}" title="Solo Channel ${ch.channelDisplay}: Isolate this channel and silence all other channels">S</button>
                 </div>
@@ -5232,6 +5232,7 @@ function initSysexViewSwitcher() {
         btnDumps.addEventListener("click", () => {
             state.sysexViewMode = "dumps";
             updateSysexDeckVisibility();
+            applyActiveModel(state.activeModel, false);
         });
     }
 }
@@ -6372,14 +6373,26 @@ function setSliderAndVal(sliderId, valId, val, formatter) {
     if (label) label.textContent = formatter ? formatter(val) : val;
 }
 
+function estimateFmStageTime(rate, isAttack = false, maxRate = 63) {
+    const r = Math.min(maxRate, Math.max(0, parseInt(rate, 10) || 0));
+    if (r >= maxRate) return isAttack ? "< 2ms" : "~15ms";
+    if (r <= 0) return isAttack ? "> 10s" : (isAttack ? "> 10s" : "Hold");
+    const fraction = r / maxRate;
+    const ms = Math.round(15 * Math.pow(10, (1 - fraction) * 2.8));
+    if (ms < 1000) return `~${ms}ms`;
+    return `~${(ms / 1000).toFixed(1)}s`;
+}
+
 function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColor) {
     const svg = document.getElementById(svgId);
     if (!svg) return;
 
-    // ViewBox: 0 0 200 60
-    const yZero = 50;
-    const yPeak = 6;
-    const height = yZero - yPeak; // 44 px
+    // High-Resolution ViewBox: 0 0 500 130
+    const xStart = 36;
+    const xEnd = 478;
+    const yZero = 108;
+    const yPeak = 16;
+    const height = yZero - yPeak; // 92 px
 
     const normAr = Math.min(63, Math.max(0, parseInt(ar, 10) || 0));
     const normD1r = Math.min(63, Math.max(0, parseInt(d1r, 10) || 0));
@@ -6387,57 +6400,102 @@ function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColo
     const normD2r = Math.min(31, Math.max(0, parseInt(d2r, 10) || 0));
     const normRr = Math.min(15, Math.max(0, parseInt(rr, 10) || 0));
 
-    // Attack segment width (4px to 45px)
-    const attWidth = Math.max(4, Math.round(45 * (1 - (normAr / 63)) + 4));
+    // Attack segment width (16px to 110px)
+    const attWidth = Math.max(16, Math.round(95 * (1 - (normAr / 63)) + 16));
 
-    // D1 segment width (8px to 50px)
-    const d1Width = Math.max(8, Math.round(50 * (1 - (normD1r / 63)) + 8));
+    // D1 segment width (22px to 120px)
+    const d1Width = Math.max(22, Math.round(105 * (1 - (normD1r / 63)) + 22));
 
-    // D1 level Y: level 15 is peak (yPeak), level 0 is yZero
+    // D1 level Y: level 15 is peak (yPeak, 0dB), level 0 is yZero (-inf dB)
     const d1LevelFraction = normD1l / 15;
     const d1Y = yZero - (d1LevelFraction * height);
 
-    // D2 segment width (8px to 45px)
-    const d2Width = Math.max(8, Math.round(45 * (1 - (normD2r / 31)) + 8));
-    const d2LevelFraction = d1LevelFraction * 0.5;
+    // D2 segment width (22px to 120px)
+    const d2Width = Math.max(22, Math.round(105 * (1 - (normD2r / 31)) + 22));
+    const d2LevelFraction = normD2r > 0 ? (d1LevelFraction * Math.max(0.08, 1 - (normD2r / 31))) : d1LevelFraction;
     const d2Y = yZero - (d2LevelFraction * height);
 
-    // Release segment width (6px to 45px)
-    const rrWidth = Math.max(6, Math.round(45 * (1 - (normRr / 15)) + 6));
+    // Release segment width (20px to 115px)
+    const rrWidth = Math.max(20, Math.round(95 * (1 - (normRr / 15)) + 20));
 
-    const p0 = { x: 8, y: yZero };
+    const p0 = { x: xStart, y: yZero };
     const p1 = { x: p0.x + attWidth, y: yPeak };
     const p2 = { x: p1.x + d1Width, y: d1Y };
     const p3 = { x: p2.x + d2Width, y: d2Y };
-    const p4 = { x: Math.min(192, p3.x + rrWidth), y: yZero };
+    const p4 = { x: Math.min(xEnd, p3.x + rrWidth), y: yZero };
 
     const gradId = `${svgId}_grad`;
+    const glowId = `${svgId}_glow`;
+
     svg.innerHTML = `
         <defs>
             <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
-                <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.4" />
+                <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.45" />
+                <stop offset="50%" stop-color="${strokeColor}" stop-opacity="0.18" />
                 <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.02" />
             </linearGradient>
+            <filter id="${glowId}" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="3.5" result="blur" />
+                <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                </feMerge>
+            </filter>
         </defs>
-        <!-- Grid baseline & guides -->
-        <line x1="8" y1="${yZero}" x2="192" y2="${yZero}" stroke="#334155" stroke-width="1" stroke-dasharray="2,2" />
-        <line x1="8" y1="${yPeak}" x2="192" y2="${yPeak}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,2" />
-        <!-- Key Off vertical marker -->
-        <line x1="${p3.x}" y1="4" x2="${p3.x}" y2="54" stroke="#475569" stroke-width="1" stroke-dasharray="1,2" />
-        <text x="${p3.x + 2}" y="13" fill="#64748b" font-size="7" font-family="monospace">KEY OFF</text>
-        <!-- Area fill under envelope curve -->
-        <path d="M ${p0.x} ${p0.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y} Z" fill="url(#${gradId})" />
-        <!-- Curve stroke -->
-        <path d="M ${p0.x} ${p0.y} L ${p1.x} ${p1.y} L ${p2.x} ${p2.y} L ${p3.x} ${p3.y} L ${p4.x} ${p4.y}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-        <!-- Stage Nodes -->
-        <circle cx="${p1.x}" cy="${p1.y}" r="2" fill="${strokeColor}" />
-        <circle cx="${p2.x}" cy="${p2.y}" r="1.5" fill="${strokeColor}" />
-        <circle cx="${p3.x}" cy="${p3.y}" r="1.5" fill="${strokeColor}" />
-        <!-- Phase Labels -->
-        <text x="${Math.max(10, (p0.x + p1.x)/2 - 3)}" y="48" fill="${strokeColor}" font-size="7" font-weight="bold" font-family="monospace">A</text>
-        <text x="${(p1.x + p2.x)/2 - 4}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">D1</text>
-        <text x="${(p2.x + p3.x)/2 - 4}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">D2</text>
-        <text x="${Math.min(185, (p3.x + p4.x)/2 - 3)}" y="48" fill="#94a3b8" font-size="7" font-family="monospace">R</text>
+
+        <!-- Stage Background Shading Bands -->
+        <rect x="${p0.x}" y="12" width="${p1.x - p0.x}" height="${yZero - 12}" fill="${strokeColor}" fill-opacity="0.04" />
+        <rect x="${p1.x}" y="12" width="${p2.x - p1.x}" height="${yZero - 12}" fill="#ffffff" fill-opacity="0.015" />
+        <rect x="${p2.x}" y="12" width="${p3.x - p2.x}" height="${yZero - 12}" fill="${strokeColor}" fill-opacity="0.03" />
+        <rect x="${p3.x}" y="12" width="${p4.x - p3.x}" height="${yZero - 12}" fill="#ffffff" fill-opacity="0.02" />
+
+        <!-- Amplitude Gridlines & dB Scale -->
+        <line x1="${xStart}" y1="${yPeak}" x2="${xEnd}" y2="${yPeak}" stroke="#334155" stroke-width="1" stroke-dasharray="3,3" />
+        <text x="6" y="${yPeak + 3}" fill="#64748b" font-size="8" font-family="monospace">0dB</text>
+
+        <line x1="${xStart}" y1="${yPeak + 23}" x2="${xEnd}" y2="${yPeak + 23}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3" />
+        <text x="6" y="${yPeak + 26}" fill="#475569" font-size="8" font-family="monospace">-6dB</text>
+
+        <line x1="${xStart}" y1="${yPeak + 46}" x2="${xEnd}" y2="${yPeak + 46}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3" />
+        <text x="6" y="${yPeak + 49}" fill="#475569" font-size="8" font-family="monospace">-12dB</text>
+
+        <line x1="${xStart}" y1="${yPeak + 69}" x2="${xEnd}" y2="${yPeak + 69}" stroke="#1e293b" stroke-width="1" stroke-dasharray="2,3" />
+        <text x="6" y="${yPeak + 72}" fill="#475569" font-size="8" font-family="monospace">-24dB</text>
+
+        <line x1="${xStart}" y1="${yZero}" x2="${xEnd}" y2="${yZero}" stroke="#334155" stroke-width="1.2" />
+        <text x="6" y="${yZero + 3}" fill="#64748b" font-size="8" font-family="monospace">-∞</text>
+
+        <!-- Key Off Gate End Vertical Line -->
+        <line x1="${p3.x}" y1="12" x2="${p3.x}" y2="${yZero + 5}" stroke="#f43f5e" stroke-width="1.5" stroke-dasharray="3,3" />
+        <text x="${Math.min(400, p3.x + 4)}" y="23" fill="#fb7185" font-size="8.5" font-weight="bold" font-family="monospace">KEY OFF</text>
+
+        <!-- Area fill under envelope curve (smooth bezier) -->
+        <path d="M ${p0.x} ${p0.y} Q ${p0.x + (p1.x - p0.x)*0.35} ${p0.y} ${p1.x} ${p1.y} Q ${p1.x + (p2.x - p1.x)*0.25} ${p2.y} ${p2.x} ${p2.y} L ${p3.x} ${p3.y} Q ${p3.x + (p4.x - p3.x)*0.3} ${p4.y} ${p4.x} ${p4.y} L ${p0.x} ${p0.y} Z" fill="url(#${gradId})" />
+
+        <!-- Neon Curve Stroke (Layer 1: Ambient Glow) -->
+        <path d="M ${p0.x} ${p0.y} Q ${p0.x + (p1.x - p0.x)*0.35} ${p0.y} ${p1.x} ${p1.y} Q ${p1.x + (p2.x - p1.x)*0.25} ${p2.y} ${p2.x} ${p2.y} L ${p3.x} ${p3.y} Q ${p3.x + (p4.x - p3.x)*0.3} ${p4.y} ${p4.x} ${p4.y}" fill="none" stroke="${strokeColor}" stroke-width="4.5" stroke-opacity="0.3" filter="url(#${glowId})" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Crisp Foreground Stroke (Layer 2) -->
+        <path d="M ${p0.x} ${p0.y} Q ${p0.x + (p1.x - p0.x)*0.35} ${p0.y} ${p1.x} ${p1.y} Q ${p1.x + (p2.x - p1.x)*0.25} ${p2.y} ${p2.x} ${p2.y} L ${p3.x} ${p3.y} Q ${p3.x + (p4.x - p3.x)*0.3} ${p4.y} ${p4.x} ${p4.y}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+
+        <!-- Glowing Stage Nodes -->
+        <circle cx="${p1.x}" cy="${p1.y}" r="6" fill="${strokeColor}" fill-opacity="0.25" />
+        <circle cx="${p1.x}" cy="${p1.y}" r="3" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.5" />
+
+        <circle cx="${p2.x}" cy="${p2.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" />
+        <circle cx="${p2.x}" cy="${p2.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+
+        <circle cx="${p3.x}" cy="${p3.y}" r="5" fill="${strokeColor}" fill-opacity="0.2" />
+        <circle cx="${p3.x}" cy="${p3.y}" r="2.5" fill="#ffffff" stroke="${strokeColor}" stroke-width="1.2" />
+
+        <circle cx="${p4.x}" cy="${p4.y}" r="4" fill="${strokeColor}" fill-opacity="0.2" />
+        <circle cx="${p4.x}" cy="${p4.y}" r="2" fill="${strokeColor}" />
+
+        <!-- Phase Footers with Rates and Stage Markers -->
+        <text x="${(p0.x + p1.x)/2}" y="123" text-anchor="middle" fill="${strokeColor}" font-size="8.5" font-weight="bold" font-family="monospace">ATTACK (${normAr})</text>
+        <text x="${(p1.x + p2.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">D1R:${normD1r} • L:${normD1l}</text>
+        <text x="${(p2.x + p3.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">D2R:${normD2r}</text>
+        <text x="${(p3.x + p4.x)/2}" y="123" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="monospace">RELEASE (${normRr})</text>
     `;
 }
 
@@ -6450,6 +6508,11 @@ function updateFmEnvelopes() {
     const mRr = document.getElementById("fmModRr")?.value || 6;
     renderFmEnvelopeSvg("svgFmModEnv", mAr, mD1r, mD1l, mD2r, mRr, "#22d3ee", "#0891b2");
 
+    const modBadge = document.getElementById("fmModEnvBadge");
+    if (modBadge) {
+        modBadge.textContent = `A: ${mAr} (${estimateFmStageTime(mAr, true, 63)}) • D1: ${mD1r} • D2: ${mD2r} • R: ${mRr} (${estimateFmStageTime(mRr, false, 15)})`;
+    }
+
     // Carrier
     const cAr = document.getElementById("fmCarAr")?.value || 63;
     const cD1r = document.getElementById("fmCarD1r")?.value || 20;
@@ -6457,6 +6520,11 @@ function updateFmEnvelopes() {
     const cD2r = document.getElementById("fmCarD2r")?.value || 0;
     const cRr = document.getElementById("fmCarRr")?.value || 6;
     renderFmEnvelopeSvg("svgFmCarEnv", cAr, cD1r, cD1l, cD2r, cRr, "#10b981", "#059669");
+
+    const carBadge = document.getElementById("fmCarEnvBadge");
+    if (carBadge) {
+        carBadge.textContent = `A: ${cAr} (${estimateFmStageTime(cAr, true, 63)}) • D1: ${cD1r} • D2: ${cD2r} • R: ${cRr} (${estimateFmStageTime(cRr, false, 15)})`;
+    }
 }
 
 function updateFmVoiceUI(voice) {
@@ -7214,90 +7282,232 @@ function drawVectorCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const w = canvas.width;
-    const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
-    const scale = w * 0.4;
+    // Use device pixel ratio for razor-sharp rendering on high-DPI / handheld screens
+    const dpr = window.devicePixelRatio || 1;
+    const logicalW = 240;
+    const logicalH = 240;
+    if (canvas.width !== logicalW * dpr || canvas.height !== logicalH * dpr) {
+        canvas.width = logicalW * dpr;
+        canvas.height = logicalH * dpr;
+        canvas.style.width = logicalW + "px";
+        canvas.style.height = logicalH + "px";
+    }
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, logicalW, logicalH);
 
-    // Subtle dark gradient background
-    const bgGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, w * 0.5);
-    bgGrad.addColorStop(0, "rgba(30, 41, 59, 0.6)");
-    bgGrad.addColorStop(1, "rgba(10, 15, 29, 0.95)");
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, w, h);
+    const cx = logicalW / 2;
+    const cy = logicalH / 2;
+    const rActive = 96; // 360° circular boundary radius (fits within 240x240 with margins)
 
-    // Grid circles
-    ctx.strokeStyle = "rgba(71, 85, 105, 0.35)";
-    ctx.lineWidth = 1;
-    [0.25, 0.5, 0.75, 1.0].forEach(r => {
+    // Outer Gimbal Bezel Collar (Metallic machined ring)
+    ctx.beginPath();
+    ctx.arc(cx, cy, rActive + 12, 0, Math.PI * 2);
+    const bezelGrad = ctx.createLinearGradient(cx - rActive, cy - rActive, cx + rActive, cy + rActive);
+    bezelGrad.addColorStop(0, "#334155");
+    bezelGrad.addColorStop(0.5, "#1e293b");
+    bezelGrad.addColorStop(1, "#0f172a");
+    ctx.fillStyle = bezelGrad;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Inner Touchpad Cavity (Deep Midnight Radial Surface)
+    ctx.beginPath();
+    ctx.arc(cx, cy, rActive, 0, Math.PI * 2);
+    const cavityGrad = ctx.createRadialGradient(cx, cy, 6, cx, cy, rActive);
+    cavityGrad.addColorStop(0, "#111c33");
+    cavityGrad.addColorStop(0.7, "#0c1424");
+    cavityGrad.addColorStop(1, "#060a12");
+    ctx.fillStyle = cavityGrad;
+    ctx.fill();
+    ctx.strokeStyle = "rgba(51, 65, 85, 0.8)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Quadrant Ambient Color Glows (A = Cyan, B = Emerald, C = Amber, D = Rose)
+    // North (Voice A - Cyan)
+    const glowA = ctx.createRadialGradient(cx, cy - rActive * 0.7, 4, cx, cy - rActive * 0.7, 50);
+    glowA.addColorStop(0, "rgba(6, 182, 212, 0.22)");
+    glowA.addColorStop(1, "rgba(6, 182, 212, 0)");
+    ctx.fillStyle = glowA;
+    ctx.beginPath();
+    ctx.arc(cx, cy - rActive * 0.7, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // East (Voice B - Emerald)
+    const glowB = ctx.createRadialGradient(cx + rActive * 0.7, cy, 4, cx + rActive * 0.7, cy, 50);
+    glowB.addColorStop(0, "rgba(16, 185, 129, 0.22)");
+    glowB.addColorStop(1, "rgba(16, 185, 129, 0)");
+    ctx.fillStyle = glowB;
+    ctx.beginPath();
+    ctx.arc(cx + rActive * 0.7, cy, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // South (Voice C - Amber)
+    const glowC = ctx.createRadialGradient(cx, cy + rActive * 0.7, 4, cx, cy + rActive * 0.7, 50);
+    glowC.addColorStop(0, "rgba(245, 158, 11, 0.22)");
+    glowC.addColorStop(1, "rgba(245, 158, 11, 0)");
+    ctx.fillStyle = glowC;
+    ctx.beginPath();
+    ctx.arc(cx, cy + rActive * 0.7, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // West (Voice D - Rose)
+    const glowD = ctx.createRadialGradient(cx - rActive * 0.7, cy, 4, cx - rActive * 0.7, cy, 50);
+    glowD.addColorStop(0, "rgba(244, 63, 94, 0.22)");
+    glowD.addColorStop(1, "rgba(244, 63, 94, 0)");
+    ctx.fillStyle = glowD;
+    ctx.beginPath();
+    ctx.arc(cx - rActive * 0.7, cy, 50, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Concentric Target Range Rings (0.25, 0.50, 0.75, 1.00)
+    [0.25, 0.5, 0.75, 1.0].forEach((r, idx) => {
         ctx.beginPath();
-        ctx.arc(cx, cy, scale * r, 0, Math.PI * 2);
+        ctx.arc(cx, cy, rActive * r, 0, Math.PI * 2);
+        ctx.strokeStyle = idx === 3 ? "rgba(99, 102, 241, 0.5)" : "rgba(71, 85, 105, 0.3)";
+        ctx.lineWidth = idx === 3 ? 1.5 : 0.8;
         ctx.stroke();
     });
 
-    // Crosshairs
+    // Radial 360° Degree Ticks around the perimeter
+    for (let deg = 0; deg < 360; deg += 15) {
+        const rad = (deg * Math.PI) / 180;
+        const isMajor = deg % 90 === 0;
+        const isSemi = deg % 45 === 0;
+        const tickLen = isMajor ? 6 : (isSemi ? 4 : 2.5);
+        const r1 = rActive;
+        const r2 = rActive - tickLen;
+        const x1 = cx + Math.cos(rad) * r1;
+        const y1 = cy + Math.sin(rad) * r1;
+        const x2 = cx + Math.cos(rad) * r2;
+        const y2 = cy + Math.sin(rad) * r2;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.strokeStyle = isMajor ? "rgba(226, 232, 240, 0.7)" : (isSemi ? "rgba(148, 163, 184, 0.5)" : "rgba(100, 116, 139, 0.3)");
+        ctx.lineWidth = isMajor ? 1.5 : 1;
+        ctx.stroke();
+    }
+
+    // Reticle Crosshairs with Center Deadband
     ctx.beginPath();
-    ctx.moveTo(cx, cy - scale);
-    ctx.lineTo(cx, cy + scale);
-    ctx.moveTo(cx - scale, cy);
-    ctx.lineTo(cx + scale, cy);
+    // Vertical line
+    ctx.moveTo(cx, cy - rActive);
+    ctx.lineTo(cx, cy - 6);
+    ctx.moveTo(cx, cy + 6);
+    ctx.lineTo(cx, cy + rActive);
+    // Horizontal line
+    ctx.moveTo(cx - rActive, cy);
+    ctx.lineTo(cx - 6, cy);
+    ctx.moveTo(cx + 6, cy);
+    ctx.lineTo(cx + rActive, cy);
+    ctx.strokeStyle = "rgba(71, 85, 105, 0.4)";
+    ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Cardinal Labels
+    // Center Deadband Target Ring (0, 0)
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(148, 163, 184, 0.6)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Cardinal Voice Badges
     ctx.font = "bold 10px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    ctx.fillStyle = "#22d3ee"; // Cyan - Voice A
-    ctx.fillText("A", cx, cy - scale - 8);
+    ctx.fillStyle = "#22d3ee";
+    ctx.fillText("A", cx, cy - rActive - 7);
 
-    ctx.fillStyle = "#34d399"; // Emerald - Voice B
-    ctx.fillText("B", cx + scale + 8, cy);
+    ctx.fillStyle = "#34d399";
+    ctx.fillText("B", cx + rActive + 7, cy);
 
-    ctx.fillStyle = "#fbbf24"; // Amber - Voice C
-    ctx.fillText("C", cx, cy + scale + 8);
+    ctx.fillStyle = "#fbbf24";
+    ctx.fillText("C", cx, cy + rActive + 7);
 
-    ctx.fillStyle = "#fb7185"; // Rose - Voice D
-    ctx.fillText("D", cx - scale - 8, cy);
+    ctx.fillStyle = "#fb7185";
+    ctx.fillText("D", cx - rActive - 7, cy);
 
-    // Puck coordinate
-    const puckX = cx + vectorState.x * scale;
-    const puckY = cy - vectorState.y * scale;
+    // Current Joystick Coordinates Clamped to 360° Circle
+    const puckX = cx + vectorState.x * rActive;
+    const puckY = cy - vectorState.y * rActive;
 
-    // Line from center
+    // Glowing Spring-Tether Line from Center to Puck
     ctx.beginPath();
     ctx.moveTo(cx, cy);
     ctx.lineTo(puckX, puckY);
-    ctx.strokeStyle = "rgba(99, 102, 241, 0.6)";
+    ctx.strokeStyle = "rgba(99, 102, 241, 0.7)";
     ctx.lineWidth = 2;
+    ctx.shadowColor = "#6366f1";
+    ctx.shadowBlur = 6;
     ctx.stroke();
+    ctx.shadowBlur = 0; // Reset shadow
 
-    // Puck outer glow
-    const puckGrad = ctx.createRadialGradient(puckX, puckY, 2, puckX, puckY, 14);
-    puckGrad.addColorStop(0, "rgba(99, 102, 241, 1)");
-    puckGrad.addColorStop(0.5, "rgba(56, 189, 248, 0.7)");
-    puckGrad.addColorStop(1, "rgba(99, 102, 241, 0)");
-    ctx.fillStyle = puckGrad;
+    // Calculate dynamic color blend based on weights for puck glow
+    const weights = calculateVectorWeights(vectorState.x, vectorState.y);
+    const rCol = Math.round(weights.wA * 34 + weights.wB * 52 + weights.wC * 251 + weights.wD * 251);
+    const gCol = Math.round(weights.wA * 211 + weights.wB * 211 + weights.wC * 191 + weights.wD * 113);
+    const bCol = Math.round(weights.wA * 238 + weights.wB * 153 + weights.wC * 36 + weights.wD * 133);
+
+    // Puck Ambient Bloom
+    const puckGlow = ctx.createRadialGradient(puckX, puckY, 2, puckX, puckY, 18);
+    puckGlow.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, 0.9)`);
+    puckGlow.addColorStop(0.5, `rgba(${rCol}, ${gCol}, ${bCol}, 0.35)`);
+    puckGlow.addColorStop(1, `rgba(${rCol}, ${gCol}, ${bCol}, 0)`);
+    ctx.fillStyle = puckGlow;
     ctx.beginPath();
-    ctx.arc(puckX, puckY, 14, 0, Math.PI * 2);
+    ctx.arc(puckX, puckY, 18, 0, Math.PI * 2);
     ctx.fill();
 
-    // Puck center dot
-    ctx.fillStyle = "#ffffff";
+    // Tactile Machined Joystick Puck Body (Dome with Spherical Bevel)
     ctx.beginPath();
-    ctx.arc(puckX, puckY, 4, 0, Math.PI * 2);
+    ctx.arc(puckX, puckY, 10, 0, Math.PI * 2);
+    const knobGrad = ctx.createRadialGradient(puckX - 3, puckY - 3, 1, puckX, puckY, 10);
+    knobGrad.addColorStop(0, "#f8fafc");
+    knobGrad.addColorStop(0.3, "#94a3b8");
+    knobGrad.addColorStop(0.75, "#334155");
+    knobGrad.addColorStop(1, "#0f172a");
+    ctx.fillStyle = knobGrad;
     ctx.fill();
-    ctx.strokeStyle = "#4f46e5";
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 1.2;
     ctx.stroke();
+
+    // Concentric Grip Ridge
+    ctx.beginPath();
+    ctx.arc(puckX, puckY, 6.5, 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Center Illuminated Jewel Bead
+    ctx.beginPath();
+    ctx.arc(puckX, puckY, 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgb(${rCol}, ${gCol}, ${bCol})`;
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    ctx.restore();
 }
 
 function setVectorPosition(x, y, notifyHost = true) {
-    vectorState.x = Math.max(-1.0, Math.min(1.0, x));
-    vectorState.y = Math.max(-1.0, Math.min(1.0, y));
+    // 360° Circular Boundary Clamping (authentic hardware joystick gimbal physics)
+    let dist = Math.sqrt(x * x + y * y);
+    if (dist > 1.0) {
+        x /= dist;
+        y /= dist;
+        dist = 1.0;
+    }
+
+    vectorState.x = x;
+    vectorState.y = y;
 
     const weights = calculateVectorWeights(vectorState.x, vectorState.y);
 
@@ -7348,7 +7558,8 @@ function setVectorPosition(x, y, notifyHost = true) {
     if (cc3) cc3.textContent = "CC " + Math.round(weights.wC * 127);
     if (cc4) cc4.textContent = "CC " + Math.round(weights.wD * 127);
 
-    drawVectorCanvas();
+    // Fluid canvas rendering
+    requestAnimationFrame(drawVectorCanvas);
 
     if (notifyHost) {
         const now = performance.now();
@@ -7379,7 +7590,8 @@ function setupVectorTouchpad() {
         const mouseY = clientY - rect.top;
         const cX = rect.width / 2;
         const cY = rect.height / 2;
-        const scale = rect.width * 0.4;
+        // Radius scale inside active area
+        const scale = (rect.width / 240) * 96;
 
         let x = (mouseX - cX) / scale;
         let y = (cY - mouseY) / scale;
@@ -7616,13 +7828,21 @@ function renderVectorPresetLibrary() {
     const listEl = document.getElementById("vecPresetList");
 
     if (!listEl) return;
-    const presets = state.vectorPresets || [];
+    let presets = state.vectorPresets || [];
+    if (state.vecSearchQuery) {
+        const q = state.vecSearchQuery.toLowerCase();
+        presets = presets.filter(p => {
+            const name = (p.name || p.fileName || '').toLowerCase();
+            return name.includes(q);
+        });
+    }
+
     if (countBadge) countBadge.textContent = `${presets.length} ${presets.length === 1 ? 'preset' : 'presets'}`;
 
     if (presets.length === 0) {
         listEl.innerHTML = `
             <div class="p-3 text-center text-slate-500 text-[10px]">
-                No custom vector presets. Click "Save Preset" to store your favorite blends!
+                ${state.vecSearchQuery ? 'No vector presets match your search filter.' : 'No custom vector presets. Click "Save Preset" to store your favorite blends!'}
             </div>
         `;
         return;
@@ -7666,6 +7886,14 @@ function renderVectorPresetLibrary() {
 function initVectorSynthesizer() {
     setupVectorTouchpad();
     initVectorVoiceDropdowns();
+
+    const searchInput = document.getElementById("vecSearchInput");
+    if (searchInput) {
+        searchInput.addEventListener("input", (e) => {
+            state.vecSearchQuery = e.target.value.trim().toLowerCase();
+            renderVectorPresetLibrary();
+        });
+    }
 
     ["vecVoiceA", "vecVoiceB", "vecVoiceC", "vecVoiceD"].forEach(id => {
         const sel = document.getElementById(id);

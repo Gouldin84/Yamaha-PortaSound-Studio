@@ -7,8 +7,8 @@
         MinWidth="960" MinHeight="480"
         WindowState="Maximized"
         WindowStartupLocation="CenterScreen"
-        Background="#020617">
+        Background="#0b1324">
     <Grid>
-        <wv2:WebView2 Name="MainWebView" DefaultBackgroundColor="#020617" />
+        <wv2:WebView2 Name="MainWebView" DefaultBackgroundColor="#0b1324" />
     </Grid>
 </Window>

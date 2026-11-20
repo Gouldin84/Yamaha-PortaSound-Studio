@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.6.4">
+    <link rel="stylesheet" href="styles.css?v=2.6.5">
     <script>
         tailwind.config = {
             theme: {
@@ -983,11 +983,11 @@
                     </div>
                 </div>
 
-                <!-- 4-Strip FM Sound Designer Rack -->
-                <div class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 xl:grid-rows-1 gap-3 overflow-y-auto xl:overflow-hidden custom-scrollbar pr-0.5">
+                <!-- FM Sound Designer Workstation: Library on Left, Dual Large Envelopes above 3-Strip Operator Rack -->
+                <div class="flex-1 min-h-0 flex flex-col xl:flex-row gap-3 overflow-hidden pr-0.5">
                     
-                    <!-- Strip 1: FM Voice Patch Library (Leftmost) -->
-                    <div id="fmVoiceLibraryStrip" class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-indigo-400 flex flex-col min-h-0 h-[480px] xl:h-full overflow-hidden space-y-2">
+                    <!-- Strip 1: FM Voice Patch Library (Full Height Left Column) -->
+                    <div id="fmVoiceLibraryStrip" class="w-full xl:w-72 2xl:w-80 shrink-0 glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-indigo-400 flex flex-col min-h-0 h-[380px] xl:h-full overflow-hidden space-y-2">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
                             <span class="text-xs font-bold text-indigo-400">FM Voice Library</span>
                             <span id="fmVoiceCountBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">0 patches</span>
@@ -995,7 +995,7 @@
 
                         <!-- Search Bar -->
                         <div class="relative shrink-0">
-                            <input type="text" id="fmSearchInput" placeholder="Filter patches..." class="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                            <input type="text" id="fmSearchInput" placeholder="Filter patches..." title="Filter FM patches: Search presets by name, character, or category" class="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
                             <span class="absolute left-2 top-1.5 text-slate-500 text-[10px]">🔍</span>
                         </div>
 
@@ -1007,381 +1007,405 @@
                         </div>
                     </div>
 
-                    <!-- Strip 2: Operator 1 (Modulator) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-cyan-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
-                            <span class="text-xs font-bold text-cyan-400">OP 1: Modulator</span>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">Timbre / Harmonics</span>
+                    <!-- Main FM Synthesis Workspace (Right Stage) -->
+                    <div id="fmSoundDesignerMainPane" class="flex-1 min-w-0 flex flex-col gap-3 h-full overflow-hidden">
+                        
+                        <!-- Top Deck: Large Dual High-Definition ADSR Envelopes (Taking half width each) -->
+                        <div id="fmDualEnvelopeDeck" class="shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-3 h-44 xl:h-48">
+                            
+                            <!-- Large Modulator ADSR Envelope Card -->
+                            <div id="cardModEnvelope" class="glass-card p-3 rounded-xl border-t-2 border-t-cyan-400 flex flex-col min-h-0 overflow-hidden shadow-md">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="w-2 h-2 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400/50"></span>
+                                        <span class="text-xs font-bold text-cyan-400">OP 1: Modulator ADSR Envelope</span>
+                                        <span class="px-1.5 py-0.2 rounded text-[8px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50 hidden sm:inline">Timbre / Harmonics</span>
+                                    </div>
+                                    <div class="flex items-center space-x-1.5">
+                                        <span id="fmModEnvBadge" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/60" title="Modulator envelope stage parameters (Attack, Decay 1, Decay 2, Release)">A: 63 • D1: 25 • D2: 0 • R: 6</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 min-h-0 mt-1 relative w-full flex items-center justify-center">
+                                    <svg id="svgFmModEnv" class="w-full h-full bg-slate-950/90 rounded-lg border border-slate-800/80 shadow-inner" viewBox="0 0 500 130" preserveAspectRatio="none"></svg>
+                                </div>
+                            </div>
+
+                            <!-- Large Carrier ADSR Envelope Card -->
+                            <div id="cardCarEnvelope" class="glass-card p-3 rounded-xl border-t-2 border-t-emerald-400 flex flex-col min-h-0 overflow-hidden shadow-md">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
+                                        <span class="text-xs font-bold text-emerald-400">OP 2: Carrier ADSR Envelope</span>
+                                        <span class="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50 hidden sm:inline">Pitch / Output</span>
+                                    </div>
+                                    <div class="flex items-center space-x-1.5">
+                                        <span id="fmCarEnvBadge" class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60" title="Carrier envelope stage parameters (Attack, Decay 1, Decay 2, Release)">A: 63 • D1: 20 • D2: 0 • R: 6</span>
+                                    </div>
+                                </div>
+                                <div class="flex-1 min-h-0 mt-1 relative w-full flex items-center justify-center">
+                                    <svg id="svgFmCarEnv" class="w-full h-full bg-slate-950/90 rounded-lg border border-slate-800/80 shadow-inner" viewBox="0 0 500 130" preserveAspectRatio="none"></svg>
+                                </div>
+                            </div>
+
                         </div>
 
-                        <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
-                            <!-- Multiplier -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Multiplier (MUL)</span>
-                                    <span id="fmModMulVal" class="font-mono text-cyan-400">1 (1.0x)</span>
+                        <!-- Bottom Deck: 3-Column Operator Rack (OP 1, OP 2, Global LFO) -->
+                        <div id="fmOperatorRack" class="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 gap-3 overflow-y-auto custom-scrollbar pr-0.5">
+                            
+                            <!-- Box 1: Operator 1 (Modulator Controls) -->
+                            <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-cyan-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                    <span class="text-xs font-bold text-cyan-400">OP 1: Modulator</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-800/50">Timbre / Harmonics</span>
                                 </div>
-                                <input type="range" id="fmModMul" min="0" max="15" value="1" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                            </div>
 
-                            <!-- Total Level (Modulation Index) -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Total Level (Modulation Depth)</span>
-                                    <span id="fmModTlVal" class="font-mono text-cyan-400">50</span>
-                                </div>
-                                <input type="range" id="fmModTl" min="0" max="99" value="50" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                            </div>
-
-                            <!-- Waveform Selector -->
-                            <div class="space-y-1">
-                                <label class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Waveform</label>
-                                <div class="grid grid-cols-4 gap-1" id="fmModWaveGroup">
-                                    <button type="button" data-wave="0" class="fm-mod-wave active py-1 rounded text-[9px] font-bold bg-cyan-600 text-white border border-cyan-400 transition" title="0: Pure Sine Wave">Sine</button>
-                                    <button type="button" data-wave="1" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="1: Squared Sine (Half inverted)">Sq.Sine</button>
-                                    <button type="button" data-wave="2" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="2: Sine Half-Wave (Rectified)">Half</button>
-                                    <button type="button" data-wave="3" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="3: Squared Sine Half-Wave">Sq.Half</button>
-                                </div>
-                            </div>
-
-                            <!-- Live Envelope Curve Visualizer -->
-                            <div class="space-y-1 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                                <div class="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                                    <span class="flex items-center space-x-1">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                                        <span>Modulator ADSR Envelope</span>
-                                    </span>
-                                    <span id="fmModEnvBadge" class="text-[9px] text-cyan-300 font-mono">Dynamic</span>
-                                </div>
-                                <svg id="svgFmModEnv" class="w-full h-11 bg-slate-950/90 rounded border border-slate-800/80" viewBox="0 0 200 60"></svg>
-                            </div>
-
-                            <!-- Attack Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Attack Rate (AR)</span>
-                                    <span id="fmModArVal" class="font-mono text-cyan-400">63</span>
-                                </div>
-                                <input type="range" id="fmModAr" min="0" max="63" value="63" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                            </div>
-
-                            <!-- Decay 1 Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Decay 1 Rate (D1R)</span>
-                                    <span id="fmModD1rVal" class="font-mono text-cyan-400">25</span>
-                                </div>
-                                <input type="range" id="fmModD1r" min="0" max="63" value="25" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                            </div>
-
-                            <!-- Release Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Release Rate (RR)</span>
-                                    <span id="fmModRrVal" class="font-mono text-cyan-400">6</span>
-                                </div>
-                                <input type="range" id="fmModRr" min="0" max="15" value="6" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                            </div>
-
-                            <!-- Collapsible Hidden Parameters Drawer -->
-                            <details class="group mt-2 border-t border-slate-800/80 pt-2">
-                                <summary class="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-cyan-400 hover:text-cyan-300 select-none flex items-center justify-between">
-                                    <span>🔒 Hidden Parameters</span>
-                                    <span class="text-xs transition-transform group-open:rotate-180">▼</span>
-                                </summary>
-                                <div class="mt-2 space-y-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px]">
-                                    <!-- Fine Detune -->
+                                <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
+                                    <!-- Multiplier -->
                                     <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Fine Detune (DT1)</span>
-                                            <span id="fmModFineVal" class="font-mono text-cyan-300">0</span>
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Multiplier (MUL)</span>
+                                            <span id="fmModMulVal" class="font-mono text-cyan-400">1 (1.0x)</span>
                                         </div>
-                                        <input type="range" id="fmModFine" min="-3" max="3" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
+                                        <input type="range" id="fmModMul" min="0" max="15" value="1" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Harmonic Frequency Multiplier (0-15): Sets the harmonic ratio to carrier (0 = 0.5x subharmonic, 1 = 1.0x fundamental, 2 = 2.0x 2nd harmonic, up to 15x). Controls overtone spacing and timbre brightness.">
                                     </div>
-                                    <!-- Coarse Detune -->
-                                    <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300">
-                                        <input type="checkbox" id="fmModCoarse" class="w-3 h-3 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500">
-                                        <span>Coarse Detune (+600c Tritone)</span>
-                                    </label>
-                                    <!-- Decay 1 Level -->
+
+                                    <!-- Total Level (Modulation Index) -->
                                     <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Decay 1 Level (D1L)</span>
-                                            <span id="fmModD1lVal" class="font-mono text-cyan-300">0</span>
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Total Level (Modulation Depth)</span>
+                                            <span id="fmModTlVal" class="font-mono text-cyan-400">50</span>
                                         </div>
-                                        <input type="range" id="fmModD1l" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
+                                        <input type="range" id="fmModTl" min="0" max="99" value="50" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Total Level / Modulation Depth (0-99): Controls FM modulation index. Higher values generate richer sidebands and metallic clangs. Zero yields a pure carrier sine tone.">
                                     </div>
-                                    <!-- Decay 2 Rate -->
+
+                                    <!-- Waveform Selector -->
+                                    <div class="space-y-1">
+                                        <label class="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Modulator Waveform</label>
+                                        <div class="grid grid-cols-4 gap-1" id="fmModWaveGroup">
+                                            <button type="button" data-wave="0" class="fm-mod-wave active py-1 rounded text-[9px] font-bold bg-cyan-600 text-white border border-cyan-400 transition" title="0: Pure Sine Wave (Classic FM warm bells, organs, electric pianos)">Sine</button>
+                                            <button type="button" data-wave="1" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="1: Squared Sine (Half inverted, sharp brassy overtones)">Sq.Sine</button>
+                                            <button type="button" data-wave="2" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="2: Sine Half-Wave (Rectified, punchy synth leads and clavi)">Half</button>
+                                            <button type="button" data-wave="3" class="fm-mod-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="3: Squared Sine Half-Wave (Clipped half, aggressive gritty bass)">Sq.Half</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Attack Rate -->
                                     <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Decay 2 Rate (D2R)</span>
-                                            <span id="fmModD2rVal" class="font-mono text-cyan-300">0</span>
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Attack Rate (AR)</span>
+                                            <span id="fmModArVal" class="font-mono text-cyan-400">63</span>
                                         </div>
-                                        <input type="range" id="fmModD2r" min="0" max="31" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
+                                        <input type="range" id="fmModAr" min="0" max="63" value="63" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Attack Rate (0-63): Speed of initial timbre rise (63 = immediate bite/strike, 0 = slow ambient filter sweep).">
                                     </div>
-                                    <!-- Sustain Release Rate -->
+
+                                    <!-- Decay 1 Rate -->
                                     <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Sustain Release Rate (SRR)</span>
-                                            <span id="fmModSrrVal" class="font-mono text-cyan-300">5</span>
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Decay 1 Rate (D1R)</span>
+                                            <span id="fmModD1rVal" class="font-mono text-cyan-400">25</span>
                                         </div>
-                                        <input type="range" id="fmModSrr" min="0" max="15" value="5" class="w-full h-1 bg-slate-800 accent-cyan-400">
+                                        <input type="range" id="fmModD1r" min="0" max="63" value="25" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Decay 1 Rate (0-63): Speed at which modulation falls from peak attack level to the Decay 1 Level (D1L) breakpoint.">
                                     </div>
-                                    <!-- Level Key Scaling -->
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <div class="flex justify-between text-slate-400 text-[9px]">
-                                                <span>LKS High</span>
-                                                <span id="fmModLksHiVal" class="font-mono text-cyan-300">0</span>
+
+                                    <!-- Release Rate -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Release Rate (RR)</span>
+                                            <span id="fmModRrVal" class="font-mono text-cyan-400">6</span>
+                                        </div>
+                                        <input type="range" id="fmModRr" min="0" max="15" value="6" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Release Rate (0-15): Speed at which modulation decays after key release (15 = immediate cutoff, 1 = long lingering timbre fade).">
+                                    </div>
+
+                                    <!-- Collapsible Hidden Parameters Drawer -->
+                                    <details class="group mt-2 border-t border-slate-800/80 pt-2">
+                                        <summary class="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-cyan-400 hover:text-cyan-300 select-none flex items-center justify-between" title="Access 18 extended FM synthesis parameters hidden on physical keyboard front panel">
+                                            <span>🔒 Hidden Parameters</span>
+                                            <span class="text-xs transition-transform group-open:rotate-180">▼</span>
+                                        </summary>
+                                        <div class="mt-2 space-y-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px]">
+                                            <!-- Fine Detune -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Fine Detune (DT1)</span>
+                                                    <span id="fmModFineVal" class="font-mono text-cyan-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmModFine" min="-3" max="3" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Fine Detune (-3 to +3): Subtle pitch offset between operators creating rich acoustic chorus beating and stereo widening.">
                                             </div>
-                                            <input type="range" id="fmModLksHi" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                                        </div>
-                                        <div>
-                                            <div class="flex justify-between text-slate-400 text-[9px]">
-                                                <span>LKS Low</span>
-                                                <span id="fmModLksLoVal" class="font-mono text-cyan-300">0</span>
+                                            <!-- Coarse Detune -->
+                                            <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Coarse Detune (+600 cents): Shifts modulator frequency by a tritone (half-octave) for clangorous inharmonic bell tones.">
+                                                <input type="checkbox" id="fmModCoarse" class="w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500">
+                                                <span>Coarse Detune (+600c Tritone)</span>
+                                            </label>
+                                            <!-- Decay 1 Level -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Decay 1 Level (D1L)</span>
+                                                    <span id="fmModD1lVal" class="font-mono text-cyan-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmModD1l" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Decay 1 Level (0-15): Intermediate modulation index breakpoint (sustain level) where Decay 1 ends and Decay 2 begins.">
                                             </div>
-                                            <input type="range" id="fmModLksLo" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
+                                            <!-- Decay 2 Rate -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Decay 2 Rate (D2R)</span>
+                                                    <span id="fmModD2rVal" class="font-mono text-cyan-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmModD2r" min="0" max="31" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Decay 2 Rate (0-31): Secondary timbre decay slope while key is held down (0 = infinite hold, 31 = fast acoustic decay).">
+                                            </div>
+                                            <!-- Sustain Release Rate -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Sustain Release Rate (SRR)</span>
+                                                    <span id="fmModSrrVal" class="font-mono text-cyan-300">5</span>
+                                                </div>
+                                                <input type="range" id="fmModSrr" min="0" max="15" value="5" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Sustain Release Rate (0-15): Modulator release rate applied when hardware sustain pedal/switch is active.">
+                                            </div>
+                                            <!-- Level Key Scaling -->
+                                            <div class="grid grid-cols-2 gap-1.5">
+                                                <div>
+                                                    <div class="flex justify-between text-slate-400 text-[9px]">
+                                                        <span>LKS High</span>
+                                                        <span id="fmModLksHiVal" class="font-mono text-cyan-300">0</span>
+                                                    </div>
+                                                    <input type="range" id="fmModLksHi" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Level Key Scaling High (0-15): Attenuates modulation index in upper treble octaves to avoid piercing harshness.">
+                                                </div>
+                                                <div>
+                                                    <div class="flex justify-between text-slate-400 text-[9px]">
+                                                        <span>LKS Low</span>
+                                                        <span id="fmModLksLoVal" class="font-mono text-cyan-300">0</span>
+                                                    </div>
+                                                    <input type="range" id="fmModLksLo" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Level Key Scaling Low (0-15): Attenuates modulation index in lower bass octaves to keep bass notes tight.">
+                                                </div>
+                                            </div>
+                                            <!-- Rate Key Scaling -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Rate Key Scaling (RKS)</span>
+                                                    <span id="fmModRksVal" class="font-mono text-cyan-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmModRks" min="0" max="3" value="0" class="w-full h-1.5 bg-slate-800 accent-cyan-400" title="Rate Key Scaling (0-3): Automatically speeds up envelope rates at higher pitches, mimicking acoustic instruments.">
+                                            </div>
+                                            <!-- AM Enable -->
+                                            <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Amplitude Modulation Enable: Routes the global tremolo LFO to modulate this operator's level.">
+                                                <input type="checkbox" id="fmModAm" class="w-3.5 h-3.5 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500">
+                                                <span>Tremolo LFO Enable (AM EN)</span>
+                                            </label>
                                         </div>
-                                    </div>
-                                    <!-- Rate Key Scaling -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Rate Key Scaling (RKS)</span>
-                                            <span id="fmModRksVal" class="font-mono text-cyan-300">0</span>
-                                        </div>
-                                        <input type="range" id="fmModRks" min="0" max="3" value="0" class="w-full h-1 bg-slate-800 accent-cyan-400">
-                                    </div>
-                                    <!-- AM Enable -->
-                                    <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300">
-                                        <input type="checkbox" id="fmModAm" class="w-3 h-3 rounded text-cyan-500 bg-slate-800 border-slate-700 accent-cyan-500">
-                                        <span>Tremolo LFO Enable (AM EN)</span>
-                                    </label>
+                                    </details>
                                 </div>
-                            </details>
+                            </div>
+
+                            <!-- Box 2: Operator 2 (Carrier Controls) -->
+                            <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-emerald-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                    <span class="text-xs font-bold text-emerald-400">OP 2: Carrier</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">Pitch / Audio Output</span>
+                                </div>
+
+                                <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
+                                    <!-- Multiplier -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Multiplier (MUL)</span>
+                                            <span id="fmCarMulVal" class="font-mono text-emerald-400">1 (1.0x)</span>
+                                        </div>
+                                        <input type="range" id="fmCarMul" min="0" max="15" value="1" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Carrier Frequency Multiplier (0-15): Determines the fundamental pitch octave and interval of the audible output tone.">
+                                    </div>
+
+                                    <!-- Panel Level (Output Volume) -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Carrier Output Level</span>
+                                            <span id="fmCarTlVal" class="font-mono text-emerald-400">80</span>
+                                        </div>
+                                        <input type="range" id="fmCarTl" min="0" max="99" value="80" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Carrier Output Level (0-99): Direct volume level of the carrier waveform into the synthesizer audio DAC.">
+                                    </div>
+
+                                    <!-- Independent Carrier Waveform Selector -->
+                                    <div class="space-y-1">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Carrier Waveform</label>
+                                            <span class="text-[8px] text-emerald-400 font-semibold" title="Carrier waveform can be chosen independently of Modulator via SysEx">🔒 Independent</span>
+                                        </div>
+                                        <div class="grid grid-cols-4 gap-1" id="fmCarWaveGroup">
+                                            <button type="button" data-wave="0" class="fm-car-wave active py-1 rounded text-[9px] font-bold bg-emerald-600 text-white border border-emerald-400 transition" title="0: Pure Sine Wave (Classic smooth tone)">Sine</button>
+                                            <button type="button" data-wave="1" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="1: Squared Sine (Half inverted, sharp edge)">Sq.Sine</button>
+                                            <button type="button" data-wave="2" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="2: Sine Half-Wave (Rectified, hollow wood/pipe timbre)">Half</button>
+                                            <button type="button" data-wave="3" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="3: Squared Sine Half-Wave (Aggressive bite)">Sq.Half</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Attack Rate -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Attack Rate (AR)</span>
+                                            <span id="fmCarArVal" class="font-mono text-emerald-400">63</span>
+                                        </div>
+                                        <input type="range" id="fmCarAr" min="0" max="63" value="63" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Carrier Attack Rate (0-63): Speed of sound volume onset (63 = immediate punch, 0 = gentle fade-in).">
+                                    </div>
+
+                                    <!-- Decay 1 Rate -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Decay 1 Rate (D1R)</span>
+                                            <span id="fmCarD1rVal" class="font-mono text-emerald-400">20</span>
+                                        </div>
+                                        <input type="range" id="fmCarD1r" min="0" max="63" value="20" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Carrier Decay 1 Rate (0-63): Speed at which sound volume drops from initial strike to sustain level.">
+                                    </div>
+
+                                    <!-- Release Rate -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Release Rate (RR)</span>
+                                            <span id="fmCarRrVal" class="font-mono text-emerald-400">6</span>
+                                        </div>
+                                        <input type="range" id="fmCarRr" min="0" max="15" value="6" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Carrier Release Rate (0-15): Speed of sound fade-out after key release (15 = immediate silence, 6 = natural acoustic release).">
+                                    </div>
+
+                                    <!-- Collapsible Hidden Parameters Drawer -->
+                                    <details class="group mt-2 border-t border-slate-800/80 pt-2">
+                                        <summary class="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 select-none flex items-center justify-between" title="Access 18 extended FM synthesis parameters hidden on physical keyboard front panel">
+                                            <span>🔒 Hidden Parameters</span>
+                                            <span class="text-xs transition-transform group-open:rotate-180">▼</span>
+                                        </summary>
+                                        <div class="mt-2 space-y-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px]">
+                                            <!-- Fine Detune -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Fine Detune (DT1)</span>
+                                                    <span id="fmCarFineVal" class="font-mono text-emerald-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmCarFine" min="-3" max="3" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Fine Detune (-3 to +3): Subtle pitch offset for chorusing against the modulator.">
+                                            </div>
+                                            <!-- Coarse Detune -->
+                                            <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Coarse Detune (+600 cents): Tritone pitch offset of the carrier.">
+                                                <input type="checkbox" id="fmCarCoarse" class="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-800 border-slate-700 accent-emerald-500">
+                                                <span>Coarse Detune (+600c Tritone)</span>
+                                            </label>
+                                            <!-- Decay 1 Level -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Decay 1 Level (D1L)</span>
+                                                    <span id="fmCarD1lVal" class="font-mono text-emerald-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmCarD1l" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Decay 1 Level (0-15): Sustain volume level held while note remains pressed.">
+                                            </div>
+                                            <!-- Decay 2 Rate -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Decay 2 Rate (D2R)</span>
+                                                    <span id="fmCarD2rVal" class="font-mono text-emerald-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmCarD2r" min="0" max="31" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Decay 2 Rate (0-31): Volume fade slope during prolonged sustained notes (0 = organ sustain, 31 = fast acoustic decay).">
+                                            </div>
+                                            <!-- Sustain Release Rate -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Sustain Release Rate (SRR)</span>
+                                                    <span id="fmCarSrrVal" class="font-mono text-emerald-300">5</span>
+                                                </div>
+                                                <input type="range" id="fmCarSrr" min="0" max="15" value="5" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Sustain Release Rate (0-15): Carrier release rate when hardware sustain pedal or switch is active.">
+                                            </div>
+                                            <!-- Level Key Scaling -->
+                                            <div class="grid grid-cols-2 gap-1.5">
+                                                <div>
+                                                    <div class="flex justify-between text-slate-400 text-[9px]">
+                                                        <span>LKS High</span>
+                                                        <span id="fmCarLksHiVal" class="font-mono text-emerald-300">0</span>
+                                                    </div>
+                                                    <input type="range" id="fmCarLksHi" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Level Key Scaling High (0-15): Volume reduction across high treble notes.">
+                                                </div>
+                                                <div>
+                                                    <div class="flex justify-between text-slate-400 text-[9px]">
+                                                        <span>LKS Low</span>
+                                                        <span id="fmCarLksLoVal" class="font-mono text-emerald-300">0</span>
+                                                    </div>
+                                                    <input type="range" id="fmCarLksLo" min="0" max="15" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Level Key Scaling Low (0-15): Volume reduction across low bass notes.">
+                                                </div>
+                                            </div>
+                                            <!-- Rate Key Scaling -->
+                                            <div class="space-y-0.5">
+                                                <div class="flex justify-between text-slate-300">
+                                                    <span>Rate Key Scaling (RKS)</span>
+                                                    <span id="fmCarRksVal" class="font-mono text-emerald-300">0</span>
+                                                </div>
+                                                <input type="range" id="fmCarRks" min="0" max="3" value="0" class="w-full h-1.5 bg-slate-800 accent-emerald-400" title="Rate Key Scaling (0-3): Faster envelope playback for higher keys.">
+                                            </div>
+                                            <!-- AM Enable -->
+                                            <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300" title="Tremolo Enable: Routes global LFO to modulate carrier volume for classic tremolo.">
+                                                <input type="checkbox" id="fmCarAm" class="w-3.5 h-3.5 rounded text-emerald-500 bg-slate-800 border-slate-700 accent-emerald-500">
+                                                <span>Tremolo LFO Enable (AM EN)</span>
+                                            </label>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+
+                            <!-- Box 3: Pitch & Modulation (Global/LFO) -->
+                            <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-amber-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
+                                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                                    <span class="text-xs font-bold text-amber-400">Modulation & LFO</span>
+                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/50">Global Parameters</span>
+                                </div>
+
+                                <div class="space-y-2.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
+                                    <!-- Feedback -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Modulator Feedback (FB)</span>
+                                            <span id="fmFeedbackVal" class="font-mono text-amber-400">0</span>
+                                        </div>
+                                        <input type="range" id="fmFeedback" min="0" max="7" value="0" class="w-full h-1.5 bg-slate-800 accent-amber-400" title="Self-Feedback (0-7): Feeds Modulator output back into its own phase input (0 = pure sine, 7 = rich sawtooth noise). Essential for brass, synth brass, rock organs, and noise percussion.">
+                                    </div>
+
+                                    <!-- Vibrato Enable -->
+                                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                                        <span class="text-[10px] font-medium text-slate-200">Vibrato Switch</span>
+                                        <input type="checkbox" id="fmVibrato" class="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500 cursor-pointer" title="Vibrato Switch: Toggles pitch modulation LFO on active voice.">
+                                    </div>
+
+                                    <!-- Vibrato Delay Time -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Vibrato Delay (VDT)</span>
+                                            <span id="fmVibratoDelayVal" class="font-mono text-amber-400">0 ms</span>
+                                        </div>
+                                        <input type="range" id="fmVibratoDelay" min="0" max="127" value="0" class="w-full h-1.5 bg-slate-800 accent-amber-400" title="Vibrato Delay Time (0-127): Onset time before vibrato pitch modulation kicks in after pressing a key.">
+                                    </div>
+
+                                    <!-- Pitch Modulation Sensitivity -->
+                                    <div class="space-y-0.5">
+                                        <div class="flex justify-between text-[10px] font-medium text-slate-300">
+                                            <span>Vibrato Depth (PMS)</span>
+                                            <span id="fmPitchModSensVal" class="font-mono text-amber-400">0</span>
+                                        </div>
+                                        <input type="range" id="fmPitchModSens" min="0" max="7" value="0" class="w-full h-1.5 bg-slate-800 accent-amber-400" title="Pitch Modulation Sensitivity (0-7): Maximum pitch wobble depth (0 = subtle acoustic vibrato, 7 = deep pitch wobble).">
+                                    </div>
+
+                                    <!-- Hidden Parameter: Amplitude Modulation Sensitivity -->
+                                    <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-[10px] font-medium text-slate-200">Tremolo Depth (AMS)</span>
+                                            <span class="text-[8px] text-amber-400 font-semibold" title="Locked on physical keyboard panel">🔒 Hidden</span>
+                                        </div>
+                                        <div class="flex justify-between text-[9px] text-slate-400 font-mono">
+                                            <span>LFO Amplitude Modulation</span>
+                                            <span id="fmAmpModSensVal" class="text-amber-300">0</span>
+                                        </div>
+                                        <input type="range" id="fmAmpModSens" min="0" max="3" value="0" class="w-full h-1.5 bg-slate-800 accent-amber-400" title="Amplitude Modulation Sensitivity (0-3): Depth of tremolo volume pulsing applied to operators with AM EN enabled.">
+                                    </div>
+
+                                    <!-- Sustain Switch -->
+                                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
+                                        <span class="text-[10px] font-medium text-slate-200">Sustain Switch</span>
+                                        <input type="checkbox" id="fmSustain" class="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500 cursor-pointer" title="Envelope Sustain Switch: Extends release decay time for lingering organ and ambient synth tails.">
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
+
                     </div>
-
-                    <!-- Strip 3: Operator 2 (Carrier) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-emerald-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
-                            <span class="text-xs font-bold text-emerald-400">OP 2: Carrier</span>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800/50">Pitch / Audio Output</span>
-                        </div>
-
-                        <div class="space-y-2 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
-                            <!-- Multiplier -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Multiplier (MUL)</span>
-                                    <span id="fmCarMulVal" class="font-mono text-emerald-400">1 (1.0x)</span>
-                                </div>
-                                <input type="range" id="fmCarMul" min="0" max="15" value="1" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                            </div>
-
-                            <!-- Panel Level (Output Volume) -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Carrier Output Level</span>
-                                    <span id="fmCarTlVal" class="font-mono text-emerald-400">80</span>
-                                </div>
-                                <input type="range" id="fmCarTl" min="0" max="99" value="80" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                            </div>
-
-                            <!-- Independent Carrier Waveform Selector -->
-                            <div class="space-y-1">
-                                <div class="flex items-center justify-between">
-                                    <label class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Carrier Waveform</label>
-                                    <span class="text-[8px] text-emerald-400 font-semibold" title="Carrier waveform can be chosen independently of Modulator via SysEx">🔒 Independent</span>
-                                </div>
-                                <div class="grid grid-cols-4 gap-1" id="fmCarWaveGroup">
-                                    <button type="button" data-wave="0" class="fm-car-wave active py-1 rounded text-[9px] font-bold bg-emerald-600 text-white border border-emerald-400 transition" title="0: Pure Sine Wave">Sine</button>
-                                    <button type="button" data-wave="1" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="1: Squared Sine">Sq.Sine</button>
-                                    <button type="button" data-wave="2" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="2: Sine Half-Wave">Half</button>
-                                    <button type="button" data-wave="3" class="fm-car-wave py-1 rounded text-[9px] font-bold bg-slate-800 text-slate-300 hover:text-white border border-slate-700 transition" title="3: Squared Sine Half-Wave">Sq.Half</button>
-                                </div>
-                            </div>
-
-                            <!-- Live Envelope Curve Visualizer -->
-                            <div class="space-y-1 bg-slate-900/60 p-2 rounded-lg border border-slate-800">
-                                <div class="flex justify-between items-center text-[10px] text-slate-400 font-medium">
-                                    <span class="flex items-center space-x-1">
-                                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                        <span>Carrier ADSR Envelope</span>
-                                    </span>
-                                    <span id="fmCarEnvBadge" class="text-[9px] text-emerald-300 font-mono">Dynamic</span>
-                                </div>
-                                <svg id="svgFmCarEnv" class="w-full h-11 bg-slate-950/90 rounded border border-slate-800/80" viewBox="0 0 200 60"></svg>
-                            </div>
-
-                            <!-- Attack Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Attack Rate (AR)</span>
-                                    <span id="fmCarArVal" class="font-mono text-emerald-400">63</span>
-                                </div>
-                                <input type="range" id="fmCarAr" min="0" max="63" value="63" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                            </div>
-
-                            <!-- Decay 1 Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Decay 1 Rate (D1R)</span>
-                                    <span id="fmCarD1rVal" class="font-mono text-emerald-400">20</span>
-                                </div>
-                                <input type="range" id="fmCarD1r" min="0" max="63" value="20" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                            </div>
-
-                            <!-- Release Rate -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Release Rate (RR)</span>
-                                    <span id="fmCarRrVal" class="font-mono text-emerald-400">6</span>
-                                </div>
-                                <input type="range" id="fmCarRr" min="0" max="15" value="6" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                            </div>
-
-                            <!-- Collapsible Hidden Parameters Drawer -->
-                            <details class="group mt-2 border-t border-slate-800/80 pt-2">
-                                <summary class="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-emerald-400 hover:text-emerald-300 select-none flex items-center justify-between">
-                                    <span>🔒 Hidden Parameters</span>
-                                    <span class="text-xs transition-transform group-open:rotate-180">▼</span>
-                                </summary>
-                                <div class="mt-2 space-y-2 p-2 rounded-lg bg-slate-900/90 border border-slate-800 text-[10px]">
-                                    <!-- Fine Detune -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Fine Detune (DT1)</span>
-                                            <span id="fmCarFineVal" class="font-mono text-emerald-300">0</span>
-                                        </div>
-                                        <input type="range" id="fmCarFine" min="-3" max="3" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                    </div>
-                                    <!-- Coarse Detune -->
-                                    <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300">
-                                        <input type="checkbox" id="fmCarCoarse" class="w-3 h-3 rounded text-emerald-500 bg-slate-800 border-slate-700 accent-emerald-500">
-                                        <span>Coarse Detune (+600c Tritone)</span>
-                                    </label>
-                                    <!-- Decay 1 Level -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Decay 1 Level (D1L)</span>
-                                            <span id="fmCarD1lVal" class="font-mono text-emerald-300">0</span>
-                                        </div>
-                                        <input type="range" id="fmCarD1l" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                    </div>
-                                    <!-- Decay 2 Rate -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Decay 2 Rate (D2R)</span>
-                                            <span id="fmCarD2rVal" class="font-mono text-emerald-300">0</span>
-                                        </div>
-                                        <input type="range" id="fmCarD2r" min="0" max="31" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                    </div>
-                                    <!-- Sustain Release Rate -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Sustain Release Rate (SRR)</span>
-                                            <span id="fmCarSrrVal" class="font-mono text-emerald-300">5</span>
-                                        </div>
-                                        <input type="range" id="fmCarSrr" min="0" max="15" value="5" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                    </div>
-                                    <!-- Level Key Scaling -->
-                                    <div class="grid grid-cols-2 gap-1.5">
-                                        <div>
-                                            <div class="flex justify-between text-slate-400 text-[9px]">
-                                                <span>LKS High</span>
-                                                <span id="fmCarLksHiVal" class="font-mono text-emerald-300">0</span>
-                                            </div>
-                                            <input type="range" id="fmCarLksHi" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                        </div>
-                                        <div>
-                                            <div class="flex justify-between text-slate-400 text-[9px]">
-                                                <span>LKS Low</span>
-                                                <span id="fmCarLksLoVal" class="font-mono text-emerald-300">0</span>
-                                            </div>
-                                            <input type="range" id="fmCarLksLo" min="0" max="15" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                        </div>
-                                    </div>
-                                    <!-- Rate Key Scaling -->
-                                    <div class="space-y-0.5">
-                                        <div class="flex justify-between text-slate-300">
-                                            <span>Rate Key Scaling (RKS)</span>
-                                            <span id="fmCarRksVal" class="font-mono text-emerald-300">0</span>
-                                        </div>
-                                        <input type="range" id="fmCarRks" min="0" max="3" value="0" class="w-full h-1 bg-slate-800 accent-emerald-400">
-                                    </div>
-                                    <!-- AM Enable -->
-                                    <label class="flex items-center space-x-1.5 cursor-pointer text-slate-300">
-                                        <input type="checkbox" id="fmCarAm" class="w-3 h-3 rounded text-emerald-500 bg-slate-800 border-slate-700 accent-emerald-500">
-                                        <span>Tremolo LFO Enable (AM EN)</span>
-                                    </label>
-                                </div>
-                            </details>
-                        </div>
-                    </div>
-
-                    <!-- Strip 4: Pitch & Modulation (Global/LFO) -->
-                    <div class="glass-card fm-strip-card p-3 rounded-xl border-t-2 border-t-amber-400 flex flex-col min-h-0 h-full overflow-hidden space-y-2.5">
-                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
-                            <span class="text-xs font-bold text-amber-400">Modulation & LFO</span>
-                            <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800/50">Global Parameters</span>
-                        </div>
-
-                        <div class="space-y-2.5 flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-0.5">
-                            <!-- Feedback -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Modulator Feedback (FB)</span>
-                                    <span id="fmFeedbackVal" class="font-mono text-amber-400">0</span>
-                                </div>
-                                <input type="range" id="fmFeedback" min="0" max="7" value="0" class="w-full h-1 bg-slate-800 accent-amber-400" title="Self-Feedback (0-7): Increases harmonic complexity, harshness, and metallic noise">
-                            </div>
-
-                            <!-- Vibrato Enable -->
-                            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                                <span class="text-[10px] font-medium text-slate-200">Vibrato Switch</span>
-                                <input type="checkbox" id="fmVibrato" class="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500 cursor-pointer">
-                            </div>
-
-                            <!-- Vibrato Delay Time -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Vibrato Delay (VDT)</span>
-                                    <span id="fmVibratoDelayVal" class="font-mono text-amber-400">0 ms</span>
-                                </div>
-                                <input type="range" id="fmVibratoDelay" min="0" max="127" value="0" class="w-full h-1 bg-slate-800 accent-amber-400" title="Vibrato Delay Time (0-127): Onset time before vibrato kicks in">
-                            </div>
-
-                            <!-- Pitch Modulation Sensitivity -->
-                            <div class="space-y-0.5">
-                                <div class="flex justify-between text-[10px] font-medium text-slate-300">
-                                    <span>Vibrato Depth (PMS)</span>
-                                    <span id="fmPitchModSensVal" class="font-mono text-amber-400">0</span>
-                                </div>
-                                <input type="range" id="fmPitchModSens" min="0" max="7" value="0" class="w-full h-1 bg-slate-800 accent-amber-400" title="Pitch Modulation Sensitivity (0-7): Maximum pitch wobble depth">
-                            </div>
-
-                            <!-- Hidden Parameter: Amplitude Modulation Sensitivity -->
-                            <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[10px] font-medium text-slate-200">Tremolo Depth (AMS)</span>
-                                    <span class="text-[8px] text-amber-400 font-semibold" title="Locked on keyboard panel">🔒 Hidden</span>
-                                </div>
-                                <div class="flex justify-between text-[9px] text-slate-400 font-mono">
-                                    <span>LFO Amplitude Modulation</span>
-                                    <span id="fmAmpModSensVal" class="text-amber-300">0</span>
-                                </div>
-                                <input type="range" id="fmAmpModSens" min="0" max="3" value="0" class="w-full h-1 bg-slate-800 accent-amber-400" title="Amplitude Modulation Sensitivity (0-3): Depth of tremolo modulation">
-                            </div>
-
-                            <!-- Sustain Switch -->
-                            <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800">
-                                <span class="text-[10px] font-medium text-slate-200">Sustain Switch</span>
-                                <input type="checkbox" id="fmSustain" class="w-4 h-4 rounded text-amber-500 bg-slate-800 border-slate-700 accent-amber-500 cursor-pointer">
-                            </div>
-                        </div>
-                    </div>
-
                 </div>
             </div>
 
@@ -1454,125 +1478,28 @@
                     </div>
                 </div>
 
-                <!-- Vector Synthesizer Main Deck (Controls on Left, Touchpad on Right) -->
-                <div class="flex-1 min-h-0 flex flex-col lg:flex-row gap-3 overflow-y-auto lg:overflow-hidden custom-scrollbar pr-0.5">
+                <!-- Vector Synthesizer Main Deck (Uniform 3-Column Layout: Library Left, Touchpad Center, Tools/LFO Right) -->
+                <div class="flex-1 min-h-0 flex flex-col xl:flex-row gap-3 overflow-hidden pr-0.5">
                     
-                    <!-- Left Column: Orbit Automation, Volume Ladders & Preset Library (w-full lg:w-[420px] 2xl:w-[460px]) -->
-                    <div class="w-full lg:w-[420px] 2xl:w-[460px] shrink-0 flex flex-col space-y-3 h-full overflow-y-auto custom-scrollbar pr-1">
-                        
-                        <!-- Section A: LFO Motion Orbit Engine -->
-                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2.5">
-                            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
-                                <span class="text-xs font-bold text-slate-200">LFO Motion Orbit Engine</span>
-                                <span id="vecOrbitStatusBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Manual</span>
-                            </div>
-
-                            <div class="grid grid-cols-2 gap-2 text-[10px]">
-                                <!-- Orbit Trajectory Mode -->
-                                <div class="space-y-0.5">
-                                    <label class="font-medium text-slate-300">Motion Path</label>
-                                    <select id="selVecOrbitMode" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
-                                        <option value="manual">Manual (No LFO)</option>
-                                        <option value="circle">Circular Orbit</option>
-                                        <option value="figure8">Lissajous (Figure-8)</option>
-                                        <option value="spiral">Expanding Spiral</option>
-                                        <option value="pingpong">Diagonal Ping-Pong</option>
-                                        <option value="wander">Random Drift</option>
-                                    </select>
-                                </div>
-
-                                <!-- Orbit Speed -->
-                                <div class="space-y-0.5">
-                                    <div class="flex justify-between font-medium text-slate-300">
-                                        <span>Orbit Speed</span>
-                                        <span id="vecOrbitSpeedVal" class="font-mono text-indigo-400">3.0s</span>
-                                    </div>
-                                    <input type="range" id="vecOrbitSpeed" min="5" max="100" value="30" class="w-full h-1 bg-slate-800 accent-indigo-400" title="Orbit period: 0.5s to 10s per cycle">
-                                </div>
-                            </div>
-
-                            <!-- Play / Pause Orbit Button -->
-                            <button id="btnVecToggleOrbit" class="w-full flex items-center justify-center space-x-1.5 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 shadow-md">
-                                <span id="vecOrbitBtnIcon">▶</span>
-                                <span id="vecOrbitBtnLabel">Start Vector Orbit</span>
-                            </button>
+                    <!-- Column 1 (Far Left): Vector Preset Library (Uniform with all other library panels) -->
+                    <div id="vecPresetsLibraryStrip" class="w-full xl:w-72 2xl:w-80 shrink-0 glass-card p-3 rounded-xl border-t-2 border-t-indigo-400 flex flex-col min-h-0 h-[380px] xl:h-full overflow-hidden space-y-2">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+                            <span class="text-xs font-bold text-indigo-400">Vector Presets</span>
+                            <span id="vecPresetCountBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-950/80 text-indigo-300 border border-indigo-800/50">0 presets</span>
                         </div>
-
-                        <!-- Section B: 4-Channel Live Volume Ladders -->
-                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2">
-                            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vector Volume Balance</span>
-                                <span class="text-[9px] font-mono text-cyan-400">CC 7 Volume (0-127)</span>
-                            </div>
-                            <div class="grid grid-cols-4 gap-2 text-center text-[10px]">
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-cyan-300">
-                                        <span id="meterVecVal1">25%</span>
-                                    </div>
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh1" class="w-full bg-cyan-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
-                                        <span id="meterVecCc1" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-emerald-300">
-                                        <span id="meterVecVal2">25%</span>
-                                    </div>
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh2" class="w-full bg-emerald-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
-                                        <span id="meterVecCc2" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-amber-300">
-                                        <span id="meterVecVal3">25%</span>
-                                    </div>
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh3" class="w-full bg-amber-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
-                                        <span id="meterVecCc3" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
-                                <div class="space-y-1">
-                                    <div class="text-[10px] font-mono font-bold text-rose-300">
-                                        <span id="meterVecVal4">25%</span>
-                                    </div>
-                                    <div class="h-16 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
-                                        <div id="meterVecCh4" class="w-full bg-rose-400 rounded transition-all duration-75" style="height: 25%"></div>
-                                    </div>
-                                    <div class="space-y-0.5">
-                                        <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
-                                        <span id="meterVecCc4" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
-                                    </div>
-                                </div>
+                        <div class="relative shrink-0">
+                            <input type="text" id="vecSearchInput" placeholder="Filter vector presets..." title="Filter Vector Presets: Search 4-voice morph combinations by name" class="w-full pl-6 pr-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+                            <span class="absolute left-2 top-1.5 text-slate-500 text-[10px]">🔍</span>
+                        </div>
+                        <div id="vecPresetList" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1.5 pr-0.5">
+                            <div class="p-4 text-center text-slate-500 text-[10px]">
+                                No custom vector presets. Click "Save Preset" above to store your favorite blends!
                             </div>
                         </div>
-
-                        <!-- Section C: Vector Preset Library -->
-                        <div class="glass-card p-3 rounded-xl border border-slate-800/80 shadow-md flex-1 min-h-[160px] flex flex-col justify-between space-y-1.5">
-                            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-300">Vector Presets</span>
-                                <span id="vecPresetCountBadge" class="text-[9px] text-indigo-400 font-bold">0 presets</span>
-                            </div>
-                            <div id="vecPresetList" class="flex-1 overflow-y-auto custom-scrollbar space-y-1 pr-0.5">
-                                <div class="p-3 text-center text-slate-500 text-[10px]">
-                                    No custom vector presets. Click "Save Preset" to store your favorite blends!
-                                </div>
-                            </div>
-                        </div>
-
                     </div>
 
-                    <!-- Right Column: 2D Vector Touchpad & Voice Quadrants (flex-1) -->
-                    <div class="flex-1 min-w-0 h-full glass-card p-4 rounded-xl border border-slate-800/80 shadow-xl flex flex-col justify-start space-y-3 overflow-y-auto custom-scrollbar">
+                    <!-- Column 2 (Center): 2D Vector Touchpad & Voice Quadrants (flex-1) -->
+                    <div id="vecTouchpadDeck" class="flex-1 min-w-0 h-full glass-card p-4 rounded-xl border border-slate-800/80 shadow-xl flex flex-col justify-start space-y-3 overflow-y-auto custom-scrollbar">
                         <div class="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
                             <div class="flex items-center space-x-2">
                                 <span class="text-sm">🕹️</span>
@@ -1617,9 +1544,9 @@
                                     <select id="vecVoiceD" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-rose-500 cursor-pointer"></select>
                                 </div>
 
-                                <!-- The 2D Canvas Trackpad -->
-                                <div class="relative select-none">
-                                    <canvas id="vecCanvas" width="220" height="220" class="rounded-2xl border-2 border-slate-700/80 bg-slate-950/90 shadow-2xl cursor-crosshair"></canvas>
+                                <!-- The 2D Canvas Trackpad (360° Circular Gimbal) -->
+                                <div class="relative select-none p-1">
+                                    <canvas id="vecCanvas" width="240" height="240" class="rounded-full border-2 border-slate-700/80 bg-slate-950/95 shadow-2xl cursor-crosshair"></canvas>
                                 </div>
 
                                 <!-- East Pole: Voice B (Channel 2) -->
@@ -1642,7 +1569,108 @@
                             </div>
                         </div>
 
-                        <p class="text-[10px] text-slate-500 text-center shrink-0">Click and drag inside the trackpad to morph between all 4 AWM voices in real time.</p>
+                        <p class="text-[10px] text-slate-500 text-center shrink-0">Click and drag inside the circular touchpad or double-click to center. Clamped to a physical 360° circular gimbal.</p>
+                    </div>
+
+                    <!-- Column 3 (Far Right): LFO Orbit Engine & 4-Channel Volume Balance -->
+                    <div id="vecToolsDeck" class="w-full xl:w-80 2xl:w-96 shrink-0 flex flex-col space-y-3 h-full overflow-y-auto custom-scrollbar pr-0.5">
+                        
+                        <!-- Section A: LFO Motion Orbit Engine -->
+                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2.5">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                                <span class="text-xs font-bold text-slate-200">LFO Motion Orbit Engine</span>
+                                <span id="vecOrbitStatusBadge" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">Manual</span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2 text-[10px]">
+                                <!-- Orbit Trajectory Mode -->
+                                <div class="space-y-0.5">
+                                    <label class="font-medium text-slate-300">Motion Path</label>
+                                    <select id="selVecOrbitMode" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[10px] text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
+                                        <option value="manual">Manual (No LFO)</option>
+                                        <option value="circle">Circular Orbit</option>
+                                        <option value="figure8">Lissajous (Figure-8)</option>
+                                        <option value="spiral">Expanding Spiral</option>
+                                        <option value="pingpong">Diagonal Ping-Pong</option>
+                                        <option value="wander">Random Drift</option>
+                                    </select>
+                                </div>
+
+                                <!-- Orbit Speed -->
+                                <div class="space-y-0.5">
+                                    <div class="flex justify-between font-medium text-slate-300">
+                                        <span>Orbit Speed</span>
+                                        <span id="vecOrbitSpeedVal" class="font-mono text-indigo-400">3.0s</span>
+                                    </div>
+                                    <input type="range" id="vecOrbitSpeed" min="5" max="100" value="30" class="w-full h-1.5 bg-slate-800 accent-indigo-400" title="Orbit period: 0.5s to 10s per cycle">
+                                </div>
+                            </div>
+
+                            <!-- Play / Pause Orbit Button -->
+                            <button id="btnVecToggleOrbit" class="w-full flex items-center justify-center space-x-1.5 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-white font-bold text-xs transition active:scale-95 shadow-md">
+                                <span id="vecOrbitBtnIcon">▶</span>
+                                <span id="vecOrbitBtnLabel">Start Vector Orbit</span>
+                            </button>
+                        </div>
+
+                        <!-- Section B: 4-Channel Live Volume Ladders -->
+                        <div class="glass-card p-3.5 rounded-xl border border-slate-800/80 shadow-md space-y-2 flex-1 flex flex-col justify-between">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-1 shrink-0">
+                                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Vector Volume Balance</span>
+                                <span class="text-[9px] font-mono text-cyan-400">CC 7 Volume (0-127)</span>
+                            </div>
+                            <div class="grid grid-cols-4 gap-2 text-center text-[10px] my-auto">
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-mono font-bold text-cyan-300">
+                                        <span id="meterVecVal1">25%</span>
+                                    </div>
+                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh1" class="w-full bg-cyan-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-cyan-400 block">CH 1 (A)</span>
+                                        <span id="meterVecCc1" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-mono font-bold text-emerald-300">
+                                        <span id="meterVecVal2">25%</span>
+                                    </div>
+                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh2" class="w-full bg-emerald-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-emerald-400 block">CH 2 (B)</span>
+                                        <span id="meterVecCc2" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-mono font-bold text-amber-300">
+                                        <span id="meterVecVal3">25%</span>
+                                    </div>
+                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh3" class="w-full bg-amber-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-amber-400 block">CH 3 (C)</span>
+                                        <span id="meterVecCc3" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="text-[10px] font-mono font-bold text-rose-300">
+                                        <span id="meterVecVal4">25%</span>
+                                    </div>
+                                    <div class="h-20 w-full bg-slate-900 rounded-lg p-1 flex items-end justify-center vec-meter-ladder">
+                                        <div id="meterVecCh4" class="w-full bg-rose-400 rounded transition-all duration-75" style="height: 25%"></div>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-[9px] font-bold text-rose-400 block">CH 4 (D)</span>
+                                        <span id="meterVecCc4" class="text-[8px] font-mono text-slate-400 block">CC 32</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                     </div>
 
                 </div>
@@ -2485,7 +2513,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.4</p>
+                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.5</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -2631,6 +2659,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.6.4"></script>
+    <script src="app.js?v=2.6.5"></script>
 </body>
 </html>

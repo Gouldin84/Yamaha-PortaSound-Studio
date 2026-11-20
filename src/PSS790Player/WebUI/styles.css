@@ -27,31 +27,91 @@ body {
     box-shadow: 0 0 8px rgba(6, 182, 212, 0.5);
 }
 
-/* Custom Range Slider */
+/* Custom Range Slider - Tactile Shaded Pill / Capsule Console Fader */
 input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    background: #1e293b;
+    height: 6px;
+    background: #172338;
     border-radius: 9999px;
     outline: none;
-    transition: background 0.2s ease-in-out;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+    transition: background 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
 
 input[type="range"]::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    background: #06b6d4;
+    width: 10px;
+    height: 20px;
+    border-radius: 5px;
+    background: linear-gradient(180deg, #38bdf8 0%, #0284c7 48%, #0369a1 52%, #075985 100%);
     cursor: pointer;
-    box-shadow: 0 0 10px rgba(6, 182, 212, 0.6);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 0 8px rgba(6, 182, 212, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s ease, background 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-    transform: scale(1.25);
-    box-shadow: 0 0 14px rgba(6, 182, 212, 0.9);
+    transform: scaleY(1.12) scaleX(1.15);
+    background: linear-gradient(180deg, #7dd3fc 0%, #38bdf8 48%, #0284c7 52%, #0369a1 100%);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                0 0 14px rgba(56, 189, 248, 0.8);
+}
+
+input[type="range"]::-webkit-slider-thumb:active {
+    transform: scale(0.96);
+    background: linear-gradient(180deg, #0284c7 0%, #0369a1 100%);
+}
+
+/* Emerald Pill Thumb for Carrier Parameters */
+input[type="range"].accent-emerald-400::-webkit-slider-thumb {
+    background: linear-gradient(180deg, #34d399 0%, #059669 48%, #047857 52%, #064e3b 100%);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 0 8px rgba(16, 185, 129, 0.45);
+}
+input[type="range"].accent-emerald-400::-webkit-slider-thumb:hover {
+    background: linear-gradient(180deg, #6ee7b7 0%, #34d399 48%, #059669 52%, #047857 100%);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                0 0 14px rgba(52, 211, 153, 0.8);
+}
+
+/* Amber Pill Thumb for Modulation & LFO Parameters */
+input[type="range"].accent-amber-400::-webkit-slider-thumb {
+    background: linear-gradient(180deg, #fbbf24 0%, #d97706 48%, #b45309 52%, #78350f 100%);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 0 8px rgba(245, 158, 11, 0.45);
+}
+input[type="range"].accent-amber-400::-webkit-slider-thumb:hover {
+    background: linear-gradient(180deg, #fde68a 0%, #fbbf24 48%, #d97706 52%, #b45309 100%);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                0 0 14px rgba(251, 191, 36, 0.8);
+}
+
+/* Indigo Pill Thumb for Orbit & Vector Controls */
+input[type="range"].accent-indigo-400::-webkit-slider-thumb {
+    background: linear-gradient(180deg, #818cf8 0%, #4f46e5 48%, #4338ca 52%, #312e81 100%);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.4),
+                0 0 8px rgba(99, 102, 241, 0.45);
+}
+input[type="range"].accent-indigo-400::-webkit-slider-thumb:hover {
+    background: linear-gradient(180deg, #a5b4fc 0%, #818cf8 48%, #4f46e5 52%, #4338ca 100%);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6),
+                inset 0 1px 0 rgba(255, 255, 255, 0.9),
+                0 0 14px rgba(129, 140, 248, 0.8);
 }
 
 /* Glowing Note Meter - Glossy hardware lens */
@@ -344,11 +404,12 @@ body.is-resizing-sidebar {
 
 /* Touch & Handheld (Asus ROG Ally) Optimizations */
 @media (pointer: coarse) {
-    /* Larger slider thumbs for effortless finger dragging */
+    /* Larger shaded pill thumbs for effortless finger dragging */
     input[type="range"]::-webkit-slider-thumb {
-        width: 22px;
-        height: 22px;
-        box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+        width: 14px;
+        height: 26px;
+        border-radius: 7px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 12px rgba(6, 182, 212, 0.8);
     }
 
     /* Song row hit targets */
@@ -383,6 +444,86 @@ body.is-resizing-sidebar {
 
 .ctx-menu-item:hover {
     background-color: rgba(30, 41, 59, 0.9);
+}
+
+/* ==========================================================================
+   Modern Refined Dark Studio Theme (Deep Midnight Charcoal & High Legibility)
+   ========================================================================== */
+
+body:not(.theme-light) {
+    background-color: #0b1324 !important;
+    color: #f8fafc;
+}
+
+body:not(.theme-light) .bg-slate-950,
+body:not(.theme-light) .bg-slate-950\/95,
+body:not(.theme-light) .bg-slate-950\/90,
+body:not(.theme-light) .bg-slate-950\/80 {
+    background-color: #0d1629 !important;
+}
+
+body:not(.theme-light) .bg-slate-900,
+body:not(.theme-light) .bg-slate-900\/90,
+body:not(.theme-light) .bg-slate-900\/80 {
+    background-color: #121e36 !important;
+}
+
+body:not(.theme-light) .bg-slate-800,
+body:not(.theme-light) .bg-slate-800\/90,
+body:not(.theme-light) .bg-slate-800\/80,
+body:not(.theme-light) .bg-slate-800\/60 {
+    background-color: #1a2947 !important;
+}
+
+body:not(.theme-light) .glass-panel {
+    background: rgba(18, 30, 54, 0.85);
+    border-color: rgba(43, 62, 98, 0.7);
+}
+
+body:not(.theme-light) .glass-card {
+    background: rgba(18, 30, 54, 0.75);
+    border-color: rgba(43, 62, 98, 0.7);
+}
+
+body:not(.theme-light) .border-slate-800,
+body:not(.theme-light) .border-slate-800\/80,
+body:not(.theme-light) .border-slate-800\/60 {
+    border-color: #243556 !important;
+}
+
+body:not(.theme-light) .border-slate-700,
+body:not(.theme-light) .border-slate-700\/80,
+body:not(.theme-light) .border-slate-700\/60 {
+    border-color: #33476e !important;
+}
+
+/* Enhanced Text Legibility in Dark Theme */
+body:not(.theme-light) .text-slate-400 {
+    color: #94a3b8 !important;
+}
+
+body:not(.theme-light) .text-slate-500 {
+    color: #8194ad !important;
+}
+
+/* FM Sound Designer Large Dual Envelope Cards */
+#cardModEnvelope, #cardCarEnvelope {
+    box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+body.theme-light #cardModEnvelope, body.theme-light #cardCarEnvelope {
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    background: #ffffff !important;
+}
+
+/* Circular Vector Synth Touchpad */
+#vecCanvas {
+    touch-action: none;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 0 12px rgba(99, 102, 241, 0.25);
+}
+body.theme-light #vecCanvas {
+    background-color: #f8fafc !important;
+    border-color: #cbd5e1 !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
 }
 
 /* ==========================================================================
@@ -498,14 +639,16 @@ body.theme-light select option {
     color: #0f172a !important;
 }
 
-/* Range Slider */
+/* Range Slider in Light Theme */
 body.theme-light input[type="range"] {
-    background: #e2e8f0 !important;
+    background: #cbd5e1 !important;
+    border-color: #94a3b8 !important;
 }
 
 body.theme-light input[type="range"]::-webkit-slider-thumb {
-    background: #0891b2 !important;
-    box-shadow: 0 0 8px rgba(8, 145, 178, 0.4) !important;
+    background: linear-gradient(180deg, #38bdf8 0%, #0891b2 50%, #0e7490 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.7) !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 6px rgba(8, 145, 178, 0.35) !important;
 }
 
 /* Scrollbars */
@@ -702,6 +845,32 @@ body.theme-light [class*="border-indigo-600"] {
 body.theme-light [class*="border-blue-800"],
 body.theme-light [class*="border-blue-600"] {
     border-color: #bfdbfe !important;
+}
+
+/* FM Sound Designer Audition Buttons - Dark Mode Contrast */
+body:not(.theme-light) #fmAuditionStrip {
+    background-color: #121e36;
+    border-color: #243556;
+}
+body:not(.theme-light) .btn-fm-audition-note {
+    background-color: #1a2947;
+    color: #e2e8f0;
+    border: 1px solid #33476e;
+}
+body:not(.theme-light) .btn-fm-audition-note:hover {
+    background-color: #0891b2;
+    color: #ffffff;
+    border-color: #22d3ee;
+}
+body:not(.theme-light) .btn-fm-audition-note[data-chord="true"] {
+    background-color: #312e81;
+    color: #c7d2fe;
+    border: 1px solid #4338ca;
+}
+body:not(.theme-light) .btn-fm-audition-note[data-chord="true"]:hover {
+    background-color: #4f46e5;
+    color: #ffffff;
+    border-color: #6366f1;
 }
 
 /* FM Sound Designer Audition Buttons in Light Theme */
@@ -1009,9 +1178,10 @@ body.handheld-touch-mode .tree-song-item {
 }
 
 body.handheld-touch-mode input[type="range"]::-webkit-slider-thumb {
-    width: 26px !important;
-    height: 26px !important;
-    transform: scale(1.2);
+    width: 16px !important;
+    height: 28px !important;
+    border-radius: 8px !important;
+    transform: scale(1.1);
 }
 
 body.handheld-touch-mode #btnPlayPause {
