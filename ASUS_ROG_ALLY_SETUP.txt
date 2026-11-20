@@ -34,7 +34,7 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.6.0)
+ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.6.1)
 ------------------------------------------------------------------------
 Yamaha PortaSound Studio works natively with the Asus ROG Ally Z1 Extreme
 when left in default "Auto Mode" (or "Desktop Mode"):
