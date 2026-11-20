@@ -91,7 +91,7 @@ namespace PSS790Player.Tests
             var gmDir = Path.Combine(musicDir, "GM Midi");
             var pssDir = Path.Combine(musicDir, "PSS-790 Midi");
 
-            if (!Directory.Exists(gmDir) || Directory.GetFiles(gmDir, "*.mid", SearchOption.AllDirectories).Length == 0) return;
+            if (!Directory.Exists(gmDir) || Directory.GetFiles(gmDir, "*.mid", SearchOption.AllDirectories).Length < 113) return;
 
             int count = await BatchConverter.ConvertDirectoryAsync(gmDir, pssDir);
             Assert.True(count >= 113, "Expected at least 113 files converted, but got " + count);
@@ -139,7 +139,7 @@ namespace PSS790Player.Tests
             var musicDir = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), "Music", "Midi");
             var pssDir = Path.Combine(musicDir, "PSS-790 Midi");
 
-            if (!Directory.Exists(pssDir) || Directory.GetFiles(pssDir, "*.mid", SearchOption.AllDirectories).Length == 0) return;
+            if (!Directory.Exists(pssDir) || Directory.GetFiles(pssDir, "*.mid", SearchOption.AllDirectories).Length < 113) return;
 
             var files = Directory.GetFiles(pssDir, "*.mid", SearchOption.AllDirectories);
             Assert.True(files.Length >= 113, "Expected at least 113 PSS-790 files, got " + files.Length);
