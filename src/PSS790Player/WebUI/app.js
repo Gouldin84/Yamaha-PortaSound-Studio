@@ -920,10 +920,15 @@ function autoFitSidebarWidth(force = false) {
     ctx.font = "600 11px Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
     let maxTextWidth = 100;
+    let longestCharLen = 0;
 
     for (const file of state.visibleSongList) {
-        const w = ctx.measureText(file.fileName || "").width;
-        if (w > maxTextWidth) maxTextWidth = w;
+        const name = file.fileName || "";
+        if (name.length > longestCharLen * 0.75) {
+            const w = ctx.measureText(name).width;
+            if (w > maxTextWidth) maxTextWidth = w;
+            if (name.length > longestCharLen) longestCharLen = name.length;
+        }
     }
 
     // Also check visible folder group labels
@@ -1594,6 +1599,97 @@ function filterFolderNode(folder, query) {
     return null;
 }
 
+const FOLDER_CHUNK_SIZE = 50;
+
+function renderFileListChunked(targetContainer, fileList, padPx) {
+    if (!fileList || fileList.length === 0) return;
+
+    // Register all files into state.visibleSongList for index navigation
+    for (let i = 0; i < fileList.length; i++) {
+        state.visibleSongList.push(fileList[i]);
+    }
+
+    const initialCount = Math.min(FOLDER_CHUNK_SIZE, fileList.length);
+    const fragment = document.createDocumentFragment();
+    for (let i = 0; i < initialCount; i++) {
+        const fileEl = createSongItemElement(fileList[i]);
+        if (padPx > 0) fileEl.style.paddingLeft = `${padPx + 10}px`;
+        fragment.appendChild(fileEl);
+    }
+    targetContainer.appendChild(fragment);
+
+    if (fileList.length > initialCount) {
+        let renderedCount = initialCount;
+        const sentinel = document.createElement("div");
+        sentinel.className = "folder-load-sentinel py-1 px-3 text-[10px] text-cyan-400 font-mono cursor-pointer hover:text-cyan-300 select-none transition-colors";
+        sentinel.textContent = `Showing ${renderedCount} of ${fileList.length} songs (scroll for more)`;
+
+        const renderNextChunk = () => {
+            if (renderedCount >= fileList.length) return;
+            const nextLimit = Math.min(renderedCount + FOLDER_CHUNK_SIZE, fileList.length);
+            const batchFragment = document.createDocumentFragment();
+            for (let i = renderedCount; i < nextLimit; i++) {
+                const fileEl = createSongItemElement(fileList[i]);
+                if (padPx > 0) fileEl.style.paddingLeft = `${padPx + 10}px`;
+                batchFragment.appendChild(fileEl);
+            }
+            targetContainer.insertBefore(batchFragment, sentinel);
+            renderedCount = nextLimit;
+            if (renderedCount >= fileList.length) {
+                sentinel.remove();
+                if (sentinel._observer) sentinel._observer.disconnect();
+            } else {
+                sentinel.textContent = `Showing ${renderedCount} of ${fileList.length} songs (scroll for more)`;
+            }
+        };
+
+        const renderAllRemaining = () => {
+            if (renderedCount >= fileList.length) return;
+            const remFragment = document.createDocumentFragment();
+            for (let i = renderedCount; i < fileList.length; i++) {
+                const fileEl = createSongItemElement(fileList[i]);
+                if (padPx > 0) fileEl.style.paddingLeft = `${padPx + 10}px`;
+                remFragment.appendChild(fileEl);
+            }
+            targetContainer.insertBefore(remFragment, sentinel);
+            renderedCount = fileList.length;
+            sentinel.remove();
+            if (sentinel._observer) sentinel._observer.disconnect();
+        };
+
+        sentinel._renderAllRemaining = renderAllRemaining;
+        sentinel.addEventListener("click", renderNextChunk);
+
+        if (window.IntersectionObserver) {
+            const observer = new IntersectionObserver((entries) => {
+                if (entries[0] && entries[0].isIntersecting) {
+                    renderNextChunk();
+                }
+            }, { root: document.getElementById("treeContainer"), rootMargin: "200px" });
+            observer.observe(sentinel);
+            sentinel._observer = observer;
+        }
+
+        targetContainer.appendChild(sentinel);
+    }
+}
+
+function ensureSongElementRendered(fullPath) {
+    if (!fullPath) return null;
+    let el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(fullPath)}"]`);
+    if (el) return el;
+
+    const sentinels = document.querySelectorAll(".folder-load-sentinel");
+    for (const s of sentinels) {
+        if (typeof s._renderAllRemaining === "function") {
+            s._renderAllRemaining();
+            el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(fullPath)}"]`);
+            if (el) return el;
+        }
+    }
+    return document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(fullPath)}"]`);
+}
+
 function renderFolderNode(folder, depth, catKey, query) {
     const isFavFolder = !!folder.isVirtualFavorites;
     const folderKey = `${catKey}:${folder.relativePath || folder.name}`;
@@ -1692,16 +1788,9 @@ function renderFolderNode(folder, depth, catKey, query) {
             });
         }
 
-        // 2. Render direct files
+        // 2. Render direct files (Virtual/Chunked)
         if (folder.files && folder.files.length > 0) {
-            folder.files.forEach(file => {
-                state.visibleSongList.push(file);
-                const fileEl = createSongItemElement(file);
-                if (padPx > 0) {
-                    fileEl.style.paddingLeft = `${padPx + 10}px`;
-                }
-                folderContent.appendChild(fileEl);
-            });
+            renderFileListChunked(folderContent, folder.files, padPx);
         }
 
         folderGroup.appendChild(folderContent);
@@ -1891,10 +1980,7 @@ function renderLibraryTree() {
                 if (isRootExpanded) {
                     const rootContent = document.createElement("div");
                     rootContent.className = "pl-3 space-y-0.5 border-l border-slate-800/80 ml-2.5";
-                    filteredRootFiles.forEach(file => {
-                        state.visibleSongList.push(file);
-                        rootContent.appendChild(createSongItemElement(file));
-                    });
+                    renderFileListChunked(rootContent, filteredRootFiles, 0);
                     rootGroup.appendChild(rootContent);
                 }
 
@@ -2079,29 +2165,71 @@ function createSongItemElement(file) {
 }
 
 function highlightActiveSongInTree() {
-    const items = document.querySelectorAll(".tree-song-item");
-    items.forEach(el => {
-        const path = el.dataset.fullPath;
-        const isSelected = path === state.selectedSongPath;
-        const isPlayingThis = path === state.currentFilePath && state.isPlaying;
-
-        el.classList.toggle("selected", isSelected);
-        el.classList.toggle("playing", isPlayingThis);
-
-        const iconEl = el.querySelector(".song-icon");
-        if (iconEl) {
-            if (isPlayingThis) {
-                iconEl.textContent = "🔊";
-                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
-            } else if (isSelected) {
-                iconEl.textContent = "▶";
-                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
-            } else {
-                iconEl.textContent = "🎵";
-                iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+    // 1. Remove selected state from previously selected item (if no longer selected)
+    const prevSelected = document.querySelectorAll(".tree-song-item.selected");
+    prevSelected.forEach(el => {
+        if (el.dataset.fullPath !== state.selectedSongPath) {
+            el.classList.remove("selected");
+            const isPlayingThis = el.dataset.fullPath === state.currentFilePath && state.isPlaying;
+            const iconEl = el.querySelector(".song-icon");
+            if (iconEl) {
+                if (isPlayingThis) {
+                    iconEl.textContent = "🔊";
+                    iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+                } else {
+                    iconEl.textContent = "🎵";
+                    iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+                }
             }
         }
     });
+
+    // 2. Remove playing state from previously playing item (if no longer playing)
+    const prevPlaying = document.querySelectorAll(".tree-song-item.playing");
+    prevPlaying.forEach(el => {
+        const isPlayingThis = el.dataset.fullPath === state.currentFilePath && state.isPlaying;
+        if (!isPlayingThis) {
+            el.classList.remove("playing");
+            const isSelected = el.dataset.fullPath === state.selectedSongPath;
+            const iconEl = el.querySelector(".song-icon");
+            if (iconEl) {
+                if (isSelected) {
+                    iconEl.textContent = "▶";
+                    iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
+                } else {
+                    iconEl.textContent = "🎵";
+                    iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+                }
+            }
+        }
+    });
+
+    // 3. Apply selected state to new selected item
+    if (state.selectedSongPath) {
+        const selEl = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(state.selectedSongPath)}"]`);
+        if (selEl) {
+            selEl.classList.add("selected");
+            const isPlayingThis = state.selectedSongPath === state.currentFilePath && state.isPlaying;
+            const iconEl = selEl.querySelector(".song-icon");
+            if (iconEl && !isPlayingThis) {
+                iconEl.textContent = "▶";
+                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
+            }
+        }
+    }
+
+    // 4. Apply playing state to new playing item
+    if (state.currentFilePath && state.isPlaying) {
+        const playEl = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(state.currentFilePath)}"]`);
+        if (playEl) {
+            playEl.classList.add("playing");
+            const iconEl = playEl.querySelector(".song-icon");
+            if (iconEl) {
+                iconEl.textContent = "🔊";
+                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+            }
+        }
+    }
 }
 
 function navigateSongList(direction) {
@@ -2128,7 +2256,7 @@ function selectSongByIndex(index) {
     state.selectedSongPath = song.fullPath;
     highlightActiveSongInTree();
 
-    const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
+    const el = ensureSongElementRendered(song.fullPath);
     if (el) {
         el.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
@@ -2153,7 +2281,7 @@ function playSongByIndex(index) {
     highlightActiveSongInTree();
     sendToHost("load_midi_and_play", { path: song.fullPath });
 
-    const el = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(song.fullPath)}"]`);
+    const el = ensureSongElementRendered(song.fullPath);
     if (el) {
         el.scrollIntoView({ block: "nearest", behavior: "auto" });
     }
@@ -3768,15 +3896,19 @@ document.getElementById("btnBatchDelete")?.addEventListener("click", () => {
 const sidebarSearchInput = document.getElementById("sidebarSearchInput");
 const btnClearSearch = document.getElementById("btnClearSearch");
 
+let searchDebounceTimer = null;
 if (sidebarSearchInput) {
     sidebarSearchInput.addEventListener("input", (e) => {
-        state.searchQuery = e.target.value.trim();
-        if (state.searchQuery.length > 0) {
-            if (btnClearSearch) btnClearSearch.classList.remove("hidden");
-        } else {
-            if (btnClearSearch) btnClearSearch.classList.add("hidden");
+        const val = e.target.value.trim();
+        state.searchQuery = val;
+        if (btnClearSearch) {
+            btnClearSearch.classList.toggle("hidden", val.length === 0);
         }
-        renderLibraryTree();
+        if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+            searchDebounceTimer = null;
+            renderLibraryTree();
+        }, 120);
     });
 }
 

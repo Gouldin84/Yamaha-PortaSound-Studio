@@ -196,6 +196,11 @@ input[type="range"]::-webkit-slider-thumb:hover {
     scroll-behavior: auto !important;
 }
 
+#treeContainer {
+    contain: layout style;
+    will-change: scroll-position;
+}
+
 /* Quick-Pick Sidebar Styling */
 #quickPickSidebar {
     height: 100%;
@@ -262,7 +267,18 @@ body.is-resizing-sidebar {
 }
 
 .tree-song-item {
-    transition: background-color 0.1s ease, border-color 0.1s ease;
+    contain: content;
+    will-change: transform;
+    transform: translateZ(0);
+    transition: background-color 0.08s ease, border-color 0.08s ease;
+}
+
+.tree-folder-group {
+    contain: layout style;
+}
+
+.tree-category-group {
+    contain: layout style;
 }
 
 .tree-song-item:hover {

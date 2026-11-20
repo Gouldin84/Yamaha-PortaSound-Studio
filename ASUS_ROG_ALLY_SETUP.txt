@@ -34,7 +34,7 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.5.6)
+ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.5.7)
 ------------------------------------------------------------------------
 Yamaha PortaSound Studio works natively with the Asus ROG Ally Z1 Extreme
 when left in default "Auto Mode" (or "Desktop Mode"):
@@ -53,6 +53,9 @@ when left in default "Auto Mode" (or "Desktop Mode"):
 
 TOUCHSCREEN & HANDHELD FEATURES FOR ASUS ROG ALLY
 ------------------------------------------------------------------------
+- 120Hz Buttery DOM Virtualization: Massive song libraries (3,800+ songs)
+  scroll effortlessly at native 120 FPS with GPU layer promotion and O(1)
+  targeted item highlighting. Zero micro-stutters or frame drops.
 - Responsive Handheld Top Bar: All header controls are neatly fitted for
   1080p (with 150%/175% Windows DPI scaling) and 720p displays with zero
   off-screen clipping. Secondary utilities (Folder, Batch, Shortcuts, About)
