@@ -2046,6 +2046,23 @@ function createSongItemElement(file) {
         badgeTitle = `Native ${is680 ? 'Yamaha PSS-680' : 'Yamaha PSS-790'} converted file (plays via direct hardware passthrough)`;
     }
 
+    let playIcon = "🎵";
+    let playTitle = "Play this song";
+    let playClass = "btn-song-play song-icon text-[11px] shrink-0 text-slate-500 hover:text-cyan-400";
+    if (isPlaying) {
+        playIcon = "🔊";
+        playTitle = "Pause playback (Space)";
+        playClass = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+    } else if (file.fullPath === state.currentFilePath) {
+        playIcon = "▶";
+        playTitle = "Resume playback (Space)";
+        playClass = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400";
+    } else if (isSelected) {
+        playIcon = "▶";
+        playTitle = "Play this song (Enter / Button A)";
+        playClass = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400";
+    }
+
     const div = document.createElement("div");
     div.className = `group tree-song-item flex items-center justify-between px-2 py-1 rounded-lg border border-transparent cursor-pointer select-none text-[11px] text-slate-300 transition-all ${isSelected ? 'selected' : ''} ${isPlaying ? 'playing' : ''} ${isChecked ? 'bg-cyan-950/40 border-cyan-800/50' : ''}`;
     div.dataset.fullPath = file.fullPath;
@@ -2060,15 +2077,31 @@ function createSongItemElement(file) {
             <button type="button" class="btn-song-star shrink-0 text-[11px] px-0.5 hover:scale-125 transition ${isFav ? 'text-amber-400 font-bold' : 'text-slate-600 hover:text-amber-400'}" title="${isFav ? 'Remove from Favourites (F)' : 'Add to Favourites (F)'}">
                 ${isFav ? '★' : '☆'}
             </button>
-            <span class="song-icon text-[11px] shrink-0 ${isPlaying ? 'text-cyan-400 animate-pulse' : (isSelected ? 'text-cyan-400' : 'text-slate-500')}">
-                ${isPlaying ? '🔊' : (isSelected ? '▶' : '🎵')}
-            </span>
+            <button type="button" class="${playClass}" title="${playTitle}">
+                ${playIcon}
+            </button>
             ${formatSongTitleHtml(file.fileName, file.subFolder)}
         </div>
         <span class="song-badge text-[9px] font-bold font-mono px-1 py-0.2 rounded shrink-0 ml-1.5 ${badgeClass}" title="${badgeTitle}">
             ${badgeLabel}
         </span>
     `;
+
+    const playBtn = div.querySelector(".btn-song-play");
+    if (playBtn) {
+        playBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (file.fullPath === state.currentFilePath && state.isPlaying) {
+                sendToHost("pause");
+            } else if (file.fullPath === state.currentFilePath && !state.isPlaying) {
+                sendToHost("play");
+            } else {
+                state.selectedSongPath = file.fullPath;
+                highlightActiveSongInTree();
+                sendToHost("load_midi_and_play", { path: file.fullPath });
+            }
+        });
+    }
 
     const starBtn = div.querySelector(".btn-song-star");
     if (starBtn) {
@@ -2131,22 +2164,31 @@ function createSongItemElement(file) {
     });
 
     div.addEventListener("click", (e) => {
-        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
+        if (e.target.classList.contains("song-checkbox") || 
+            e.target.closest(".btn-song-star") || 
+            e.target.closest(".btn-song-play")) return;
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
 
-        // Mouse clicks (and ROG Ally RB shoulder clicks) ONLY stage/load the song into the player deck.
-        // They NEVER auto-play; playback begins strictly when the user clicks Play, or presses Button A / Enter / Space.
-        sendToHost("load_file", { path: file.fullPath, autoPlay: false });
+        // Mouse clicks (and ROG Ally RB shoulder clicks) ONLY highlight the row.
+        // If not currently playing, stage metadata onto the deck. Active playback is NEVER stopped!
+        if (!state.isPlaying) {
+            sendToHost("load_midi_metadata", { path: file.fullPath });
+        }
     });
 
     div.addEventListener("dblclick", (e) => {
-        if (e.target.classList.contains("song-checkbox") || e.target.closest(".btn-song-star")) return;
+        if (e.target.classList.contains("song-checkbox") || 
+            e.target.closest(".btn-song-star") || 
+            e.target.closest(".btn-song-play")) return;
         e.preventDefault();
         state.selectedSongPath = file.fullPath;
         highlightActiveSongInTree();
-        // Double-click also strictly loads without starting playback.
-        sendToHost("load_file", { path: file.fullPath, autoPlay: false });
+
+        // Double-click also strictly highlights without interrupting playback
+        if (!state.isPlaying) {
+            sendToHost("load_midi_metadata", { path: file.fullPath });
+        }
     });
 
     div.addEventListener("contextmenu", (e) => {
@@ -2172,14 +2214,16 @@ function highlightActiveSongInTree() {
         if (el.dataset.fullPath !== state.selectedSongPath) {
             el.classList.remove("selected");
             const isPlayingThis = el.dataset.fullPath === state.currentFilePath && state.isPlaying;
-            const iconEl = el.querySelector(".song-icon");
+            const iconEl = el.querySelector(".btn-song-play, .song-icon");
             if (iconEl) {
                 if (isPlayingThis) {
                     iconEl.textContent = "🔊";
-                    iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+                    iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+                    iconEl.title = "Pause playback (Space)";
                 } else {
                     iconEl.textContent = "🎵";
-                    iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+                    iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-slate-500 hover:text-cyan-400";
+                    iconEl.title = "Play this song";
                 }
             }
         }
@@ -2192,14 +2236,16 @@ function highlightActiveSongInTree() {
         if (!isPlayingThis) {
             el.classList.remove("playing");
             const isSelected = el.dataset.fullPath === state.selectedSongPath;
-            const iconEl = el.querySelector(".song-icon");
+            const iconEl = el.querySelector(".btn-song-play, .song-icon");
             if (iconEl) {
                 if (isSelected) {
                     iconEl.textContent = "▶";
-                    iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
+                    iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400";
+                    iconEl.title = "Play this song (Enter / Button A)";
                 } else {
                     iconEl.textContent = "🎵";
-                    iconEl.className = "song-icon text-[11px] shrink-0 text-slate-500";
+                    iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-slate-500 hover:text-cyan-400";
+                    iconEl.title = "Play this song";
                 }
             }
         }
@@ -2211,10 +2257,11 @@ function highlightActiveSongInTree() {
         if (selEl) {
             selEl.classList.add("selected");
             const isPlayingThis = state.selectedSongPath === state.currentFilePath && state.isPlaying;
-            const iconEl = selEl.querySelector(".song-icon");
+            const iconEl = selEl.querySelector(".btn-song-play, .song-icon");
             if (iconEl && !isPlayingThis) {
                 iconEl.textContent = "▶";
-                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400";
+                iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400";
+                iconEl.title = "Play this song (Enter / Button A)";
             }
         }
     }
@@ -2224,10 +2271,11 @@ function highlightActiveSongInTree() {
         const playEl = document.querySelector(`.tree-song-item[data-full-path="${CSS.escape(state.currentFilePath)}"]`);
         if (playEl) {
             playEl.classList.add("playing");
-            const iconEl = playEl.querySelector(".song-icon");
+            const iconEl = playEl.querySelector(".btn-song-play, .song-icon");
             if (iconEl) {
                 iconEl.textContent = "🔊";
-                iconEl.className = "song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+                iconEl.className = "btn-song-play song-icon text-[11px] shrink-0 text-cyan-400 animate-pulse";
+                iconEl.title = "Pause playback (Space)";
             }
         }
     }
