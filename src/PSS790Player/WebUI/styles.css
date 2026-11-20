@@ -239,6 +239,15 @@ body.is-resizing-sidebar {
     user-select: none !important;
 }
 
+/* Scrollbar Utility for Header & Narrow Viewports */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
 /* Song Title Styling (Dark Theme Default) */
 .song-title {
     color: #f1f5f9;
@@ -529,15 +538,18 @@ body.theme-light .tree-folder-group .font-medium {
     color: #0f172a !important;
 }
 
-/* Context Menu */
-body.theme-light #libraryContextMenu {
+/* Context & Dropdown Menus */
+body.theme-light #libraryContextMenu,
+body.theme-light #modelDropdownMenu,
+body.theme-light #moreToolsDropdownMenu {
     background-color: #ffffff !important;
     border-color: #cbd5e1 !important;
     color: #0f172a !important;
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06) !important;
 }
 
-body.theme-light .ctx-menu-item:hover {
+body.theme-light .ctx-menu-item:hover,
+body.theme-light #moreToolsDropdownMenu button:hover {
     background-color: #f1f5f9 !important;
 }
 

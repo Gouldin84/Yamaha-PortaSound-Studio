@@ -7555,6 +7555,73 @@ function initModelSelector() {
     applyActiveModel(savedModel);
 }
 
+function initMoreToolsMenu() {
+    const btn = document.getElementById("btnMoreTools");
+    const menu = document.getElementById("moreToolsDropdownMenu");
+    if (!btn || !menu) return;
+
+    function openMenu() {
+        menu.classList.remove("hidden");
+        requestAnimationFrame(() => {
+            menu.classList.remove("opacity-0", "scale-95");
+            menu.classList.add("opacity-100", "scale-100");
+        });
+        btn.setAttribute("aria-expanded", "true");
+    }
+
+    function closeMenu() {
+        menu.classList.remove("opacity-100", "scale-100");
+        menu.classList.add("opacity-0", "scale-95");
+        setTimeout(() => {
+            menu.classList.add("hidden");
+        }, 150);
+        btn.setAttribute("aria-expanded", "false");
+    }
+
+    btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = !menu.classList.contains("hidden");
+        if (isOpen) closeMenu();
+        else openMenu();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+            closeMenu();
+        }
+    });
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !menu.classList.contains("hidden")) {
+            closeMenu();
+        }
+    });
+
+    document.getElementById("menuItemOpenFolder")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        document.getElementById("btnOpenFolder")?.click();
+    });
+
+    document.getElementById("menuItemOpenBatch")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        document.getElementById("btnOpenBatch")?.click();
+    });
+
+    document.getElementById("menuItemShortcuts")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        openShortcutsModal();
+    });
+
+    document.getElementById("menuItemAbout")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        openAboutModal();
+    });
+}
+
 // Trigger initial handshake and keyboard shortcuts
 function startApp() {
     initTheme();
@@ -7564,6 +7631,7 @@ function startApp() {
     initVuMeters();
     renderRecordingsLibrary();
     initModelSelector();
+    initMoreToolsMenu();
     initHandheldMode();
 
     // Sound Designer & SysEx Workstation initializers

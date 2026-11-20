@@ -34,7 +34,7 @@ Option 3: Permanent Manual Unblock
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.5.5)
+ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.5.6)
 ------------------------------------------------------------------------
 Yamaha PortaSound Studio works natively with the Asus ROG Ally Z1 Extreme
 when left in default "Auto Mode" (or "Desktop Mode"):
@@ -51,11 +51,14 @@ when left in default "Auto Mode" (or "Desktop Mode"):
 - Button N / P: Quick skip to Next / Previous track.
 - Button Space / Esc: Play/Pause and Emergency Hardware Stop.
 
-TOUCHSCREEN FEATURES FOR ASUS ROG ALLY
+TOUCHSCREEN & HANDHELD FEATURES FOR ASUS ROG ALLY
 ------------------------------------------------------------------------
+- Responsive Handheld Top Bar: All header controls are neatly fitted for
+  1080p (with 150%/175% Windows DPI scaling) and 720p displays with zero
+  off-screen clipping. Secondary utilities (Folder, Batch, Shortcuts, About)
+  are organized in a fast-access [⋯] Studio Tools dropdown menu.
 - Safe Library Tapping: Tapping or clicking any song stages it onto the
   player deck at 00:00. Playback strictly waits for Button A or the Play button.
-  from 00:00 without intrusive popups or tooltips blocking your view.
 - Handheld Touch Mode: Tap the 🖐️ Touch button in the header to enlarge
   slider handles, buttons, and song rows to 42px+ for effortless thumb use.
 - Continuous Auto-Advance: When a track finishes, the player automatically
