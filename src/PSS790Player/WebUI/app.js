@@ -7243,7 +7243,8 @@ const VECTOR_PRESETS = {
         "posX": 0.38,
         "posY": 0.88,
         "orbitMode": "wander",
-        "orbitSpeed": 1.4
+        "orbitSpeed": 1.4,
+        "channelEffects": { 0: { "rev": 2, "vib": 3 }, 1: { "rev": 2, "vib": 3 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 1, "vib": 0 } }
     },
     "van_halen_jump": {
         "name": "Jump OB Vector Brass",
@@ -7254,7 +7255,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.69,
         "orbitMode": "pingpong",
-        "orbitSpeed": 4.3
+        "orbitSpeed": 4.3,
+        "channelEffects": { 0: { "rev": 2, "vib": 4 }, 1: { "rev": 2, "vib": 2 }, 2: { "rev": 2, "vib": 4 }, 3: { "rev": 3, "vib": 5 } }
     },
     "dx7_tine_ep": {
         "name": "Ballad Tine & Crystal EP",
@@ -7265,7 +7267,8 @@ const VECTOR_PRESETS = {
         "posX": -0.19,
         "posY": 0.44,
         "orbitMode": "wander",
-        "orbitSpeed": 1.7
+        "orbitSpeed": 1.7,
+        "channelEffects": { 0: { "rev": 2, "vib": 1 }, 1: { "rev": 1, "vib": 0 }, 2: { "rev": 2, "vib": 1 }, 3: { "rev": 3, "vib": 4 } }
     },
     "haddaway_lately_bass": {
         "name": "What Is Love Club Bass",
@@ -7276,7 +7279,8 @@ const VECTOR_PRESETS = {
         "posX": -0.12,
         "posY": 0.56,
         "orbitMode": "wander",
-        "orbitSpeed": 1.2
+        "orbitSpeed": 1.2,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 1, "vib": 0 } }
     },
     "eurythmics_sweet_dreams": {
         "name": "Sweet Dreams Vector Pulse",
@@ -7287,7 +7291,8 @@ const VECTOR_PRESETS = {
         "posX": 0.25,
         "posY": 0.5,
         "orbitMode": "manual",
-        "orbitSpeed": 3.0
+        "orbitSpeed": 3.0,
+        "channelEffects": { 0: { "rev": 2, "vib": 4 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 2, "vib": 2 }, 3: { "rev": 2, "vib": 3 } }
     },
     "new_order_blue_monday": {
         "name": "Blue Monday Choir & Bass",
@@ -7298,7 +7303,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.44,
         "orbitMode": "wander",
-        "orbitSpeed": 1.6
+        "orbitSpeed": 1.6,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 2, "vib": 3 }, 2: { "rev": 0, "vib": 0 }, 3: { "rev": 1, "vib": 2 } }
     },
     "danger_zone_slap": {
         "name": "Danger Zone Slap & Brass",
@@ -7309,7 +7315,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.62,
         "orbitMode": "wander",
-        "orbitSpeed": 1.2
+        "orbitSpeed": 1.2,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 2, "vib": 3 }, 2: { "rev": 0, "vib": 0 }, 3: { "rev": 3, "vib": 0 } }
     },
     "axel_f_brass": {
         "name": "Axel F Marimba-Brass Lead",
@@ -7320,7 +7327,8 @@ const VECTOR_PRESETS = {
         "posX": 0.31,
         "posY": 0.56,
         "orbitMode": "wander",
-        "orbitSpeed": 1.2
+        "orbitSpeed": 1.2,
+        "channelEffects": { 0: { "rev": 2, "vib": 2 }, 1: { "rev": 1, "vib": 0 }, 2: { "rev": 2, "vib": 4 }, 3: { "rev": 3, "vib": 1 } }
     },
     "daft_punk_hbfs": {
         "name": "Harder Better Talk-Lead",
@@ -7331,7 +7339,8 @@ const VECTOR_PRESETS = {
         "posX": 0.44,
         "posY": 0.5,
         "orbitMode": "circle",
-        "orbitSpeed": 1.9
+        "orbitSpeed": 1.9,
+        "channelEffects": { 0: { "rev": 1, "vib": 2 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 0, "vib": 0 }, 3: { "rev": 1, "vib": 2 } }
     },
     "stranger_things_arp": {
         "name": "Stranger Things Analog Vector",
@@ -7342,7 +7351,8 @@ const VECTOR_PRESETS = {
         "posX": 0.25,
         "posY": 0.44,
         "orbitMode": "pingpong",
-        "orbitSpeed": 3.8
+        "orbitSpeed": 3.8,
+        "channelEffects": { 0: { "rev": 2, "vib": 1 }, 1: { "rev": 3, "vib": 5 }, 2: { "rev": 2, "vib": 3 }, 3: { "rev": 3, "vib": 5 } }
     },
     "vangelis_blade_runner_pad": {
         "name": "Blade Runner CS-80 Vector Pad",
@@ -7353,7 +7363,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.31,
         "orbitMode": "pingpong",
-        "orbitSpeed": 7.5
+        "orbitSpeed": 7.5,
+        "channelEffects": { 0: { "rev": 3, "vib": 5 }, 1: { "rev": 3, "vib": 6 }, 2: { "rev": 2, "vib": 3 }, 3: { "rev": 3, "vib": 4 } }
     },
     "toto_africa_pad": {
         "name": "Africa Kalimba & Polysynth",
@@ -7364,7 +7375,8 @@ const VECTOR_PRESETS = {
         "posX": -0.12,
         "posY": 0.38,
         "orbitMode": "wander",
-        "orbitSpeed": 2.0
+        "orbitSpeed": 2.0,
+        "channelEffects": { 0: { "rev": 3, "vib": 5 }, 1: { "rev": 2, "vib": 0 }, 2: { "rev": 2, "vib": 2 }, 3: { "rev": 3, "vib": 5 } }
     },
     "enya_orinoco_pad": {
         "name": "Orinoco Pizzicato & Choir",
@@ -7375,7 +7387,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.25,
         "orbitMode": "pingpong",
-        "orbitSpeed": 5.0
+        "orbitSpeed": 5.0,
+        "channelEffects": { 0: { "rev": 3, "vib": 2 }, 1: { "rev": 3, "vib": 5 }, 2: { "rev": 2, "vib": 1 }, 3: { "rev": 3, "vib": 6 } }
     },
     "wham_last_christmas_bell": {
         "name": "Last Christmas Sleigh & Bell",
@@ -7386,7 +7399,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.5,
         "orbitMode": "wander",
-        "orbitSpeed": 2.1
+        "orbitSpeed": 2.1,
+        "channelEffects": { 0: { "rev": 2, "vib": 4 }, 1: { "rev": 2, "vib": 0 }, 2: { "rev": 2, "vib": 4 }, 3: { "rev": 1, "vib": 0 } }
     },
     "phil_collins_air_bell": {
         "name": "In the Air Glass & Atmosphere",
@@ -7397,7 +7411,8 @@ const VECTOR_PRESETS = {
         "posX": 0.31,
         "posY": 0.38,
         "orbitMode": "pingpong",
-        "orbitSpeed": 6.0
+        "orbitSpeed": 6.0,
+        "channelEffects": { 0: { "rev": 3, "vib": 2 }, 1: { "rev": 2, "vib": 4 }, 2: { "rev": 2, "vib": 0 }, 3: { "rev": 3, "vib": 4 } }
     },
     "madonna_fm_marimba": {
         "name": "80s Wood Marimba & Vibe",
@@ -7408,7 +7423,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.56,
         "orbitMode": "manual",
-        "orbitSpeed": 2.5
+        "orbitSpeed": 2.5,
+        "channelEffects": { 0: { "rev": 1, "vib": 0 }, 1: { "rev": 1, "vib": 0 }, 2: { "rev": 2, "vib": 1 }, 3: { "rev": 0, "vib": 0 } }
     },
     "sonic_steel_drum": {
         "name": "Green Hill Steel Drum Ensemble",
@@ -7419,7 +7435,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.75,
         "orbitMode": "wander",
-        "orbitSpeed": 1.5
+        "orbitSpeed": 1.5,
+        "channelEffects": { 0: { "rev": 2, "vib": 1 }, 1: { "rev": 2, "vib": 0 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 3, "vib": 2 } }
     },
     "gated_fm_snare": {
         "name": "80s Gated Timpani & Metal Hit",
@@ -7430,7 +7447,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.31,
         "orbitMode": "wander",
-        "orbitSpeed": 1.0
+        "orbitSpeed": 1.0,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 0, "vib": 0 } }
     },
     "planet_rock_orch_hit": {
         "name": "Planet Rock Fairlight Hit",
@@ -7441,7 +7459,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.69,
         "orbitMode": "manual",
-        "orbitSpeed": 1.9
+        "orbitSpeed": 1.9,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 3, "vib": 2 }, 2: { "rev": 0, "vib": 0 }, 3: { "rev": 2, "vib": 3 } }
     },
     "electro_metallic_cowbell": {
         "name": "Blue Monday Metallic Clank",
@@ -7452,7 +7471,8 @@ const VECTOR_PRESETS = {
         "posX": 0.38,
         "posY": 0.25,
         "orbitMode": "manual",
-        "orbitSpeed": 1.2
+        "orbitSpeed": 1.2,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 1, "vib": 0 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 0, "vib": 0 } }
     },
     "sonic_knuckles_sky_sanctuary": {
         "name": "Sky Sanctuary Harp & Crystal",
@@ -7463,7 +7483,8 @@ const VECTOR_PRESETS = {
         "posX": 0.25,
         "posY": 0.56,
         "orbitMode": "wander",
-        "orbitSpeed": 1.7
+        "orbitSpeed": 1.7,
+        "channelEffects": { 0: { "rev": 3, "vib": 2 }, 1: { "rev": 2, "vib": 0 }, 2: { "rev": 2, "vib": 0 }, 3: { "rev": 2, "vib": 3 } }
     },
     "sonic2_chemical_plant_bass": {
         "name": "Chemical Plant Slap & Synth",
@@ -7474,7 +7495,8 @@ const VECTOR_PRESETS = {
         "posX": 0.31,
         "posY": 0.62,
         "orbitMode": "wander",
-        "orbitSpeed": 1.1
+        "orbitSpeed": 1.1,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 1, "vib": 2 }, 3: { "rev": 1, "vib": 1 } }
     },
     "sor2_go_straight_bass": {
         "name": "Go Straight Rave Stab & Bass",
@@ -7485,7 +7507,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.56,
         "orbitMode": "wander",
-        "orbitSpeed": 1.3
+        "orbitSpeed": 1.3,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 1, "vib": 2 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 0, "vib": 0 } }
     },
     "outrun_magical_sound_marimba": {
         "name": "Magical Sound Steel & Marimba",
@@ -7496,7 +7519,8 @@ const VECTOR_PRESETS = {
         "posX": 0.38,
         "posY": 0.5,
         "orbitMode": "manual",
-        "orbitSpeed": 2.1
+        "orbitSpeed": 2.1,
+        "channelEffects": { 0: { "rev": 2, "vib": 0 }, 1: { "rev": 2, "vib": 1 }, 2: { "rev": 1, "vib": 0 }, 3: { "rev": 2, "vib": 3 } }
     },
     "thunder_force_iv_guitar": {
         "name": "Metal Squad Vector Shred",
@@ -7507,7 +7531,8 @@ const VECTOR_PRESETS = {
         "posX": 0.25,
         "posY": 0.75,
         "orbitMode": "pingpong",
-        "orbitSpeed": 2.7
+        "orbitSpeed": 2.7,
+        "channelEffects": { 0: { "rev": 1, "vib": 2 }, 1: { "rev": 1, "vib": 2 }, 2: { "rev": 2, "vib": 4 }, 3: { "rev": 1, "vib": 1 } }
     },
     "toejam_earl_funk_bass": {
         "name": "Big Earl Slap & Clavinet",
@@ -7518,7 +7543,8 @@ const VECTOR_PRESETS = {
         "posX": 0.19,
         "posY": 0.44,
         "orbitMode": "wander",
-        "orbitSpeed": 1.4
+        "orbitSpeed": 1.4,
+        "channelEffects": { 0: { "rev": 0, "vib": 0 }, 1: { "rev": 0, "vib": 0 }, 2: { "rev": 0, "vib": 0 }, 3: { "rev": 1, "vib": 0 } }
     },
     "castlevania_bloodlines_harpsichord": {
         "name": "Reincarnated Gothic Harpsichord",
@@ -7529,7 +7555,8 @@ const VECTOR_PRESETS = {
         "posX": 0.12,
         "posY": 0.69,
         "orbitMode": "wander",
-        "orbitSpeed": 1.8
+        "orbitSpeed": 1.8,
+        "channelEffects": { 0: { "rev": 1, "vib": 0 }, 1: { "rev": 2, "vib": 1 }, 2: { "rev": 2, "vib": 3 }, 3: { "rev": 3, "vib": 4 } }
     },
     "phantasy_star_iv_brass": {
         "name": "Algol Battle Vector Brass",
@@ -7540,7 +7567,8 @@ const VECTOR_PRESETS = {
         "posX": 0.25,
         "posY": 0.62,
         "orbitMode": "wander",
-        "orbitSpeed": 1.6
+        "orbitSpeed": 1.6,
+        "channelEffects": { 0: { "rev": 3, "vib": 2 }, 1: { "rev": 2, "vib": 4 }, 2: { "rev": 2, "vib": 2 }, 3: { "rev": 2, "vib": 3 } }
     },
     "after_burner_ii_lead": {
         "name": "Final Take Off Arcade Lead",
@@ -7551,7 +7579,8 @@ const VECTOR_PRESETS = {
         "posX": 0.31,
         "posY": 0.56,
         "orbitMode": "pingpong",
-        "orbitSpeed": 2.5
+        "orbitSpeed": 2.5,
+        "channelEffects": { 0: { "rev": 2, "vib": 4 }, 1: { "rev": 1, "vib": 2 }, 2: { "rev": 2, "vib": 4 }, 3: { "rev": 3, "vib": 0 } }
     },
     "shinobi_iii_shakuhachi": {
         "name": "Whirlwind Shakuhachi & Koto",
@@ -7562,7 +7591,8 @@ const VECTOR_PRESETS = {
         "posX": -0.19,
         "posY": 0.69,
         "orbitMode": "wander",
-        "orbitSpeed": 1.4
+        "orbitSpeed": 1.4,
+        "channelEffects": { 0: { "rev": 3, "vib": 6 }, 1: { "rev": 3, "vib": 6 }, 2: { "rev": 2, "vib": 2 }, 3: { "rev": 3, "vib": 5 } }
     }
 };
 
