@@ -7685,7 +7685,13 @@ function initModelSelector() {
 
     if (!btn || !menu) return;
 
+    let closeTimer = null;
+
     function openMenu() {
+        if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+        }
         menu.classList.remove("hidden");
         requestAnimationFrame(() => {
             menu.classList.remove("opacity-0", "scale-95");
@@ -7698,8 +7704,10 @@ function initModelSelector() {
     function closeMenu() {
         menu.classList.remove("opacity-100", "scale-100");
         menu.classList.add("opacity-0", "scale-95");
-        setTimeout(() => {
+        if (closeTimer) clearTimeout(closeTimer);
+        closeTimer = setTimeout(() => {
             menu.classList.add("hidden");
+            closeTimer = null;
         }, 150);
         btn.setAttribute("aria-expanded", "false");
         if (chevron) chevron.classList.remove("rotate-180");
@@ -7741,7 +7749,13 @@ function initMoreToolsMenu() {
     const menu = document.getElementById("moreToolsDropdownMenu");
     if (!btn || !menu) return;
 
+    let closeTimer = null;
+
     function openMenu() {
+        if (closeTimer) {
+            clearTimeout(closeTimer);
+            closeTimer = null;
+        }
         menu.classList.remove("hidden");
         requestAnimationFrame(() => {
             menu.classList.remove("opacity-0", "scale-95");
@@ -7753,8 +7767,10 @@ function initMoreToolsMenu() {
     function closeMenu() {
         menu.classList.remove("opacity-100", "scale-100");
         menu.classList.add("opacity-0", "scale-95");
-        setTimeout(() => {
+        if (closeTimer) clearTimeout(closeTimer);
+        closeTimer = setTimeout(() => {
             menu.classList.add("hidden");
+            closeTimer = null;
         }, 150);
         btn.setAttribute("aria-expanded", "false");
     }

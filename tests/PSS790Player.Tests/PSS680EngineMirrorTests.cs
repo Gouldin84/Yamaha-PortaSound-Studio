@@ -43,9 +43,9 @@ namespace PSS790Player.Tests
                 Assert.InRange(kvp.Value, 0, 99);
             }
 
-            // PSS-680 has 100 built-in FM presets plus 8 user synth bank slots (100-107)
-            Assert.Equal(108, Pss680Constants.Voices.Count);
-            for (int i = 0; i < 108; i++)
+            // PSS-680 has 100 built-in FM presets plus 5 user synth bank slots (100-104)
+            Assert.Equal(105, Pss680Constants.Voices.Count);
+            for (int i = 0; i < 105; i++)
             {
                 Assert.Equal(i, Pss680Constants.Voices[i].Number);
                 Assert.False(string.IsNullOrWhiteSpace(Pss680Constants.Voices[i].Name));

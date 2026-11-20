@@ -246,11 +246,11 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void PSS680_UserBanks100To107_ExistAndMapToDigitalSynthesizer()
+        public void PSS680_UserBanks100To104_ExistAndMapToDigitalSynthesizer()
         {
-            Assert.Equal(108, Pss680Constants.Voices.Count);
+            Assert.Equal(105, Pss680Constants.Voices.Count);
 
-            for (int i = 100; i <= 107; i++)
+            for (int i = 100; i <= 104; i++)
             {
                 Assert.True(Pss680Constants.Voices.ContainsKey(i));
                 var v = Pss680Constants.Voices[i];
@@ -263,13 +263,10 @@ namespace PSS790Player.Tests
             Assert.Equal("User FM Synth Bank 3", Pss680Constants.Voices[102].Name);
             Assert.Equal("User FM Synth Bank 4", Pss680Constants.Voices[103].Name);
             Assert.Equal("User FM Synth Bank 5", Pss680Constants.Voices[104].Name);
-            Assert.Equal("Extended FM Bank 1", Pss680Constants.Voices[105].Name);
-            Assert.Equal("Extended FM Bank 2", Pss680Constants.Voices[106].Name);
-            Assert.Equal("Extended FM Bank 3", Pss680Constants.Voices[107].Name);
         }
 
         [Fact]
-        public void Remapper_PreservesUserBanks100To107_OnPSS680()
+        public void Remapper_PreservesUserBanks100To104_OnPSS680()
         {
             var midi = new Melanchall.DryWetMidi.Core.MidiFile(
                 new Melanchall.DryWetMidi.Core.TrackChunk(

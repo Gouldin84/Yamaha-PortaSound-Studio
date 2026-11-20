@@ -282,7 +282,7 @@ namespace PSS790Player.Tests
         [Fact]
         public void Pss680_VoiceAndStyleTables_ContainExpectedEntries()
         {
-            Assert.Equal(108, Pss680Constants.Voices.Count);
+            Assert.Equal(105, Pss680Constants.Voices.Count);
             Assert.Equal(100, Pss680Constants.Styles.Count);
 
             Assert.Equal("Synth Brass", Pss680Constants.Voices[0].Name);

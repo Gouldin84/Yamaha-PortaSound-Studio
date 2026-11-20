@@ -429,11 +429,11 @@ namespace PSS790Player.Tests
                     }
                 }
 
-                // ProgramChange numbers must be valid PSS-680 FM presets [0..99] or user banks [100..107]
+                // ProgramChange numbers must be valid PSS-680 FM presets [0..99] or user banks [100..104]
                 var pcs = allEvents.OfType<ProgramChangeEvent>().Where(p => p.Channel != 15).ToList();
                 foreach (var pc in pcs)
                 {
-                    if (pc.ProgramNumber < 0 || pc.ProgramNumber > 107)
+                    if (pc.ProgramNumber < 0 || pc.ProgramNumber > 104)
                     {
                         violations.Add($"{relPath}: Invalid PSS-680 voice number {pc.ProgramNumber} on Channel {pc.Channel + 1}.");
                     }
