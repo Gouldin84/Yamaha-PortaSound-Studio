@@ -805,6 +805,7 @@ function renderInputDeviceSelect(preferredDevice) {
 
 function renderLibrarySelect() {
     const sel = document.getElementById("librarySelect");
+    if (!sel) return;
     sel.innerHTML = "";
 
     const lib = state.library;
@@ -3598,8 +3599,8 @@ document.getElementById("btnRefreshDevices")?.addEventListener("click", () => {
     showToast("Rescanning MIDI ports...");
 });
 
-// Library Selector
-document.getElementById("librarySelect").addEventListener("change", (e) => {
+// Library Selector (Legacy fallback if present)
+document.getElementById("librarySelect")?.addEventListener("change", (e) => {
     if (e.target.value) {
         sendToHost("load_file", { filePath: e.target.value });
     }
@@ -4081,20 +4082,20 @@ document.getElementById("btnSendTakeToPlayer").addEventListener("click", () => {
 
 // Batch Modal Handlers
 const batchModal = document.getElementById("batchModal");
-document.getElementById("btnOpenBatch").addEventListener("click", () => {
-    batchModal.classList.remove("hidden");
+document.getElementById("btnOpenBatch")?.addEventListener("click", () => {
+    batchModal?.classList.remove("hidden");
 });
 
-document.getElementById("btnCloseBatch").addEventListener("click", () => {
-    batchModal.classList.add("hidden");
+document.getElementById("btnCloseBatch")?.addEventListener("click", () => {
+    batchModal?.classList.add("hidden");
 });
 
-document.getElementById("btnCancelBatch").addEventListener("click", () => {
-    batchModal.classList.add("hidden");
+document.getElementById("btnCancelBatch")?.addEventListener("click", () => {
+    batchModal?.classList.add("hidden");
     sendToHost("cancel_batch");
 });
 
-document.getElementById("btnStartBatch").addEventListener("click", () => {
+document.getElementById("btnStartBatch")?.addEventListener("click", () => {
     const src = document.getElementById("batchSourceDir")?.value || "";
     const target790Dir = document.getElementById("batchTarget790Dir")?.value || "";
     const target680Dir = document.getElementById("batchTarget680Dir")?.value || "";
