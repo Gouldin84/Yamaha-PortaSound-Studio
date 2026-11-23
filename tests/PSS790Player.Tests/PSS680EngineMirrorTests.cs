@@ -660,5 +660,80 @@ namespace PSS790Player.Tests
             var report790 = MidiHealthInspector.Analyze(midi, fileName: "Test790.mid", model: "pss790");
             Assert.Equal(2, report790.OutOfBoundsNotesCount);
         }
+
+        [Fact]
+        public void Remap_Pss680_VelocityBaking_ScalesNoteVelocityBasedOnCc7AndCc11()
+        {
+            var midi = new MidiFile();
+            var trk = new TrackChunk();
+            // Channel 0: Program 0, CC 7 = 64 (approx 50% volume), NoteOn with raw velocity 100
+            trk.Events.Add(new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            trk.Events.Add(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)64) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            trk.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            trk.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 });
+            midi.Chunks.Add(trk);
+
+            var opt = new RemapperOptions { TargetModel = "pss680" };
+            var remapped = Remapper.Remap(midi, opt);
+
+            var note = remapped.GetNotes().Single();
+            // Raw 100 * (64 / 127) = 50.39. Sweet spot mapping: 24 + round(50.39 / 127 * 94) = 61
+            Assert.True(note.Velocity < 100);
+            Assert.Equal((SevenBitNumber)61, note.Velocity);
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss680_Phase2_CullsAccompanimentChordsWhilePreservingLeadAndBass()
+        {
+            // 15 simultaneous notes at time 0
+            var events = new List<MidiEvent>();
+            // Bass note (lowest: note 36)
+            events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            // Lead melody note (highest: note 84)
+            events.Add(new NoteOnEvent((SevenBitNumber)84, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+
+            // 13 inner chord accompaniment notes on Channel 2 (notes 50 to 62) with varied velocities
+            for (int i = 0; i < 13; i++)
+            {
+                events.Add(new NoteOnEvent((SevenBitNumber)(50 + i), (SevenBitNumber)(40 + i * 2)) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            }
+
+            // Note offs
+            events.Add(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 480 });
+            events.Add(new NoteOffEvent((SevenBitNumber)84, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            for (int i = 0; i < 13; i++)
+            {
+                events.Add(new NoteOffEvent((SevenBitNumber)(50 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            }
+
+            var midi = new MidiFile(new TrackChunk(events));
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 12, model: "pss680");
+            var optimized = optimizer.Optimize(midi);
+
+            var survivingNotes = optimized.GetNotes().ToList();
+            // Exactly 12 notes should survive to strictly respect 12 hardware voices
+            Assert.Equal(12, survivingNotes.Count);
+
+            // Bass note (36) and Lead melody (84) must be strictly shielded
+            Assert.Contains(survivingNotes, n => (int)n.NoteNumber == 36);
+            Assert.Contains(survivingNotes, n => (int)n.NoteNumber == 84);
+
+            // The 3 lowest velocity chord notes (50, 51, 52 with velocities 40, 42, 44) must be culled
+            Assert.DoesNotContain(survivingNotes, n => (int)n.NoteNumber == 50);
+            Assert.DoesNotContain(survivingNotes, n => (int)n.NoteNumber == 51);
+            Assert.DoesNotContain(survivingNotes, n => (int)n.NoteNumber == 52);
+        }
+
+        [Fact]
+        public void Pss680_DrumMap_TriangleNotes_MapToMusicalPercussionInsteadOfSplashCymbal()
+        {
+            // GM 80 (Mute Triangle) and GM 81 (Open Triangle) must NOT map to Note 61 (Splash Cymbal)
+            Assert.NotEqual((byte)61, Pss680Constants.TranslateDrumNote(80));
+            Assert.NotEqual((byte)61, Pss680Constants.TranslateDrumNote(81));
+
+            // Must map musically: 80 -> Closed Hi-Hat (57), 81 -> Cabasa (56)
+            Assert.Equal((byte)57, Pss680Constants.TranslateDrumNote(80));
+            Assert.Equal((byte)56, Pss680Constants.TranslateDrumNote(81));
+        }
     }
 }

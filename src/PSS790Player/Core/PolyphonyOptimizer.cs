@@ -142,7 +142,32 @@ namespace PSS790Player.Core
                         }
                     }
 
-                    // Melodic, vocal, and harmony notes are strictly preserved and never dropped
+                    // Phase 2: For PSS-680 (12 physical FM voices), if concurrent active notes strictly exceed the hardware limit (> _threshold),
+                    // intelligently cull low-priority accompaniment notes while strictly shielding Lead Melody, Bassline, and Core Drums.
+                    if (is680 && activeNotes.Count > _threshold)
+                    {
+                        var leadNote = activeNotes.OrderByDescending(n => n.NoteNumber).FirstOrDefault();
+                        var bassNote = activeNotes.OrderBy(n => n.NoteNumber).FirstOrDefault();
+
+                        // Candidate accompaniment notes: not lead melody, not bass fundamental, and not drums on Ch 15
+                        var candidate = activeNotes
+                            .Where(n => n != leadNote && n != bassNote && n.Channel != (FourBitNumber)15)
+                            .OrderBy(n => n.Velocity)
+                            .FirstOrDefault();
+
+                        if (candidate != null)
+                        {
+                            var key = (candidate.Channel, candidate.NoteNumber, candidate.Time);
+                            if (!notesToCull.Contains(key))
+                            {
+                                notesToCull.Add(key);
+                                activeNotes.Remove(candidate);
+                                continue;
+                            }
+                        }
+                    }
+
+                    // On PSS-790, or when all remaining notes on PSS-680 are essential, preserve without dropping
                     break;
                 }
             }

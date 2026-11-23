@@ -747,6 +747,21 @@ namespace PSS790Player.Core
                         return; // Suppress note from reaching hardware output
                     }
 
+                    // PSS-680 Live Mixer Volume: PSS-680 hardware ignores CC 7 volume in Mode 99.
+                    // Scale Note-On velocity in real-time according to the UI channel volume slider (0-100%).
+                    bool is680 = string.Equals(_player.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                    if (is680 && channelEvent is NoteOnEvent pss680NoteOn && pss680NoteOn.Velocity > 0)
+                    {
+                        byte userVol = _player._channelVolumes[ch];
+                        if (userVol != 100)
+                        {
+                            int scaledV = (int)Math.Round((byte)pss680NoteOn.Velocity * (userVol / 100.0));
+                            scaledV = Math.Clamp(scaledV, 1, 127);
+                            channelEvent = new NoteOnEvent(pss680NoteOn.NoteNumber, (SevenBitNumber)scaledV) { Channel = pss680NoteOn.Channel };
+                            midiEvent = channelEvent;
+                        }
+                    }
+
                     // Vector Quad Note Replication: When Vector Quad playback is enabled on PSS-790 and event is NoteOn/NoteOff on Channel 0,
                     // send the note to Channel 0 and replicate to Channels 1, 2, 3 (Voice B, C, D)
                     if (_player.VectorQuadPlaybackEnabled && ch == 0 && (channelEvent is NoteOnEvent or NoteOffEvent))

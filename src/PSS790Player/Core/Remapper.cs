@@ -487,6 +487,7 @@ namespace PSS790Player.Core
             if (is680)
             {
                 var channelMinNote = new Dictionary<int, int>();
+
                 foreach (var trackChunk in remapped.GetTrackChunks())
                 {
                     foreach (var evt in trackChunk.Events)
@@ -494,9 +495,12 @@ namespace PSS790Player.Core
                         if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0 && !drumChannels.Contains(noteOn.Channel))
                         {
                             int ch = noteOn.Channel;
-                            if (!channelMinNote.TryGetValue(ch, out var curMin) || noteOn.NoteNumber < curMin)
+                            if (noteOn.NoteNumber < 24)
                             {
-                                channelMinNote[ch] = noteOn.NoteNumber;
+                                if (!channelMinNote.TryGetValue(ch, out var curMin) || noteOn.NoteNumber < curMin)
+                                {
+                                    channelMinNote[ch] = noteOn.NoteNumber;
+                                }
                             }
                         }
                     }
@@ -506,9 +510,15 @@ namespace PSS790Player.Core
                 {
                     if (minN < 24)
                     {
-                        // Shift entire melodic channel up by octave(s) so descending bass phrases preserve intervals
-                        int neededOctaves = (int)Math.Ceiling((24 - minN) / 12.0);
-                        autoChannelOctaveShifts[ch] = neededOctaves * 12;
+                        int gmProg = channelGmPrograms.TryGetValue(ch, out var gp) ? gp : -1;
+                        bool isBass = IsBassInstrument(gmProg);
+                        // Only shift the entire channel for dedicated bass instruments (GM 32-39, Contrabass, Tuba)
+                        // to preserve melodic contour without shifting pianos, strings, or chordal instruments up an octave.
+                        if (isBass)
+                        {
+                            int neededOctaves = Math.Min(1, (int)Math.Ceiling((24 - minN) / 12.0));
+                            autoChannelOctaveShifts[ch] = neededOctaves * 12;
+                        }
                     }
                 }
             }
@@ -525,7 +535,7 @@ namespace PSS790Player.Core
                         te.Event is ChannelAftertouchEvent or NoteAftertouchEvent ||
                         te.Event is NormalSysExEvent or EscapeSysExEvent ||
                         (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && 
-                            (is680 ? (cc.ControlNumber != 1 && cc.ControlNumber != 7) : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
+                            (is680 ? (cc.ControlNumber != 1 && cc.ControlNumber != 7 && cc.ControlNumber != 64) : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
                         (te.Event is ProgramChangeEvent pc && (drumChannels.Contains(pc.Channel) || (pc.Channel == 15 && !relocatedMelodicChannel.HasValue)))
                     );
                 }
@@ -766,6 +776,13 @@ namespace PSS790Player.Core
             if (!is680 && options.DefaultReverbBoost)
             {
                 ApplyReverbBoost(remapped);
+            }
+
+            // Bake CC 7 (Volume) and CC 11 (Expression) into Note-On velocities for PSS-680
+            // Because PSS-680 hardware ignores CC 7 in Mode 99, dynamic velocity scaling establishes authentic channel balance.
+            if (is680)
+            {
+                ApplyPss680VelocityBaking(remapped);
             }
 
             // Run Smart Polyphony Optimizer with model-specific hardware voice ceiling
@@ -1244,6 +1261,75 @@ namespace PSS790Player.Core
                             cc.ControlNumber = (SevenBitNumber)7;
                             cc.ControlValue = (SevenBitNumber)Math.Clamp(folded, 0, 127);
                         }
+                    }
+                }
+            }
+        }
+
+        private static void ApplyPss680VelocityBaking(MidiFile midi)
+        {
+            // Step 1: Pre-scan initial CC 7 and CC 11 per channel across all tracks
+            var initialCc7 = new Dictionary<int, byte>();
+            var initialCc11 = new Dictionary<int, byte>();
+            for (int ch = 0; ch < 16; ch++)
+            {
+                initialCc7[ch] = 100; // Standard MIDI default volume
+                initialCc11[ch] = 127; // Standard MIDI default expression
+            }
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                using var mgr = track.ManageTimedEvents();
+                foreach (var te in mgr.Objects)
+                {
+                    if (te.Event is ControlChangeEvent cc)
+                    {
+                        if (cc.ControlNumber == 7 && te.Time == 0)
+                        {
+                            initialCc7[cc.Channel] = (byte)cc.ControlValue;
+                        }
+                        else if (cc.ControlNumber == 11 && te.Time == 0)
+                        {
+                            initialCc11[cc.Channel] = (byte)cc.ControlValue;
+                        }
+                    }
+                }
+            }
+
+            // Step 2: Iterate through each track chronologically and bake CC 7 & CC 11 into NoteOn velocities
+            foreach (var track in midi.GetTrackChunks())
+            {
+                var trackCc7 = new Dictionary<int, byte>(initialCc7);
+                var trackCc11 = new Dictionary<int, byte>(initialCc11);
+
+                using var mgr = track.ManageTimedEvents();
+                foreach (var te in mgr.Objects)
+                {
+                    if (te.Event is ControlChangeEvent cc)
+                    {
+                        if (cc.ControlNumber == 7)
+                        {
+                            trackCc7[cc.Channel] = (byte)cc.ControlValue;
+                        }
+                        else if (cc.ControlNumber == 11)
+                        {
+                            trackCc11[cc.Channel] = (byte)cc.ControlValue;
+                        }
+                    }
+                    else if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        int ch = noteOn.Channel;
+                        byte rawV = (byte)noteOn.Velocity;
+                        byte cc7 = trackCc7.GetValueOrDefault(ch, (byte)100);
+                        byte cc11 = trackCc11.GetValueOrDefault(ch, (byte)127);
+
+                        double eff = rawV * (cc7 / 127.0) * (cc11 / 127.0);
+                        double clampedEff = Math.Clamp(eff, 1.0, 127.0);
+
+                        // Calibrated 2-op FM sweet spot (24..118)
+                        // Guarantees soft passages are audible while loud passages avoid digital clipping on PSS-680
+                        int scaled = 24 + (int)Math.Round((clampedEff / 127.0) * (118 - 24));
+                        noteOn.Velocity = (SevenBitNumber)Math.Clamp(scaled, 1, 127);
                     }
                 }
             }

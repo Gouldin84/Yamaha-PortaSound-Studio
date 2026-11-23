@@ -332,7 +332,7 @@ namespace PSS790Player.Core
             // Organs
             { 16, 1 }, { 17, 28 }, { 18, 27 }, { 19, 2 }, { 20, 49 }, { 21, 31 }, { 22, 22 }, { 23, 56 },
             // Guitars
-            { 24, 73 }, { 25, 36 }, { 26, 12 }, { 27, 69 }, { 28, 13 }, { 29, 68 }, { 30, 70 }, { 31, 71 },
+            { 24, 73 }, { 25, 36 }, { 26, 12 }, { 27, 12 }, { 28, 73 }, { 29, 68 }, { 30, 70 }, { 31, 71 },
             // Basses
             { 32, 14 }, { 33, 80 }, { 34, 38 }, { 35, 81 }, { 36, 39 }, { 37, 39 }, { 38, 58 }, { 39, 58 },
             // Strings
@@ -346,9 +346,9 @@ namespace PSS790Player.Core
             // Pipe
             { 72, 90 }, { 73, 20 }, { 74, 88 }, { 75, 47 }, { 76, 46 }, { 77, 89 }, { 78, 23 }, { 79, 89 },
             // Synth Lead
-            { 80, 99 }, { 81, 98 }, { 82, 23 }, { 83, 47 }, { 84, 13 }, { 85, 94 }, { 86, 0 }, { 87, 58 },
+            { 80, 0 }, { 81, 13 }, { 82, 23 }, { 83, 47 }, { 84, 13 }, { 85, 94 }, { 86, 0 }, { 87, 58 },
             // Synth Pad
-            { 88, 96 }, { 89, 41 }, { 90, 0 }, { 91, 96 }, { 92, 35 }, { 93, 55 }, { 94, 94 }, { 95, 83 },
+            { 88, 96 }, { 89, 41 }, { 90, 41 }, { 91, 96 }, { 92, 41 }, { 93, 55 }, { 94, 94 }, { 95, 41 },
             // Synth FX
             { 96, 48 }, { 97, 41 }, { 98, 55 }, { 99, 99 }, { 100, 61 }, { 101, 95 }, { 102, 24 }, { 103, 99 },
             // Ethnic
@@ -356,7 +356,7 @@ namespace PSS790Player.Core
             // Percussive
             { 112, 63 }, { 113, 48 }, { 114, 9 }, { 115, 48 }, { 116, 66 }, { 117, 65 }, { 118, 65 }, { 119, 99 },
             // Sound FX
-            { 120, 13 }, { 121, 94 }, { 122, 99 }, { 123, 23 }, { 124, 64 }, { 125, 65 }, { 126, 97 }, { 127, 65 }
+            { 120, 79 }, { 121, 94 }, { 122, 99 }, { 123, 23 }, { 124, 64 }, { 125, 65 }, { 126, 97 }, { 127, 65 }
         });
 
         // Reverse PSS-680 FM Voice to General MIDI Program Map
@@ -384,7 +384,7 @@ namespace PSS790Player.Core
             { 59, 63 }, { 60, 68 }, { 61, 67 }, { 62, 65 }, { 63, 65 }, { 64, 64 },
             { 65, 70 }, { 66, 69 }, { 67, 75 }, { 68, 74 }, { 69, 56 }, { 70, 56 },
             { 71, 78 }, { 72, 78 }, { 73, 56 }, { 74, 56 }, { 75, 51 }, { 76, 51 },
-            { 77, 51 }, { 78, 76 }, { 79, 77 }, { 80, 61 }, { 81, 61 }
+            { 77, 51 }, { 78, 76 }, { 79, 77 }, { 80, 57 }, { 81, 56 }
         });
 
         // Reverse PSS-680 32-Drum Notes to General MIDI Drum Notes
@@ -412,12 +412,12 @@ namespace PSS790Player.Core
             if (gmNote is 17 or 18 or 29 or 30) return 57; // Scratch Push/Pull -> Closed Hi-Hat (Pad D7)
             if (gmNote is 19 or 26) return 51;             // Finger Snap -> Rim Shot (Pad A1)
             if (gmNote is 20 or 21 or 23 or 31 or 32 or 33) return 55; // Clicks / Sticks -> Cowbell (Pad D5)
-            if (gmNote is 22 or 34) return 61;             // Metronome Bell -> Agogo Hi (Pad B5)
+            if (gmNote is 22 or 34) return 61;             // Metronome Bell -> Splash Cymbal (Pad C8)
             if (gmNote is 24 or 25) return 52;             // Snare Roll -> Snare Low (Pad A2)
             if (gmNote is 82 or 83) return 56;             // Shaker / Jingle Bell -> Cabasa (Pad D6)
             if (gmNote is 84 or 85) return 71;             // Bell Tree / Castanets -> Tambourine (Pad C7)
-            if (gmNote is 88 or 89) return 61;             // Cuica -> Agogo Hi (Pad B5)
-            if (gmNote is 90 or 91) return 61;             // Triangle -> Agogo Hi (Pad B5)
+            if (gmNote is 88 or 89) return 76;             // Cuica -> Cuica Low (Pad C5)
+            if (gmNote is 90 or 91) return 57;             // Triangle -> Closed Hi-Hat (Pad B6)
 
             if (DrumMap.ContainsKey(gmNote))
             {
