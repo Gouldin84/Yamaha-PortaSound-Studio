@@ -30,17 +30,17 @@ namespace PSS790Player.Core
         public bool ScalePitchBend { get; set; } = true;
         public PitchBendScaleMode PitchBendMode { get; set; } = PitchBendScaleMode.Auto;
         public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments on PSS-790 hardware PCM
-        public bool AutoCenterDanglingPitchBends { get; set; } = true; // Guarantees all channels return to pitch 8192 (center) at track end and during silences
-        public bool EmulateSustainPedal { get; set; } = true; // Extends staccato note durations while CC 64 (Damper Pedal) is held, preventing dry/empty sound on piano/keyboard tracks
-        public bool FoldExpressionPedal { get; set; } = true; // Folds CC 11 (Expression) into CC 7 (Volume) so swells, crescendos, and track balance play on PSS-790
-        public bool NormalizeAwmVelocities { get; set; } = true; // Maps velocities into PSS-790 sweet spot (36-118), preventing inaudible notes and harsh sample clipping
-        public bool EnsureSetupPreRoll { get; set; } = true; // Guarantees a clean setup window before Note 1 so microcomputer configures voices without dropping opening notes
-        public bool DefaultReverbBoost { get; set; } = true; // Injects default CC 91 (Reverb Send = 48-64) for melodic channels lacking reverb events
+        public bool AutoCenterDanglingPitchBends { get; set; } = true; // Guarantees all channels return to pitch 8192 (center) at track end
+        public bool EmulateSustainPedal { get; set; } = true; // Extends staccato note durations while CC 64 (Damper Pedal) is held on keyboards
+        public bool FoldExpressionPedal { get; set; } = true; // Folds CC 11 (Expression) into CC 7 (Volume) for PSS-790 swells & balance
+        public bool NormalizeAwmVelocities { get; set; } = true; // Maps velocities into PSS-790 sweet spot (36-118)
+        public bool EnsureSetupPreRoll { get; set; } = true; // Guarantees a clean setup window before Note 1 so hardware configures voices first
+        public bool DefaultReverbBoost { get; set; } = true; // Injects default CC 91 (Reverb Send) for melodic channels lacking reverb on PSS-790
         public bool FilterUnsupportedControllers { get; set; } = true;
         public bool ForceRemap { get; set; } = false;
-        public double TempoMultiplier { get; set; } = 1.0; // Optional tempo multiplier (e.g. 1.25x, 1.35x, 1.5x)
-        public bool AutoNormalizeSluggishTempo { get; set; } = false; // When true, doubles tempo if detected average BPM < 68 BPM
-        public int MasterTranspose { get; set; } = 0; // Master pitch transposition in semitones (-12 to +12)
+        public double TempoMultiplier { get; set; } = 1.0;
+        public bool AutoNormalizeSluggishTempo { get; set; } = false; // Doubles tempo if average BPM < 68 BPM
+        public int MasterTranspose { get; set; } = 0; // Semitones (-12 to +12)
         public Dictionary<int, int> ChannelOctaveShifts { get; set; } = new(); // Channel (0-15) -> Semitone shift (-24 to +24)
         public Dictionary<int, int?> ChannelVoiceOverrides { get; set; } = new(); // Channel (0-15) -> VoiceNumber (0-104) or null (auto)
     }
@@ -51,6 +51,9 @@ namespace PSS790Player.Core
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
         public const string Pss680MarkerText = "PSS680_REMAPPED:v2";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
+
+        private readonly record struct TimedValueEntry(long Time, int TrackIndex, int EventOrder, byte Value);
+        private readonly record struct TimedBendRangeEntry(long Time, int TrackIndex, int EventOrder, int Semitones);
 
         public static bool HasPss790Marker(MidiFile midiFile)
         {
@@ -112,7 +115,6 @@ namespace PSS790Player.Core
                 byte[] markerBytes = System.Text.Encoding.ASCII.GetBytes(is680 ? Pss680MarkerText : Pss790MarkerText);
                 byte[] fileBytes = File.ReadAllBytes(filePath);
 
-                // Track 0 header/events are always located in the first few kilobytes
                 int searchLen = Math.Min(fileBytes.Length, 4096);
                 for (int i = 0; i <= searchLen - markerBytes.Length; i++)
                 {
@@ -155,7 +157,7 @@ namespace PSS790Player.Core
 
             // Fast scan for:
             // 1. Yamaha XG SysEx: 0xF0 followed within 8 bytes by 0x43 [dev] 0x4C
-            // 2. Bank Select CC 0 == 64 (XG SFX) or CC 0 == 127/128 (XG/GS Drums)
+            // 2. Bank Select CC 0 == 64 (XG SFX) or CC 0 == 126/127 (XG/GS Drums)
             for (int i = 0; i < bytes.Length - 4; i++)
             {
                 if (bytes[i] == 0xF0)
@@ -171,7 +173,7 @@ namespace PSS790Player.Core
                 if ((bytes[i] & 0xF0) == 0xB0 && bytes[i + 1] == 0x00)
                 {
                     byte ccVal = bytes[i + 2];
-                    if (ccVal is 64 or 127 or 128)
+                    if (ccVal is 64 or 126 or 127)
                         return true;
                 }
             }
@@ -194,7 +196,7 @@ namespace PSS790Player.Core
                     if (evt is ControlChangeEvent cc && (byte)cc.ControlNumber == 0)
                     {
                         byte val = (byte)cc.ControlValue;
-                        if (val == 64 || val == 126 || val == 127)
+                        if (val is 64 or 126 or 127)
                             return true;
                     }
                 }
@@ -221,7 +223,7 @@ namespace PSS790Player.Core
 
         public static MidiFormat DetectMidiFormat(MidiFile midiFile)
         {
-            // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events (Remapped or Recording)
+            // 1. Primary Check: Embedded Non-Destructive Marker in Text or Marker Events
             if (HasPss680Marker(midiFile))
             {
                 return MidiFormat.Pss680Native;
@@ -232,39 +234,75 @@ namespace PSS790Player.Core
                 return MidiFormat.Pss790Native;
             }
 
-            // 2. Heuristic Check: Channel 15 has percussion notes and Channel 9 has no events
+            // 2. Conservative Heuristic Check for unmarked PSS native files:
+            // Must have NO Ch 9 events, active Ch 15 notes, NO ProgramChange/PitchBend on Ch 15,
+            // NO melodic instrument name on Ch 15's track, and ALL Ch 15 notes within the PSS percussion map.
             var usedChannels = new HashSet<int>();
-            bool hasChannel15DrumNotes790 = false;
-            bool hasChannel15DrumNotes680 = false;
+            bool ch15HasProgramChange = false;
+            bool ch15HasPitchBend = false;
+            bool ch15HasMelodicText = false;
+            int ch15NoteCount = 0;
+            bool allCh15In790Map = true;
+            bool allCh15In680Map = true;
 
             foreach (var track in midiFile.GetTrackChunks())
             {
+                bool trackUsesCh15 = false;
                 foreach (var evt in track.Events)
                 {
                     if (evt is ChannelEvent ce)
                     {
                         usedChannels.Add(ce.Channel);
-                        if (ce.Channel == 15 && ce is NoteOnEvent noteOn && (byte)noteOn.Velocity > 0)
+                        if (ce.Channel == 15)
                         {
-                            byte note = (byte)noteOn.NoteNumber;
-                            if (Constants.Pss790Drums.ContainsKey(note))
+                            trackUsesCh15 = true;
+                            if (ce is ProgramChangeEvent)
                             {
-                                hasChannel15DrumNotes790 = true;
+                                ch15HasProgramChange = true;
                             }
-                            if (Pss680Constants.DrumMap.ContainsKey(note))
+                            else if (ce is PitchBendEvent)
                             {
-                                hasChannel15DrumNotes680 = true;
+                                ch15HasPitchBend = true;
                             }
+                            else if (ce is NoteOnEvent noteOn && (byte)noteOn.Velocity > 0)
+                            {
+                                ch15NoteCount++;
+                                byte note = (byte)noteOn.NoteNumber;
+                                if (!Constants.Pss790Drums.ContainsKey(note))
+                                {
+                                    allCh15In790Map = false;
+                                }
+                                if (!Pss680Constants.DrumMap.ContainsKey(note))
+                                {
+                                    allCh15In680Map = false;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (trackUsesCh15)
+                {
+                    foreach (var textEvt in track.Events.OfType<BaseTextEvent>())
+                    {
+                        if (InferGmProgramFromText(textEvt.Text).HasValue)
+                        {
+                            ch15HasMelodicText = true;
+                            break;
                         }
                     }
                 }
             }
 
-            if (!usedChannels.Contains(9) && usedChannels.Contains(15))
+            if (!usedChannels.Contains(9) &&
+                ch15NoteCount > 0 &&
+                !ch15HasProgramChange &&
+                !ch15HasPitchBend &&
+                !ch15HasMelodicText)
             {
-                if (hasChannel15DrumNotes680 && !hasChannel15DrumNotes790)
+                if (allCh15In680Map && !allCh15In790Map)
                     return MidiFormat.Pss680Native;
-                if (hasChannel15DrumNotes790)
+                if (allCh15In790Map)
                     return MidiFormat.Pss790Native;
             }
 
@@ -289,7 +327,7 @@ namespace PSS790Player.Core
             // 0. Intelligent Tempo Normalization & Adjustment
             ApplyTempoAdjustments(remapped, options);
 
-            // Normalize zero-velocity NoteOn events to standard NoteOff events to guarantee note pairing across all parsers
+            // Normalize zero-velocity NoteOn events to standard NoteOff events to guarantee note pairing across all passes
             foreach (var track in remapped.GetTrackChunks())
             {
                 for (int i = 0; i < track.Events.Count; i++)
@@ -305,10 +343,43 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Pre-scan for GM Programs per channel to identify acoustic vs synth/solo channels
-            var channelGmPrograms = new Dictionary<int, byte>();
+            // 1. Pre-scan Drum Channels (Ch 9 + Bank 126/127 + XG SysEx), XG SFX Channels (Bank 64), and Used Channels
+            var drumChannels = new HashSet<int> { 9 };
+            var sfxChannels = new HashSet<int>();
+            var usedChannels = new HashSet<int>();
+            foreach (var trackChunk in remapped.GetTrackChunks())
+            {
+                foreach (var evt in trackChunk.Events)
+                {
+                    if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        usedChannels.Add(noteOn.Channel);
+                    }
+                    else if (evt is ControlChangeEvent cc && cc.ControlNumber == 0)
+                    {
+                        if (cc.ControlValue == 126 || cc.ControlValue == 127)
+                        {
+                            drumChannels.Add(cc.Channel);
+                        }
+                        else if (cc.ControlValue == 64)
+                        {
+                            sfxChannels.Add(cc.Channel);
+                        }
+                    }
+                    else if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length > 6)
+                    {
+                        var d = sysex.Data;
+                        // Yamaha XG SysEx Part Mode Drum (08 [part] 07 > 0)
+                        if (d[0] == 0x43 && d[2] == 0x4C && d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
+                        {
+                            drumChannels.Add(d[4]);
+                        }
+                    }
+                }
+            }
 
-            // 1. Scan standard ProgramChangeEvents
+            // 2. Pre-scan GM Programs per original channel (ProgramChange -> XG SysEx -> Track text inference)
+            var channelGmPrograms = new Dictionary<int, byte>();
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 foreach (var evt in trackChunk.Events)
@@ -320,7 +391,6 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 2. Scan for Yamaha XG Multi-Part SysEx Parameter Voicing dumps before SysEx is stripped
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 foreach (var evt in trackChunk.Events)
@@ -328,11 +398,9 @@ namespace PSS790Player.Core
                     if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length >= 7)
                     {
                         var d = sysex.Data;
-                        // Yamaha XG SysEx: 43 [dev] 4C ...
                         if (d[0] == 0x43 && d[2] == 0x4C)
                         {
-                            // Bulk Dump: 43 00 4C [sizeH] [sizeL] [addrH] [addrM] [addrL]
-                            // Address 08 [part] 00 is Multi-Part Base Parameter Block, offset 10 is Program Number
+                            // Bulk Dump: 43 00 4C [sizeH] [sizeL] 08 [part] 00 ... [prog at offset 10]
                             if (d[1] == 0x00 && d[5] == 0x08 && d[7] == 0x00 && d.Length > 10)
                             {
                                 int part = d[6];
@@ -342,8 +410,7 @@ namespace PSS790Player.Core
                                     channelGmPrograms[part] = prog;
                                 }
                             }
-                            // Parameter Change: 43 10 4C [addrH] [addrM] [addrL] [data...]
-                            // Address 08 [part] 03 is Part Program Number
+                            // Parameter Change: 43 10 4C 08 [part] 03 [prog]
                             else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x03 && d.Length > 6)
                             {
                                 int part = d[4];
@@ -358,13 +425,12 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 3. Scan track metadata / text events for active channels lacking ProgramChange
             var tracksWithNotes = new Dictionary<int, TrackChunk>();
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 foreach (var evt in trackChunk.Events)
                 {
-                    if (evt is NoteOnEvent n && n.Velocity > 0 && n.Channel != (FourBitNumber)9)
+                    if (evt is NoteOnEvent n && n.Velocity > 0 && !drumChannels.Contains(n.Channel))
                     {
                         tracksWithNotes.TryAdd((int)n.Channel, trackChunk);
                     }
@@ -375,97 +441,42 @@ namespace PSS790Player.Core
             {
                 if (!channelGmPrograms.ContainsKey(ch))
                 {
-                    // Try inferring from track name or text events
                     byte? inferred = null;
                     foreach (var textEvt in tr.Events.OfType<BaseTextEvent>())
                     {
                         inferred = InferGmProgramFromText(textEvt.Text);
                         if (inferred.HasValue) break;
                     }
-
-                    // Default to GM 0 (Acoustic Grand Piano) if text not found
                     channelGmPrograms[ch] = inferred ?? 0;
                 }
             }
 
-            // 0. Virtual Sustain Pedal (CC 64) Emulation: Extend staccato note durations for keyboards (GM 0-23)
+            // 3. Virtual Sustain Pedal (CC 64) Emulation & Runaway Pedal Protection
+            // Runs after drumChannels detection so secondary GS/XG drum channels are never extended.
             if (options.EmulateSustainPedal)
             {
-                ApplySustainPedalEmulation(remapped, channelGmPrograms);
+                ApplySustainPedalEmulation(remapped, channelGmPrograms, drumChannels);
             }
 
-            // 0b. Dynamic Expression (CC 11) Folding into Volume (CC 7) for PSS-790 hardware swells & balance
-            if (options.FoldExpressionPedal)
+            // 4. Volume & Expression Dynamics (runs BEFORE drum merging and BEFORE CC 11 is filtered)
+            if (is680)
             {
+                // PSS-680 ignores CC 7 in Mode 99: bake global Type-1 CC 7 + CC 11 timelines perceptually into [24..118],
+                // cull zero-volume notes cleanly (NoteOn + NoteOff), and strip CC 7 / CC 11 from output.
+                ApplyPss680VelocityBaking(remapped);
+            }
+            else if (options.FoldExpressionPedal)
+            {
+                // PSS-790 supports CC 7 natively: fold global Type-1 CC 11 swells into CC 7.
                 ApplyExpressionPedalFolding(remapped);
             }
 
-            // Full GM to PSS-790 Remapping Pipeline
-            // 1. Pre-scan for RPN 0,0 (Pitch Bend Sensitivity) across tracks before filtering controllers
-            var channelBendRange = new Dictionary<int, int>();
-            foreach (var trackChunk in remapped.GetTrackChunks())
-            {
-                var rpnMsb = new Dictionary<int, int>();
-                var rpnLsb = new Dictionary<int, int>();
+            // 5. Chronological RPN 0,0 (Pitch Bend Sensitivity) Timeline Scan (with RPN Null & NRPN isolation)
+            var channelBendTimelines = ScanChronologicalPitchBendRanges(remapped);
 
-                foreach (var evt in trackChunk.Events)
-                {
-                    if (evt is ControlChangeEvent cc)
-                    {
-                        int ch = cc.Channel;
-                        if (cc.ControlNumber == 101) rpnMsb[ch] = cc.ControlValue;
-                        else if (cc.ControlNumber == 100) rpnLsb[ch] = cc.ControlValue;
-                        else if (cc.ControlNumber == 6)
-                        {
-                            if (rpnMsb.TryGetValue(ch, out var msb) && msb == 0 &&
-                                rpnLsb.TryGetValue(ch, out var lsb) && lsb == 0)
-                            {
-                                channelBendRange[ch] = (int)cc.ControlValue;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Pre-scan for Drum Channels (GM Channel 9 is standard percussion; GS/XG channels use Bank Select CC 0 == 127 or 128)
-            // and XG Sound Effect Channels (Bank Select CC 0 == 64)
-            var drumChannels = new HashSet<int> { 9 };
-            var sfxChannels = new HashSet<int>();
-            var usedChannels = new HashSet<int>();
-            foreach (var trackChunk in remapped.GetTrackChunks())
-            {
-                foreach (var evt in trackChunk.Events)
-                {
-                    if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0)
-                    {
-                        usedChannels.Add(noteOn.Channel);
-                    }
-                    if (evt is ControlChangeEvent cc && cc.ControlNumber == 0)
-                    {
-                        if (cc.ControlValue == 127 || cc.ControlValue == 128)
-                        {
-                            drumChannels.Add(cc.Channel);
-                        }
-                        else if (cc.ControlValue == 64)
-                        {
-                            sfxChannels.Add(cc.Channel);
-                        }
-                    }
-                    if (evt is NormalSysExEvent sysex && sysex.Data.Length > 6)
-                    {
-                        var d = sysex.Data;
-                        // Yamaha XG SysEx Part Mode Drum (08 [part] 07 > 0)
-                        if (d[0] == 0x43 && d[2] == 0x4C && d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
-                        {
-                            drumChannels.Add(d[4]);
-                        }
-                    }
-                }
-            }
-
+            // 6. Unconditional Melodic Channel 15 Relocation
             int? relocatedMelodicChannel = null;
-            // Only relocate Channel 15 if Channel 15 is MELODIC (not a drum channel) and another channel is used for drums
-            if (usedChannels.Contains(15) && !drumChannels.Contains(15) && drumChannels.Any(d => usedChannels.Contains(d)))
+            if (usedChannels.Contains(15) && !drumChannels.Contains(15))
             {
                 for (int ch = 0; ch < 15; ch++)
                 {
@@ -475,19 +486,24 @@ namespace PSS790Player.Core
                         break;
                     }
                 }
-                relocatedMelodicChannel ??= drumChannels.FirstOrDefault(d => d != 15);
-                if (relocatedMelodicChannel.HasValue && channelGmPrograms.TryGetValue(15, out var ch15Prog))
-                {
-                    channelGmPrograms[relocatedMelodicChannel.Value] = ch15Prog;
-                }
+                relocatedMelodicChannel ??= drumChannels.Cast<int?>().FirstOrDefault(d => d != 15);
+                relocatedMelodicChannel ??= Enumerable.Range(0, 15).FirstOrDefault(c => !drumChannels.Contains(c));
             }
 
-            // Pre-scan for low melodic notes to prevent individual note folding from inverting basslines on PSS-680
+            // Build post-relocation GM program map for initial ProgramChange injection and PolyphonyOptimizer priority tiers
+            var postRelocationGmPrograms = new Dictionary<int, byte>();
+            foreach (var (origCh, gmProg) in channelGmPrograms)
+            {
+                if (drumChannels.Contains(origCh)) continue;
+                int destCh = (origCh == 15 && relocatedMelodicChannel.HasValue) ? relocatedMelodicChannel.Value : origCh;
+                postRelocationGmPrograms[destCh] = gmProg;
+            }
+
+            // Pre-scan low bass notes on PSS-680 so bassline contour isn't inverted by per-note folding
             var autoChannelOctaveShifts = new Dictionary<int, int>();
             if (is680)
             {
                 var channelMinNote = new Dictionary<int, int>();
-
                 foreach (var trackChunk in remapped.GetTrackChunks())
                 {
                     foreach (var evt in trackChunk.Events)
@@ -508,41 +524,41 @@ namespace PSS790Player.Core
 
                 foreach (var (ch, minN) in channelMinNote)
                 {
-                    if (minN < 24)
+                    int gmProg = channelGmPrograms.TryGetValue(ch, out var gp) ? gp : -1;
+                    if (IsBassInstrument(gmProg))
                     {
-                        int gmProg = channelGmPrograms.TryGetValue(ch, out var gp) ? gp : -1;
-                        bool isBass = IsBassInstrument(gmProg);
-                        // Only shift the entire channel for dedicated bass instruments (GM 32-39, Contrabass, Tuba)
-                        // to preserve melodic contour without shifting pianos, strings, or chordal instruments up an octave.
-                        if (isBass)
-                        {
-                            int neededOctaves = Math.Min(1, (int)Math.Ceiling((24 - minN) / 12.0));
-                            autoChannelOctaveShifts[ch] = neededOctaves * 12;
-                        }
+                        int neededOctaves = Math.Min(1, (int)Math.Ceiling((24 - minN) / 12.0));
+                        autoChannelOctaveShifts[ch] = neededOctaves * 12;
                     }
                 }
             }
+
+            // 7. Filter Unsupported Events & Remap Channels, Voices, Notes, and Pitch Bends
+            double hardwareBendRangeSemitones = is680 ? 2.0 : 12.0;
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
                 var bentChannels = new HashSet<int>();
 
-                // Filter unsupported events, foreign GS/XG SysEx, and any Program Change on drum channels (or destination drum Channel 16)
-                // CRITICAL: Must use ManageTimedEvents to preserve absolute event timing and prevent track desync!
                 using (var timedEventsMgr = trackChunk.ManageTimedEvents())
                 {
                     timedEventsMgr.Objects.RemoveAll(te =>
                         te.Event is ChannelAftertouchEvent or NoteAftertouchEvent ||
                         te.Event is NormalSysExEvent or EscapeSysExEvent ||
-                        (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers && 
-                            (is680 ? (cc.ControlNumber != 1 && cc.ControlNumber != 7 && cc.ControlNumber != 64) : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
-                        (te.Event is ProgramChangeEvent pc && (drumChannels.Contains(pc.Channel) || (pc.Channel == 15 && !relocatedMelodicChannel.HasValue)))
+                        (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers &&
+                            (is680
+                                ? (cc.ControlNumber != 1 && cc.ControlNumber != 64)
+                                : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
+                        (te.Event is ProgramChangeEvent pc &&
+                            (drumChannels.Contains(pc.Channel) || (pc.Channel == 15 && !relocatedMelodicChannel.HasValue)))
                     );
                 }
 
-                // Process channel events in-place
+                long absTime = 0;
                 foreach (var evt in trackChunk.Events)
                 {
+                    absTime += evt.DeltaTime;
+
                     if (evt is ChannelEvent chEvt)
                     {
                         int originalChannel = chEvt.Channel;
@@ -553,7 +569,7 @@ namespace PSS790Player.Core
                         }
                         else if (drumChannels.Contains(originalChannel))
                         {
-                            chEvt.Channel = (FourBitNumber)15; // Relocate drums to Channel 16
+                            chEvt.Channel = (FourBitNumber)15; // Relocate all drums to Channel 16
                         }
 
                         int currentChannel = chEvt.Channel;
@@ -577,9 +593,9 @@ namespace PSS790Player.Core
                         {
                             int gmProg = channelGmPrograms.TryGetValue(originalChannel, out var gp) ? gp : -1;
 
-                            // Melodic octave folding for hardware multisample range, master transposition, and channel octave shifts
                             int transposeShift = options.MasterTranspose;
-                            if (options.ChannelOctaveShifts.TryGetValue(currentChannel, out var chShift))
+                            int octaveLookupCh = options.ChannelOctaveShifts.ContainsKey(originalChannel) ? originalChannel : currentChannel;
+                            if (options.ChannelOctaveShifts.TryGetValue(octaveLookupCh, out var chShift))
                             {
                                 transposeShift += chShift;
                             }
@@ -607,7 +623,8 @@ namespace PSS790Player.Core
 
                             if (chEvt is ProgramChangeEvent pc)
                             {
-                                if (options.ChannelVoiceOverrides.TryGetValue(currentChannel, out var overrideVoice) && overrideVoice.HasValue)
+                                int overrideLookupCh = options.ChannelVoiceOverrides.ContainsKey(originalChannel) ? originalChannel : currentChannel;
+                                if (options.ChannelVoiceOverrides.TryGetValue(overrideLookupCh, out var overrideVoice) && overrideVoice.HasValue)
                                 {
                                     if (is680)
                                     {
@@ -623,8 +640,7 @@ namespace PSS790Player.Core
                                     byte progNum = (byte)pc.ProgramNumber;
                                     if (sfxChannels.Contains(originalChannel))
                                     {
-                                        byte sfxProg = TranslateXgSfxVoice(progNum, is680);
-                                        pc.ProgramNumber = (SevenBitNumber)sfxProg;
+                                        pc.ProgramNumber = (SevenBitNumber)TranslateXgSfxVoice(progNum, is680);
                                     }
                                     else if (is680)
                                     {
@@ -645,8 +661,6 @@ namespace PSS790Player.Core
 
                                 if (options.NeutralizeAcousticPitchBends && isAcoustic && !is680)
                                 {
-                                    // Acoustic instruments (piano, strings, organ) must not have micro-bends detuning hardware voices on PSS-790 PCM.
-                                    // Bypassed on PSS-680 (FM tone generator handles pitch bends smoothly without PCM artifacts).
                                     pb.PitchValue = 8192;
                                 }
                                 else if (options.PitchBendMode == PitchBendScaleMode.Disable)
@@ -666,15 +680,20 @@ namespace PSS790Player.Core
                                     }
                                     else // Auto
                                     {
-                                        scaleFactor = channelBendRange.TryGetValue(originalChannel, out var range) && range > 0
-                                            ? Math.Clamp((double)range / 12.0, 0.05, 1.0)
-                                            : Constants.PitchBendScaleFactor;
+                                        int? activeRange = LookupBendRangeAtTime(channelBendTimelines, originalChannel, absTime);
+                                        if (activeRange.HasValue && activeRange.Value > 0)
+                                        {
+                                            scaleFactor = Math.Clamp(activeRange.Value / hardwareBendRangeSemitones, 0.05, 1.0);
+                                        }
+                                        else
+                                        {
+                                            scaleFactor = is680 ? 1.0 : Constants.PitchBendScaleFactor;
+                                        }
                                     }
 
                                     int centered = pb.PitchValue - 8192;
                                     int scaled = (int)Math.Round(centered * scaleFactor);
-                                    int finalValue = Math.Clamp(8192 + scaled, 0, 16383);
-                                    pb.PitchValue = (ushort)finalValue;
+                                    pb.PitchValue = (ushort)Math.Clamp(8192 + scaled, 0, 16383);
                                     bentChannels.Add(currentChannel);
                                 }
                             }
@@ -682,7 +701,7 @@ namespace PSS790Player.Core
                     }
                 }
 
-                // Guarantee that all channels that experienced pitch bends cleanly return to center (8192)
+                // Auto-center dangling pitch bends before track end
                 if (options.AutoCenterDanglingPitchBends && bentChannels.Count > 0)
                 {
                     foreach (var ch in bentChannels)
@@ -690,7 +709,6 @@ namespace PSS790Player.Core
                         var lastPb = trackChunk.Events.OfType<PitchBendEvent>().LastOrDefault(p => (int)p.Channel == ch);
                         if (lastPb != null && lastPb.PitchValue != 8192)
                         {
-                            // Only append center-bend if the track contains active notes on this channel
                             bool hasNotesOnChannel = trackChunk.Events.OfType<NoteOnEvent>().Any(n => (int)n.Channel == ch && n.Velocity > 0);
                             if (hasNotesOnChannel)
                             {
@@ -703,27 +721,22 @@ namespace PSS790Player.Core
                                         break;
                                     }
                                 }
+
                                 var centerPb = new PitchBendEvent((ushort)8192)
                                 {
                                     Channel = (FourBitNumber)ch,
                                     DeltaTime = 0
                                 };
 
-                                if (endIdx >= 0)
-                                {
-                                    trackChunk.Events.Insert(endIdx, centerPb);
-                                }
-                                else
-                                {
-                                    trackChunk.Events.Add(centerPb);
-                                }
+                                if (endIdx >= 0) trackChunk.Events.Insert(endIdx, centerPb);
+                                else trackChunk.Events.Add(centerPb);
                             }
                         }
                     }
                 }
             }
 
-            // Ensure all active melodic channels with notes have an initial Program Change
+            // 8. Ensure all active melodic channels have an initial Program Change
             var allActiveNoteChannels = remapped.GetTrackChunks()
                 .SelectMany(t => t.Events)
                 .OfType<NoteOnEvent>()
@@ -746,8 +759,22 @@ namespace PSS790Player.Core
                 {
                     if (ch != 15 && !allPcChannels.Contains(ch))
                     {
-                        byte pssProg = 3; // Default Voice 03: Piano
-                        if (channelGmPrograms.TryGetValue(ch, out var gmProg))
+                        byte pssProg = is680 ? (byte)3 : (byte)0;
+                        int origLookupCh = (relocatedMelodicChannel.HasValue && ch == relocatedMelodicChannel.Value) ? 15 : ch;
+                        int overrideKey = options.ChannelVoiceOverrides.ContainsKey(origLookupCh) ? origLookupCh : ch;
+
+                        if (options.ChannelVoiceOverrides.TryGetValue(overrideKey, out var overrideVoice) && overrideVoice.HasValue)
+                        {
+                            if (is680)
+                            {
+                                pssProg = (byte)Math.Clamp(overrideVoice.Value, 0, 104);
+                            }
+                            else if (Constants.Pss790Voices.TryGetValue(overrideVoice.Value, out var ovInfo))
+                            {
+                                pssProg = ovInfo.MidiProgram;
+                            }
+                        }
+                        else if (postRelocationGmPrograms.TryGetValue(ch, out var gmProg))
                         {
                             if (is680)
                             {
@@ -772,37 +799,119 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Injects default Yamaha DSP Reverb (CC 91) on channels without reverb events (PSS-790 onboard DSP only; PSS-680 has no DSP reverb chip)
+            // 9. Inject default Yamaha DSP Reverb (CC 91) on PSS-790
             if (!is680 && options.DefaultReverbBoost)
             {
                 ApplyReverbBoost(remapped);
             }
 
-            // Bake CC 7 (Volume) and CC 11 (Expression) into Note-On velocities for PSS-680
-            // Because PSS-680 hardware ignores CC 7 in Mode 99, dynamic velocity scaling establishes authentic channel balance.
-            if (is680)
-            {
-                ApplyPss680VelocityBaking(remapped);
-            }
-
-            // Run Smart Polyphony Optimizer with model-specific hardware voice ceiling
+            // 10. Run Smart Polyphony Optimizer with accurate pre-remap GM program priorities
             if (options.EnablePolyphonyGuard)
             {
-                int threshold = is680 ? 12 : Constants.PolyphonyGuardThreshold;
+                int threshold = is680 ? Pss680Constants.PolyphonyMode99 : Constants.PolyphonyGuardThreshold;
                 var optimizer = new PolyphonyOptimizer(enabled: true, threshold: threshold, model: options.TargetModel);
-                remapped = optimizer.Optimize(remapped);
+                remapped = optimizer.Optimize(remapped, postRelocationGmPrograms);
             }
 
-            // Enforce clean setup pre-roll separation so tone generators configure before Note 1 strikes
+            // 11. Tempo-accurate 31.25 kbps serial MIDI controller thinning (preserving extremes and sweep endpoints)
+            ApplyCcThinning(remapped);
+
+            // 12. Setup pre-roll separation keeping tick-0 setup events at 0 while shifting notes and automation together
             if (options.EnsureSetupPreRoll)
             {
                 ApplySetupPreRoll(remapped);
             }
 
-            // Embed metadata marker
+            // 13. Embed v2 metadata marker safely via ManageTimedEvents
             EnsureMarkerEmbedded(remapped, options.TargetModel);
 
             return remapped;
+        }
+
+        private static Dictionary<int, List<TimedBendRangeEntry>> ScanChronologicalPitchBendRanges(MidiFile midi)
+        {
+            var rawEvents = new List<(long Time, int TrackIndex, int EventOrder, int Channel, byte ControlNumber, byte ControlValue)>();
+            var tracks = midi.GetTrackChunks().ToList();
+
+            for (int t = 0; t < tracks.Count; t++)
+            {
+                int order = 0;
+                foreach (var te in tracks[t].GetTimedEvents())
+                {
+                    if (te.Event is ControlChangeEvent cc &&
+                        (int)cc.ControlNumber is 6 or 98 or 99 or 100 or 101)
+                    {
+                        rawEvents.Add((te.Time, t, order, (int)cc.Channel, (byte)cc.ControlNumber, (byte)cc.ControlValue));
+                    }
+                    order++;
+                }
+            }
+
+            rawEvents.Sort((a, b) =>
+            {
+                int cmp = a.Time.CompareTo(b.Time);
+                if (cmp != 0) return cmp;
+                cmp = a.TrackIndex.CompareTo(b.TrackIndex);
+                if (cmp != 0) return cmp;
+                return a.EventOrder.CompareTo(b.EventOrder);
+            });
+
+            var timelines = new Dictionary<int, List<TimedBendRangeEntry>>();
+            var rpnMsb = new int[16];
+            var rpnLsb = new int[16];
+            var rpnActive = new bool[16];
+            Array.Fill(rpnMsb, 127);
+            Array.Fill(rpnLsb, 127);
+
+            foreach (var e in rawEvents)
+            {
+                int ch = e.Channel;
+                if (e.ControlNumber == 101)
+                {
+                    rpnMsb[ch] = e.ControlValue;
+                    rpnActive[ch] = !(rpnMsb[ch] == 127 && rpnLsb[ch] == 127);
+                }
+                else if (e.ControlNumber == 100)
+                {
+                    rpnLsb[ch] = e.ControlValue;
+                    rpnActive[ch] = !(rpnMsb[ch] == 127 && rpnLsb[ch] == 127);
+                }
+                else if (e.ControlNumber is 99 or 98)
+                {
+                    // Entering NRPN mode disables active RPN so NRPN Data Entry (CC 6) cannot corrupt pitch bend sensitivity
+                    rpnActive[ch] = false;
+                }
+                else if (e.ControlNumber == 6)
+                {
+                    if (rpnActive[ch] && rpnMsb[ch] == 0 && rpnLsb[ch] == 0 && e.ControlValue > 0)
+                    {
+                        if (!timelines.TryGetValue(ch, out var list))
+                        {
+                            list = new List<TimedBendRangeEntry>();
+                            timelines[ch] = list;
+                        }
+                        list.Add(new TimedBendRangeEntry(e.Time, e.TrackIndex, e.EventOrder, e.ControlValue));
+                    }
+                }
+            }
+
+            return timelines;
+        }
+
+        private static int? LookupBendRangeAtTime(Dictionary<int, List<TimedBendRangeEntry>> timelines, int channel, long time)
+        {
+            if (!timelines.TryGetValue(channel, out var list) || list.Count == 0)
+            {
+                return null;
+            }
+
+            int? result = null;
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (list[i].Time <= time) result = list[i].Semitones;
+                else break;
+            }
+            return result;
         }
 
         private static void ApplyVoiceOverridesOnly(MidiFile midi, Dictionary<int, int?> overrides, string targetModel = "pss790")
@@ -850,13 +959,17 @@ namespace PSS790Player.Core
                 return;
             }
 
-            // Remove legacy v1 markers so the file is cleanly upgraded to v2
-            firstTrack.Events.RemoveAll(e =>
-                (e is TextEvent t && (t.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                      t.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))) ||
-                (e is MarkerEvent m && (m.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                        m.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))));
+            // Remove legacy markers using ManageTimedEvents so Track 0 timestamps never shift
+            using (var mgr = firstTrack.ManageTimedEvents())
+            {
+                mgr.Objects.RemoveAll(te =>
+                    (te.Event is TextEvent t && (t.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is MarkerEvent m && (m.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                   m.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase))));
+            }
 
+            // Inserting a DeltaTime == 0 event at index 0 preserves all subsequent absolute timestamps
             firstTrack.Events.Insert(0, new TextEvent(markerText) { DeltaTime = 0 });
         }
 
@@ -867,12 +980,11 @@ namespace PSS790Player.Core
                 return pssNote;
             }
 
-            // Musical fallbacks for extended GM/GS/XG drum notes
             if (gmNote is 24 or 25) return 49; // Snare Roll -> Snare Hi
             if (gmNote is 26) return 64;       // Finger Snap -> High Q / Rimshot
             if (gmNote is 27 or 28) return 64; // High Q / Slap -> Rimshot
             if (gmNote is 29 or 30) return 79; // Scratch Push/Pull -> Brash Squeeze
-            if (gmNote is 31 or 32 or 33) return 75; // Sticks / Square Click / Metronome Click -> Woodblock/Cowbell
+            if (gmNote is 31 or 32 or 33) return 75; // Sticks / Clicks -> Woodblock/Cowbell
             if (gmNote is 34) return 39;       // Metronome Bell -> Triangle Open
             if (gmNote is 82 or 83) return 58; // Shaker / Jingle Bell -> Maracas
             if (gmNote is 84 or 85) return 39; // Bell Tree / Castanets -> Triangle Open
@@ -890,20 +1002,19 @@ namespace PSS790Player.Core
         {
             if (is680)
             {
-                // PSS-680 FM Sound Effects:
-                // 95: SIREN, 96: EMERGENCY, 97: LASER, 98: COSMIC, 99: UFO
+                // Valid PSS-680 Manual p.40 FM voices suitable for XG SFX:
+                // 97: LASER, 95: SIREN, 99: UFO
                 return xgProgram switch
                 {
                     >= 48 and <= 51 => 97,   // Machine Gun, Laser Gun, Explosion, Firework -> LASER (97)
-                    >= 80 and <= 88 => 95,   // Phone, Door, Car, Siren -> SIREN (95)
+                    >= 80 and <= 88 => 95,   // Phone, Door, Car, Alarm -> SIREN (95)
                     >= 90 and <= 92 => 99,   // Helicopter, Starship, Jet Plane -> UFO (99)
-                    >= 93 and <= 127 => 97,  // Gunshot / etc -> LASER (97)
-                    _ => 98                  // Other FX -> COSMIC (98)
+                    >= 93 and <= 127 => 97,  // Gunshot / impacts -> LASER (97)
+                    _ => 99                  // Ambient / Cosmic / Wind FX -> UFO (99)
                 };
             }
             else
             {
-                // PSS-790 Hardware AWM Voicing for Sound Effects:
                 int pssVoice = xgProgram switch
                 {
                     >= 48 and <= 51 => 99,   // Laser Gun, Machine Gun, Explosion -> ORCHESTRA HIT (Voice 99)
@@ -918,19 +1029,11 @@ namespace PSS790Player.Core
 
         public static bool IsPianoOrKeyboardInstrument(byte gmProgram)
         {
-            // GM 0-7: Pianos (Acoustic Grand, Bright, Electric Grand, Honky-tonk, Rhodes, Clavinet)
-            // GM 8-15: Chromatic Percussion / Bells (Celesta, Glockenspiel, Music Box, Vibraphone, Marimba)
-            // GM 16-23: Organs & Accordions
             return gmProgram <= 23;
         }
 
         public static bool IsAcousticOrKeyboardInstrument(byte gmProgram)
         {
-            // GM 0-7: Piano
-            // GM 8-15: Chromatic Percussion / Bells
-            // GM 16-23: Organ & Accordion
-            // GM 40-55: Strings & Orchestral Ensembles, Harp, Timpani, Choirs
-            // GM 88-103: Synth Pads & FX
             return (gmProgram >= 0 && gmProgram <= 23) ||
                    (gmProgram >= 40 && gmProgram <= 55) ||
                    (gmProgram >= 88 && gmProgram <= 103);
@@ -938,10 +1041,6 @@ namespace PSS790Player.Core
 
         public static bool IsAliasingSensitiveAcousticVoice(byte gmProgram)
         {
-            // Acoustic piano (GM 0-7), Organs (GM 16-23), and Strings/Choir/Ensemble (GM 40-55)
-            // exhibit harsh FM/AWM multisample aliasing above Note 88 (E6).
-            // Chromatic percussion/bells (GM 8-15), Woodwinds/Piccolos (GM 72-79), and Synth Leads (GM 80-87)
-            // naturally play up to Note 108 (C8) and must not be restricted to 88.
             return (gmProgram >= 0 && gmProgram <= 7) ||
                    (gmProgram >= 16 && gmProgram <= 23) ||
                    (gmProgram >= 40 && gmProgram <= 55);
@@ -949,16 +1048,11 @@ namespace PSS790Player.Core
 
         public static bool IsBassInstrument(int gmProg)
         {
-            // GM 32-39: Basses, 43: Contrabass, 58: Tuba
             return (gmProg >= 32 && gmProg <= 39) || gmProg == 43 || gmProg == 58;
         }
 
         public static byte ClampMelodicNote(byte note, int gmProg, bool is680 = false)
         {
-            // PSS-790 tone generator natively receives MIDI notes 12 to 108 (C0 to C8).
-            // Acoustic piano, organ, and strings voices above Note 88 (E6) exhibit harsh multisample aliasing on AWM.
-            // On PSS-680 (2-Op FM synthesis), there are no PCM multisamples or aliasing artifacts; all voices play up to 108.
-            // Minimum note threshold on PSS-680 Mode 99 is Note 24 (C1, Manual p. 35). Floor 24 preserves bass fundamentals.
             bool isSensitive = !is680 && gmProg >= 0 && IsAliasingSensitiveAcousticVoice((byte)gmProg);
             byte maxNote = isSensitive ? (byte)88 : (byte)108;
             byte minNote = 24;
@@ -977,51 +1071,51 @@ namespace PSS790Player.Core
 
             if (lower.Contains("bass") || lower.Contains("bss"))
             {
-                if (lower.Contains("ac") || lower.Contains("acoustic") || lower.Contains("upright")) return 32; // Acoustic Bass
-                if (lower.Contains("slap")) return 36; // Slap Bass 1
-                if (lower.Contains("synth") || lower.Contains("syn")) return 38; // Synth Bass 1
-                if (lower.Contains("pick")) return 34; // Electric Bass (pick)
-                if (lower.Contains("fretless")) return 35; // Fretless Bass
-                return 33; // Electric Bass (finger)
+                if (lower.Contains("ac") || lower.Contains("acoustic") || lower.Contains("upright")) return 32;
+                if (lower.Contains("slap")) return 36;
+                if (lower.Contains("synth") || lower.Contains("syn")) return 38;
+                if (lower.Contains("pick")) return 34;
+                if (lower.Contains("fretless")) return 35;
+                return 33;
             }
             if (lower.Contains("guitar") || lower.Contains("gtr"))
             {
-                if (lower.Contains("dist") || lower.Contains("overdrive") || lower.Contains("od")) return 29; // Overdriven Guitar
-                if (lower.Contains("mute")) return 28; // Muted Guitar
-                if (lower.Contains("e ") || lower.Contains("electric") || lower.Contains("clean")) return 27; // Clean Guitar
-                if (lower.Contains("nylon")) return 24; // Nylon Guitar
-                if (lower.Contains("jazz")) return 26; // Electric Guitar (jazz)
-                return 25; // Steel Acoustic Guitar
+                if (lower.Contains("dist") || lower.Contains("overdrive") || lower.Contains("od")) return 29;
+                if (lower.Contains("mute")) return 28;
+                if (lower.Contains("e ") || lower.Contains("electric") || lower.Contains("clean")) return 27;
+                if (lower.Contains("nylon")) return 24;
+                if (lower.Contains("jazz")) return 26;
+                return 25;
             }
             if (lower.Contains("piano") || lower.Contains("pno") || lower.Contains("grand") || lower.Contains("intro"))
             {
-                if (lower.Contains("honky") || lower.Contains("tack")) return 3; // Honky-tonk Piano
-                return 0; // Acoustic Grand Piano
+                if (lower.Contains("honky") || lower.Contains("tack")) return 3;
+                return 0;
             }
             if (lower.Contains("rhodes") || lower.Contains("electric piano") || lower.Contains("e.piano") || lower.Contains("e-piano") || lower.Contains("wurlitzer") || lower.Contains("wurli") || lower.StartsWith("ep ") || lower.EndsWith(" ep") || lower.Contains(" ep ") || lower == "ep")
             {
-                return 4; // Electric Piano 1 (Rhodes)
+                return 4;
             }
-            if (lower.Contains("clav") || lower.Contains("clavi")) return 7; // Clavinet
-            if (lower.Contains("harpsi") || lower.Contains("harpsichord")) return 6; // Harpsichord
-            if (lower.Contains("organ") || lower.Contains("hammond") || lower.Contains("b3")) return 16; // Drawbar Organ
-            if (lower.Contains("accord") || lower.Contains("harmonica") || lower.Contains("bandoneon")) return 21; // Accordion
-            if (lower.Contains("vibes") || lower.Contains("vibraphone")) return 11; // Vibraphone
-            if (lower.Contains("marimba")) return 12; // Marimba
-            if (lower.Contains("xylophone") || lower.Contains("xylo")) return 13; // Xylophone
-            if (lower.Contains("timpani")) return 47; // Timpani
-            if (lower.Contains("pizz") || lower.Contains("pizzicato")) return 45; // Pizzicato Strings
-            if (lower.Contains("string") || lower.Contains("str ") || lower.Contains("str.") || lower.Contains("violin") || lower.Contains("viola") || lower.Contains("cello") || lower.Contains("contrabass") || lower.Contains("orch")) return 48; // String Ensemble 1
-            if (lower.Contains("choir") || lower.Contains("aah")) return 52; // Choir Aahs
-            if (lower.Contains("vocal") || lower.Contains("voice") || lower.Contains("ooh")) return 54; // Voice Oohs
-            if (lower.Contains("trumpet") || lower.Contains("brass") || lower.Contains("horn") || lower.Contains("trombone") || lower.Contains("tuba")) return 61; // Brass Section
-            if (lower.Contains("sax")) return 66; // Tenor Sax
-            if (lower.Contains("flute") || lower.Contains("pan") || lower.Contains("pipe") || lower.Contains("piccolo")) return 73; // Flute
-            if (lower.Contains("oboe") || lower.Contains("clarinet") || lower.Contains("bassoon")) return 68; // Oboe
-            if (lower.Contains("bell") || lower.Contains("chime") || lower.Contains("glock") || lower.Contains("celesta")) return 9; // Glockenspiel / Bells
-            if (lower.Contains("harp")) return 46; // Orchestral Harp
-            if (lower.Contains("pad") || lower.Contains("warm") || lower.Contains("sweep")) return 89; // Warm Pad
-            if (lower.Contains("lead") || lower.Contains("synth") || lower.Contains("syn ") || lower.Contains("syn.") || lower.Contains("saw") || lower.Contains("square") || lower.Contains("arp")) return 80; // Lead 1 (square)
+            if (lower.Contains("clav") || lower.Contains("clavi")) return 7;
+            if (lower.Contains("harpsi") || lower.Contains("harpsichord")) return 6;
+            if (lower.Contains("organ") || lower.Contains("hammond") || lower.Contains("b3")) return 16;
+            if (lower.Contains("accord") || lower.Contains("harmonica") || lower.Contains("bandoneon")) return 21;
+            if (lower.Contains("vibes") || lower.Contains("vibraphone")) return 11;
+            if (lower.Contains("marimba")) return 12;
+            if (lower.Contains("xylophone") || lower.Contains("xylo")) return 13;
+            if (lower.Contains("timpani")) return 47;
+            if (lower.Contains("pizz") || lower.Contains("pizzicato")) return 45;
+            if (lower.Contains("string") || lower.Contains("str ") || lower.Contains("str.") || lower.Contains("violin") || lower.Contains("viola") || lower.Contains("cello") || lower.Contains("contrabass") || lower.Contains("orch")) return 48;
+            if (lower.Contains("choir") || lower.Contains("aah")) return 52;
+            if (lower.Contains("vocal") || lower.Contains("voice") || lower.Contains("ooh")) return 54;
+            if (lower.Contains("trumpet") || lower.Contains("brass") || lower.Contains("horn") || lower.Contains("trombone") || lower.Contains("tuba")) return 61;
+            if (lower.Contains("sax")) return 66;
+            if (lower.Contains("flute") || lower.Contains("pan") || lower.Contains("pipe") || lower.Contains("piccolo")) return 73;
+            if (lower.Contains("oboe") || lower.Contains("clarinet") || lower.Contains("bassoon")) return 68;
+            if (lower.Contains("bell") || lower.Contains("chime") || lower.Contains("glock") || lower.Contains("celesta")) return 9;
+            if (lower.Contains("harp")) return 46;
+            if (lower.Contains("pad") || lower.Contains("warm") || lower.Contains("sweep")) return 89;
+            if (lower.Contains("lead") || lower.Contains("synth") || lower.Contains("syn ") || lower.Contains("syn.") || lower.Contains("saw") || lower.Contains("square") || lower.Contains("arp")) return 80;
 
             return null;
         }
@@ -1036,86 +1130,123 @@ namespace PSS790Player.Core
             return $"GM Instrument {program}";
         }
 
-        public static MidiHealthReport AnalyzeHealth(MidiFile originalMidi, MidiFile? remappedMidi = null, string? fileName = null)
+        public static MidiHealthReport AnalyzeHealth(MidiFile originalMidi, MidiFile? remappedMidi = null, string? fileName = null, string model = "pss790")
         {
-            return MidiHealthInspector.Analyze(originalMidi, remappedMidi, fileName);
+            return MidiHealthInspector.Analyze(originalMidi, remappedMidi, fileName, model);
         }
 
-        public static void ApplySustainPedalEmulation(MidiFile midi, Dictionary<int, byte>? channelGmPrograms = null)
+        public static void ApplySustainPedalEmulation(MidiFile midi, Dictionary<int, byte>? channelGmPrograms = null, HashSet<int>? drumChannels = null)
         {
+            var effectiveDrums = drumChannels ?? new HashSet<int> { 9 };
             var timeDivision = midi.TimeDivision as TicksPerQuarterNoteTimeDivision;
             short tpqn = timeDivision?.TicksPerQuarterNote ?? 480;
-            long maxPedalExtensionTicks = tpqn * 8; // Max 2 measures (8 beats) of sustain extension
+            long maxPedalExtensionTicks = tpqn * 8; // Max 2 measures (8 beats)
+            long runawayThresholdTicks = tpqn * 16; // > 4 measures considered runaway
 
-            foreach (var track in midi.GetTrackChunks())
+            // Build global chronological CC 64 intervals per channel across all tracks (handles Type-1 split tracks)
+            var tracks = midi.GetTrackChunks().ToList();
+            var cc64Events = new List<(long Time, int TrackIndex, int Order, int Channel, byte Value)>();
+            long globalEndTime = 0;
+
+            for (int t = 0; t < tracks.Count; t++)
             {
-                var pedalDownTicks = new Dictionary<int, long>();
-                var pedalIntervals = new Dictionary<int, List<(long Start, long End)>>();
-                for (int i = 0; i < 16; i++) pedalIntervals[i] = new List<(long, long)>();
-
-                foreach (var te in track.GetTimedEvents())
+                int order = 0;
+                foreach (var te in tracks[t].GetTimedEvents())
                 {
+                    if (te.Time > globalEndTime) globalEndTime = te.Time;
                     if (te.Event is ControlChangeEvent cc && cc.ControlNumber == 64)
                     {
-                        int ch = cc.Channel;
-                        if (cc.ControlValue >= 64)
+                        cc64Events.Add((te.Time, t, order, (int)cc.Channel, (byte)cc.ControlValue));
+                    }
+                    order++;
+                }
+            }
+
+            if (cc64Events.Count == 0) return;
+
+            cc64Events.Sort((a, b) =>
+            {
+                int cmp = a.Time.CompareTo(b.Time);
+                if (cmp != 0) return cmp;
+                cmp = a.TrackIndex.CompareTo(b.TrackIndex);
+                if (cmp != 0) return cmp;
+                return a.Order.CompareTo(b.Order);
+            });
+
+            var pedalDownTicks = new Dictionary<int, long>();
+            var pedalIntervals = new Dictionary<int, List<(long Start, long End)>>();
+            var runawayCapReleaseTicks = new Dictionary<int, List<long>>();
+            for (int i = 0; i < 16; i++)
+            {
+                pedalIntervals[i] = new List<(long, long)>();
+                runawayCapReleaseTicks[i] = new List<long>();
+            }
+
+            foreach (var e in cc64Events)
+            {
+                int ch = e.Channel;
+                if (e.Value >= 64)
+                {
+                    if (!pedalDownTicks.ContainsKey(ch))
+                    {
+                        pedalDownTicks[ch] = e.Time;
+                    }
+                }
+                else
+                {
+                    if (pedalDownTicks.TryGetValue(ch, out long downTick))
+                    {
+                        long endTick = e.Time;
+                        if (endTick - downTick > runawayThresholdTicks)
                         {
-                            if (!pedalDownTicks.ContainsKey(ch))
-                            {
-                                pedalDownTicks[ch] = te.Time;
-                            }
+                            long cappedEnd = downTick + maxPedalExtensionTicks;
+                            pedalIntervals[ch].Add((downTick, cappedEnd));
+                            runawayCapReleaseTicks[ch].Add(cappedEnd);
                         }
                         else
                         {
-                            if (pedalDownTicks.TryGetValue(ch, out var downTick))
-                            {
-                                pedalIntervals[ch].Add((downTick, te.Time));
-                                pedalDownTicks.Remove(ch);
-                            }
+                            pedalIntervals[ch].Add((downTick, endTick));
                         }
+                        pedalDownTicks.Remove(ch);
                     }
                 }
+            }
 
-                long trackEndTime = track.GetTimedEvents().LastOrDefault()?.Time ?? 0;
-                foreach (var (ch, downTick) in pedalDownTicks)
+            foreach (var (ch, downTick) in pedalDownTicks)
+            {
+                long cappedEnd = Math.Min(globalEndTime, downTick + maxPedalExtensionTicks);
+                pedalIntervals[ch].Add((downTick, cappedEnd));
+                runawayCapReleaseTicks[ch].Add(cappedEnd);
+            }
+
+            // Track channels whose sustain was baked into note durations so their raw CC 64 can be stripped cleanly
+            var bakedKeyboardChannels = new HashSet<int>();
+            for (int ch = 0; ch < 16; ch++)
+            {
+                if (effectiveDrums.Contains(ch)) continue;
+                if (pedalIntervals[ch].Count == 0) continue;
+
+                bool isKeyboard = channelGmPrograms == null ||
+                                  !channelGmPrograms.TryGetValue(ch, out byte gmProg) ||
+                                  IsPianoOrKeyboardInstrument(gmProg);
+                if (isKeyboard)
                 {
-                    // A pedal that is never released was left on as a sequencer artifact.
-                    // Cap unreleased sustain intervals to at most 2 measures (8 beats) instead of whole track.
-                    long cappedEnd = Math.Min(trackEndTime, downTick + maxPedalExtensionTicks);
-                    pedalIntervals[ch].Add((downTick, cappedEnd));
+                    bakedKeyboardChannels.Add(ch);
                 }
+            }
 
-                // Window overly long intervals (> 4 measures / 16 beats) to prevent runaway polyphony accumulation
-                for (int ch = 0; ch < 16; ch++)
-                {
-                    for (int i = 0; i < pedalIntervals[ch].Count; i++)
-                    {
-                        var (start, end) = pedalIntervals[ch][i];
-                        if (end - start > tpqn * 16)
-                        {
-                            pedalIntervals[ch][i] = (start, start + maxPedalExtensionTicks);
-                        }
-                    }
-                }
-
-                bool hasPedal = pedalIntervals.Values.Any(l => l.Count > 0);
-                if (!hasPedal) continue;
-
+            // 1. Extend staccato note durations on keyboard channels
+            foreach (var track in tracks)
+            {
                 using var notesManager = track.ManageNotes();
                 foreach (var group in notesManager.Objects.GroupBy(n => (int)n.Channel))
                 {
                     int ch = group.Key;
-                    if (ch == 9) continue; // Skip GM drum channel
-                    if (!pedalIntervals.TryGetValue(ch, out var intervals) || intervals.Count == 0) continue;
+                    if (!bakedKeyboardChannels.Contains(ch)) continue;
 
-                    // Restrict sustain pedal emulation strictly to Piano, Organ, and Chromatic Percussion (GM 0-23)!
-                    // Guitars, basses, brass, woodwinds, strings, and vocals must never have artificial sustain pedal extension.
-                    if (channelGmPrograms != null && channelGmPrograms.TryGetValue(ch, out var gmProg) && !IsPianoOrKeyboardInstrument(gmProg))
-                    {
-                        continue;
-                    }
-
+                    var intervals = pedalIntervals[ch];
                     var notes = group.OrderBy(n => n.Time).ToList();
+
                     for (int i = 0; i < notes.Count; i++)
                     {
                         var note = notes[i];
@@ -1148,6 +1279,42 @@ namespace PSS790Player.Core
                                 note.Length = newEnd - note.Time;
                             }
                         }
+                    }
+                }
+            }
+
+            // 2. Strip CC 64 from baked keyboard channels & drums (prevents double-sustain / stuck pedals),
+            // and inject explicit CC 64 = 0 release caps for any runaway pedals on non-keyboard channels.
+            foreach (var track in tracks)
+            {
+                using var mgr = track.ManageTimedEvents();
+                mgr.Objects.RemoveAll(te =>
+                    te.Event is ControlChangeEvent cc &&
+                    cc.ControlNumber == 64 &&
+                    (bakedKeyboardChannels.Contains(cc.Channel) || effectiveDrums.Contains(cc.Channel)));
+            }
+
+            var firstTrack = tracks.FirstOrDefault();
+            if (firstTrack != null)
+            {
+                var capsToInsert = new List<TimedEvent>();
+                for (int ch = 0; ch < 16; ch++)
+                {
+                    if (bakedKeyboardChannels.Contains(ch) || effectiveDrums.Contains(ch)) continue;
+                    foreach (long releaseTick in runawayCapReleaseTicks[ch])
+                    {
+                        capsToInsert.Add(new TimedEvent(
+                            new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)ch },
+                            releaseTick));
+                    }
+                }
+
+                if (capsToInsert.Count > 0)
+                {
+                    using var mgr = firstTrack.ManageTimedEvents();
+                    foreach (var cap in capsToInsert)
+                    {
+                        mgr.Objects.Add(cap);
                     }
                 }
             }
@@ -1205,7 +1372,7 @@ namespace PSS790Player.Core
                     double avgBpm = 60_000_000.0 / avgUs;
                     if (avgBpm < 68.0)
                     {
-                        mult = 2.0; // Double sluggish half-time tempo (e.g. 63 BPM -> 126 BPM)
+                        mult = 2.0;
                     }
                 }
             }
@@ -1226,19 +1393,86 @@ namespace PSS790Player.Core
             }
         }
 
+        private static (List<TimedValueEntry>[] Cc7, List<TimedValueEntry>[] Cc11) CollectGlobalVolumeTimelines(IReadOnlyList<TrackChunk> tracks)
+        {
+            var cc7 = new List<TimedValueEntry>[16];
+            var cc11 = new List<TimedValueEntry>[16];
+            for (int ch = 0; ch < 16; ch++)
+            {
+                cc7[ch] = new List<TimedValueEntry>();
+                cc11[ch] = new List<TimedValueEntry>();
+            }
+
+            for (int t = 0; t < tracks.Count; t++)
+            {
+                int order = 0;
+                foreach (var te in tracks[t].GetTimedEvents())
+                {
+                    if (te.Event is ControlChangeEvent cc)
+                    {
+                        if (cc.ControlNumber == 7)
+                        {
+                            cc7[cc.Channel].Add(new TimedValueEntry(te.Time, t, order, (byte)cc.ControlValue));
+                        }
+                        else if (cc.ControlNumber == 11)
+                        {
+                            cc11[cc.Channel].Add(new TimedValueEntry(te.Time, t, order, (byte)cc.ControlValue));
+                        }
+                    }
+                    order++;
+                }
+            }
+
+            static int CompareEntry(TimedValueEntry a, TimedValueEntry b)
+            {
+                int cmp = a.Time.CompareTo(b.Time);
+                if (cmp != 0) return cmp;
+                cmp = a.TrackIndex.CompareTo(b.TrackIndex);
+                if (cmp != 0) return cmp;
+                return a.EventOrder.CompareTo(b.EventOrder);
+            }
+
+            for (int ch = 0; ch < 16; ch++)
+            {
+                cc7[ch].Sort(CompareEntry);
+                cc11[ch].Sort(CompareEntry);
+            }
+
+            return (cc7, cc11);
+        }
+
+        private static byte LookupControllerAtTime(List<TimedValueEntry> timeline, long time, byte defaultValue)
+        {
+            if (timeline.Count == 0) return defaultValue;
+
+            // Binary search for last entry with entry.Time <= time
+            int lo = 0;
+            int hi = timeline.Count - 1;
+            int idx = -1;
+            while (lo <= hi)
+            {
+                int mid = lo + ((hi - lo) >> 1);
+                if (timeline[mid].Time <= time)
+                {
+                    idx = mid;
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid - 1;
+                }
+            }
+
+            return idx >= 0 ? timeline[idx].Value : defaultValue;
+        }
+
         private static void ApplyExpressionPedalFolding(MidiFile midi)
         {
-            foreach (var track in midi.GetTrackChunks())
+            var tracks = midi.GetTrackChunks().ToList();
+            var (globalCc7, globalCc11) = CollectGlobalVolumeTimelines(tracks);
+
+            foreach (var track in tracks)
             {
-                var currentCc7 = new Dictionary<int, byte>();
-                var currentCc11 = new Dictionary<int, byte>();
-
-                for (int ch = 0; ch < 16; ch++)
-                {
-                    currentCc7[ch] = 100;
-                    currentCc11[ch] = 127;
-                }
-
                 using var mgr = track.ManageTimedEvents();
                 foreach (var te in mgr.Objects)
                 {
@@ -1247,17 +1481,17 @@ namespace PSS790Player.Core
                         int ch = cc.Channel;
                         if (cc.ControlNumber == 7)
                         {
-                            currentCc7[ch] = (byte)cc.ControlValue;
-                            if (currentCc11[ch] != 127)
+                            byte activeCc11 = LookupControllerAtTime(globalCc11[ch], te.Time, 127);
+                            if (activeCc11 != 127)
                             {
-                                int folded = (int)Math.Round((double)currentCc7[ch] * currentCc11[ch] / 127.0);
+                                int folded = (int)Math.Round((double)(byte)cc.ControlValue * activeCc11 / 127.0);
                                 cc.ControlValue = (SevenBitNumber)Math.Clamp(folded, 0, 127);
                             }
                         }
                         else if (cc.ControlNumber == 11)
                         {
-                            currentCc11[ch] = (byte)cc.ControlValue;
-                            int folded = (int)Math.Round((double)currentCc7[ch] * currentCc11[ch] / 127.0);
+                            byte activeCc7 = LookupControllerAtTime(globalCc7[ch], te.Time, 100);
+                            int folded = (int)Math.Round((double)activeCc7 * (byte)cc.ControlValue / 127.0);
                             cc.ControlNumber = (SevenBitNumber)7;
                             cc.ControlValue = (SevenBitNumber)Math.Clamp(folded, 0, 127);
                         }
@@ -1268,69 +1502,149 @@ namespace PSS790Player.Core
 
         private static void ApplyPss680VelocityBaking(MidiFile midi)
         {
-            // Step 1: Pre-scan initial CC 7 and CC 11 per channel across all tracks
-            var initialCc7 = new Dictionary<int, byte>();
-            var initialCc11 = new Dictionary<int, byte>();
-            for (int ch = 0; ch < 16; ch++)
-            {
-                initialCc7[ch] = 100; // Standard MIDI default volume
-                initialCc11[ch] = 127; // Standard MIDI default expression
-            }
+            var tracks = midi.GetTrackChunks().ToList();
+            var (globalCc7, globalCc11) = CollectGlobalVolumeTimelines(tracks);
 
-            foreach (var track in midi.GetTrackChunks())
+            // Step 1: Bake global Type-1 CC 7 & CC 11 into paired Notes (removing both NoteOn & NoteOff when culled)
+            foreach (var track in tracks)
             {
-                using var mgr = track.ManageTimedEvents();
-                foreach (var te in mgr.Objects)
+                using var notesMgr = track.ManageNotes();
+                var notesToCull = new HashSet<Note>();
+
+                foreach (var note in notesMgr.Objects)
                 {
-                    if (te.Event is ControlChangeEvent cc)
+                    int ch = note.Channel;
+                    byte rawV = (byte)note.Velocity;
+                    byte cc7 = LookupControllerAtTime(globalCc7[ch], note.Time, 100);
+                    byte cc11 = LookupControllerAtTime(globalCc11[ch], note.Time, 127);
+
+                    if (rawV == 0 || cc7 == 0 || cc11 == 0)
                     {
-                        if (cc.ControlNumber == 7 && te.Time == 0)
-                        {
-                            initialCc7[cc.Channel] = (byte)cc.ControlValue;
-                        }
-                        else if (cc.ControlNumber == 11 && te.Time == 0)
-                        {
-                            initialCc11[cc.Channel] = (byte)cc.ControlValue;
-                        }
+                        notesToCull.Add(note);
+                        continue;
                     }
+
+                    // Calibrated sweet spot mapping for 2-op FM YM3420
+                    double eff = rawV * (cc7 / 127.0) * (cc11 / 127.0);
+
+                    if (eff < 0.5)
+                    {
+                        notesToCull.Add(note);
+                        continue;
+                    }
+
+                    // Exact calibrated 2-op FM velocity range: [24..118]
+                    double clampedEff = Math.Clamp(eff, 1.0, 127.0);
+                    int scaled = 24 + (int)Math.Round((clampedEff / 127.0) * (118 - 24));
+                    note.Velocity = (SevenBitNumber)Math.Clamp(scaled, 24, 118);
+                }
+
+                if (notesToCull.Count > 0)
+                {
+                    notesMgr.Objects.RemoveAll(n => notesToCull.Contains(n));
                 }
             }
 
-            // Step 2: Iterate through each track chronologically and bake CC 7 & CC 11 into NoteOn velocities
+            // Step 2: Strip ignored CC 7 and CC 11 events from PSS-680 output to conserve 31.25 kbps serial MIDI bandwidth
+            foreach (var track in tracks)
+            {
+                using var mgr = track.ManageTimedEvents();
+                mgr.Objects.RemoveAll(te => te.Event is ControlChangeEvent cc && (cc.ControlNumber == 7 || cc.ControlNumber == 11));
+            }
+        }
+
+        private static void ApplyCcThinning(MidiFile midi)
+        {
+            const double MinIntervalMs = 18.0;
+            var tempoMap = midi.GetTempoMap();
+
             foreach (var track in midi.GetTrackChunks())
             {
-                var trackCc7 = new Dictionary<int, byte>(initialCc7);
-                var trackCc11 = new Dictionary<int, byte>(initialCc11);
-
                 using var mgr = track.ManageTimedEvents();
-                foreach (var te in mgr.Objects)
+                var allEvents = mgr.Objects.ToList();
+                var eventsToRemove = new HashSet<TimedEvent>();
+
+                // Group continuous controller streams by (Channel, ControllerKey) where PitchBend uses key -1
+                var streams = new Dictionary<(int Channel, int Key), List<(TimedEvent Event, double TimeMs, int Value, bool IsExtreme)>>();
+
+                foreach (var te in allEvents)
                 {
-                    if (te.Event is ControlChangeEvent cc)
+                    if (te.Event is ControlChangeEvent cc && (cc.ControlNumber == 1 || cc.ControlNumber == 7 || cc.ControlNumber == 11))
                     {
-                        if (cc.ControlNumber == 7)
+                        var streamKey = ((int)cc.Channel, (int)cc.ControlNumber);
+                        if (!streams.TryGetValue(streamKey, out var list))
                         {
-                            trackCc7[cc.Channel] = (byte)cc.ControlValue;
+                            list = new List<(TimedEvent, double, int, bool)>();
+                            streams[streamKey] = list;
                         }
-                        else if (cc.ControlNumber == 11)
-                        {
-                            trackCc11[cc.Channel] = (byte)cc.ControlValue;
-                        }
+                        int val = (byte)cc.ControlValue;
+                        double ms = TimeConverter.ConvertTo<MetricTimeSpan>(te.Time, tempoMap).TotalMilliseconds;
+                        list.Add((te, ms, val, val == 0 || val == 127));
                     }
-                    else if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    else if (te.Event is PitchBendEvent pb)
                     {
-                        int ch = noteOn.Channel;
-                        byte rawV = (byte)noteOn.Velocity;
-                        byte cc7 = trackCc7.GetValueOrDefault(ch, (byte)100);
-                        byte cc11 = trackCc11.GetValueOrDefault(ch, (byte)127);
-
-                        double eff = rawV * (cc7 / 127.0) * (cc11 / 127.0);
-                        double clampedEff = Math.Clamp(eff, 1.0, 127.0);
-
-                        // Calibrated 2-op FM sweet spot (24..118)
-                        // Guarantees soft passages are audible while loud passages avoid digital clipping on PSS-680
-                        int scaled = 24 + (int)Math.Round((clampedEff / 127.0) * (118 - 24));
-                        noteOn.Velocity = (SevenBitNumber)Math.Clamp(scaled, 1, 127);
+                        var streamKey = ((int)pb.Channel, -1);
+                        if (!streams.TryGetValue(streamKey, out var list))
+                        {
+                            list = new List<(TimedEvent, double, int, bool)>();
+                            streams[streamKey] = list;
+                        }
+                        int val = pb.PitchValue;
+                        double ms = TimeConverter.ConvertTo<MetricTimeSpan>(te.Time, tempoMap).TotalMilliseconds;
+                        list.Add((te, ms, val, val == 0 || val == 8192 || val == 16383));
                     }
+                }
+
+                foreach (var stream in streams.Values)
+                {
+                    if (stream.Count <= 1) continue;
+
+                    double lastKeptMs = stream[0].TimeMs;
+                    int lastKeptVal = stream[0].Value;
+
+                    for (int i = 1; i < stream.Count; i++)
+                    {
+                        var cur = stream[i];
+
+                        // Always drop consecutive duplicate values
+                        if (cur.Value == lastKeptVal)
+                        {
+                            eventsToRemove.Add(cur.Event);
+                            continue;
+                        }
+
+                        // Always preserve extremes (0, 127, 8192, 16383)
+                        if (cur.IsExtreme)
+                        {
+                            lastKeptMs = cur.TimeMs;
+                            lastKeptVal = cur.Value;
+                            continue;
+                        }
+
+                        // Preserve if elapsed time meets minimum serial MIDI spacing
+                        if ((cur.TimeMs - lastKeptMs) >= MinIntervalMs)
+                        {
+                            lastKeptMs = cur.TimeMs;
+                            lastKeptVal = cur.Value;
+                            continue;
+                        }
+
+                        // Preserve the final settling value of a ramp (last event in stream or followed by >= 18ms gap)
+                        bool isRampEnd = (i == stream.Count - 1) || ((stream[i + 1].TimeMs - cur.TimeMs) >= MinIntervalMs);
+                        if (isRampEnd)
+                        {
+                            lastKeptMs = cur.TimeMs;
+                            lastKeptVal = cur.Value;
+                            continue;
+                        }
+
+                        eventsToRemove.Add(cur.Event);
+                    }
+                }
+
+                if (eventsToRemove.Count > 0)
+                {
+                    mgr.Objects.RemoveAll(te => eventsToRemove.Contains(te));
                 }
             }
         }
@@ -1341,8 +1655,7 @@ namespace PSS790Player.Core
 
             foreach (var track in midi.GetTrackChunks())
             {
-                using var mgr = track.ManageTimedEvents();
-                foreach (var te in mgr.Objects)
+                foreach (var te in track.GetTimedEvents())
                 {
                     if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
                     {
@@ -1362,7 +1675,14 @@ namespace PSS790Player.Core
                     using var mgr = track.ManageTimedEvents();
                     foreach (var te in mgr.Objects)
                     {
-                        if (te.Event is NoteOnEvent or NoteOffEvent)
+                        if (minNoteTime == 0)
+                        {
+                            if (te.Time > 0 || te.Event is NoteOnEvent or NoteOffEvent)
+                            {
+                                te.Time += shiftTicks;
+                            }
+                        }
+                        else if (te.Time >= minNoteTime)
                         {
                             te.Time += shiftTicks;
                         }

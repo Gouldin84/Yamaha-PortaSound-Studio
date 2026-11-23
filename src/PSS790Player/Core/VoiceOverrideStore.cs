@@ -7,13 +7,13 @@ namespace PSS790Player.Core
 {
     public class VoiceOverrideStore
     {
-        private static VoiceOverrideStore? _instance;
-        public static VoiceOverrideStore Instance => _instance ??= new VoiceOverrideStore();
+        private static readonly Lazy<VoiceOverrideStore> _lazyInstance = new(() => new VoiceOverrideStore());
+        public static VoiceOverrideStore Instance => _lazyInstance.Value;
 
         private readonly string _storagePath;
         private readonly object _lock = new();
         private Dictionary<string, Dictionary<int, int>> _overrides = new(StringComparer.OrdinalIgnoreCase);
-        private bool _isLoaded;
+        private volatile bool _isLoaded;
 
         public VoiceOverrideStore(string? customPath = null)
         {
@@ -22,10 +22,10 @@ namespace PSS790Player.Core
 
         private void EnsureLoaded()
         {
+            if (_isLoaded) return;
             lock (_lock)
             {
                 if (_isLoaded) return;
-                _isLoaded = true;
 
                 try
                 {
@@ -43,6 +43,10 @@ namespace PSS790Player.Core
                 {
                     _overrides = new Dictionary<string, Dictionary<int, int>>(StringComparer.OrdinalIgnoreCase);
                 }
+                finally
+                {
+                    _isLoaded = true;
+                }
             }
         }
 
@@ -57,14 +61,19 @@ namespace PSS790Player.Core
                 }
 
                 var json = JsonSerializer.Serialize(_overrides, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_storagePath, json);
+                var tempPath = $"{_storagePath}.{Guid.NewGuid():N}.tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _storagePath, overwrite: true);
             }
             catch { }
         }
 
+        private static string GetRelativeKeyPart(string filePath) =>
+            AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+
         private static string NormalizeKey(string filePath, string model = "pss790")
         {
-            var rel = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+            var rel = GetRelativeKeyPart(filePath);
             return string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? $"pss680:{rel}" : $"pss790:{rel}";
         }
 
@@ -73,7 +82,7 @@ namespace PSS790Player.Core
             EnsureLoaded();
             var result = new Dictionary<int, int?>();
             var key = NormalizeKey(filePath, model);
-            var legacyKey = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+            var legacyKey = GetRelativeKeyPart(filePath);
 
             lock (_lock)
             {
@@ -124,7 +133,7 @@ namespace PSS790Player.Core
         {
             EnsureLoaded();
             var key = NormalizeKey(filePath, model);
-            var legacyKey = AppPaths.GetRelativeLibraryPath(filePath).Replace('/', '\\');
+            var legacyKey = GetRelativeKeyPart(filePath);
 
             lock (_lock)
             {
@@ -141,19 +150,43 @@ namespace PSS790Player.Core
             }
         }
 
-        public void RemoveOverrides(string filePath) => ResetOverrides(filePath, "pss790");
+        public void RemoveOverrides(string filePath)
+        {
+            EnsureLoaded();
+            var key790 = NormalizeKey(filePath, "pss790");
+            var key680 = NormalizeKey(filePath, "pss680");
+            var legacyKey = GetRelativeKeyPart(filePath);
+
+            lock (_lock)
+            {
+                bool removed = _overrides.Remove(key790) |
+                               _overrides.Remove(key680) |
+                               _overrides.Remove(legacyKey);
+
+                if (removed)
+                {
+                    SaveInternal();
+                }
+            }
+        }
 
         public void RemoveFolderOverrides(string folderPath)
         {
             EnsureLoaded();
-            var prefix = NormalizeKey(folderPath).TrimEnd('\\') + "\\";
+            var prefix790 = NormalizeKey(folderPath, "pss790").TrimEnd('\\') + "\\";
+            var prefix680 = NormalizeKey(folderPath, "pss680").TrimEnd('\\') + "\\";
+            var legacyPrefix = GetRelativeKeyPart(folderPath).TrimEnd('\\') + "\\";
 
             lock (_lock)
             {
                 var keysToRemove = new List<string>();
                 foreach (var k in _overrides.Keys)
                 {
-                    if (k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    if (k.StartsWith(prefix790, StringComparison.OrdinalIgnoreCase) ||
+                        k.StartsWith(prefix680, StringComparison.OrdinalIgnoreCase) ||
+                        (!k.StartsWith("pss790:", StringComparison.OrdinalIgnoreCase) &&
+                         !k.StartsWith("pss680:", StringComparison.OrdinalIgnoreCase) &&
+                         k.StartsWith(legacyPrefix, StringComparison.OrdinalIgnoreCase)))
                     {
                         keysToRemove.Add(k);
                     }
@@ -173,17 +206,43 @@ namespace PSS790Player.Core
         public void RenameFile(string oldFilePath, string newFilePath)
         {
             EnsureLoaded();
-            var oldKey = NormalizeKey(oldFilePath);
-            var newKey = NormalizeKey(newFilePath);
-
-            if (string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase)) return;
+            var old790 = NormalizeKey(oldFilePath, "pss790");
+            var new790 = NormalizeKey(newFilePath, "pss790");
+            var old680 = NormalizeKey(oldFilePath, "pss680");
+            var new680 = NormalizeKey(newFilePath, "pss680");
+            var oldLegacy = GetRelativeKeyPart(oldFilePath);
+            var newLegacy = GetRelativeKeyPart(newFilePath);
 
             lock (_lock)
             {
-                if (_overrides.TryGetValue(oldKey, out var songOverrides))
+                bool changed = false;
+
+                if (!string.Equals(old790, new790, StringComparison.OrdinalIgnoreCase) &&
+                    _overrides.TryGetValue(old790, out var map790))
                 {
-                    _overrides[newKey] = songOverrides;
-                    _overrides.Remove(oldKey);
+                    _overrides[new790] = map790;
+                    _overrides.Remove(old790);
+                    changed = true;
+                }
+
+                if (!string.Equals(old680, new680, StringComparison.OrdinalIgnoreCase) &&
+                    _overrides.TryGetValue(old680, out var map680))
+                {
+                    _overrides[new680] = map680;
+                    _overrides.Remove(old680);
+                    changed = true;
+                }
+
+                if (!string.Equals(oldLegacy, newLegacy, StringComparison.OrdinalIgnoreCase) &&
+                    _overrides.TryGetValue(oldLegacy, out var mapLegacy))
+                {
+                    _overrides[newLegacy] = mapLegacy;
+                    _overrides.Remove(oldLegacy);
+                    changed = true;
+                }
+
+                if (changed)
+                {
                     SaveInternal();
                 }
             }
@@ -192,28 +251,41 @@ namespace PSS790Player.Core
         public void RenameFolder(string oldFolderFullPath, string newFolderFullPath)
         {
             EnsureLoaded();
-            var oldPrefix = NormalizeKey(oldFolderFullPath).TrimEnd('\\') + "\\";
-            var newPrefix = NormalizeKey(newFolderFullPath).TrimEnd('\\') + "\\";
-
-            if (string.Equals(oldPrefix, newPrefix, StringComparison.OrdinalIgnoreCase)) return;
+            var old790Prefix = NormalizeKey(oldFolderFullPath, "pss790").TrimEnd('\\') + "\\";
+            var new790Prefix = NormalizeKey(newFolderFullPath, "pss790").TrimEnd('\\') + "\\";
+            var old680Prefix = NormalizeKey(oldFolderFullPath, "pss680").TrimEnd('\\') + "\\";
+            var new680Prefix = NormalizeKey(newFolderFullPath, "pss680").TrimEnd('\\') + "\\";
+            var oldLegacyPrefix = GetRelativeKeyPart(oldFolderFullPath).TrimEnd('\\') + "\\";
+            var newLegacyPrefix = GetRelativeKeyPart(newFolderFullPath).TrimEnd('\\') + "\\";
 
             lock (_lock)
             {
-                var keysToMigrate = new List<string>();
+                var migrations = new List<(string OldKey, string NewKey)>();
                 foreach (var k in _overrides.Keys)
                 {
-                    if (k.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                    if (!string.Equals(old790Prefix, new790Prefix, StringComparison.OrdinalIgnoreCase) &&
+                        k.StartsWith(old790Prefix, StringComparison.OrdinalIgnoreCase))
                     {
-                        keysToMigrate.Add(k);
+                        migrations.Add((k, new790Prefix + k.Substring(old790Prefix.Length)));
+                    }
+                    else if (!string.Equals(old680Prefix, new680Prefix, StringComparison.OrdinalIgnoreCase) &&
+                             k.StartsWith(old680Prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        migrations.Add((k, new680Prefix + k.Substring(old680Prefix.Length)));
+                    }
+                    else if (!string.Equals(oldLegacyPrefix, newLegacyPrefix, StringComparison.OrdinalIgnoreCase) &&
+                             !k.StartsWith("pss790:", StringComparison.OrdinalIgnoreCase) &&
+                             !k.StartsWith("pss680:", StringComparison.OrdinalIgnoreCase) &&
+                             k.StartsWith(oldLegacyPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        migrations.Add((k, newLegacyPrefix + k.Substring(oldLegacyPrefix.Length)));
                     }
                 }
 
-                if (keysToMigrate.Count > 0)
+                if (migrations.Count > 0)
                 {
-                    foreach (var oldKey in keysToMigrate)
+                    foreach (var (oldKey, newKey) in migrations)
                     {
-                        var suffix = oldKey.Substring(oldPrefix.Length);
-                        var newKey = newPrefix + suffix;
                         _overrides[newKey] = _overrides[oldKey];
                         _overrides.Remove(oldKey);
                     }
@@ -222,14 +294,29 @@ namespace PSS790Player.Core
             }
         }
 
-        public bool HasOverrides(string filePath)
+        public bool HasOverrides(string filePath, string? model = null)
         {
             EnsureLoaded();
-            var key = NormalizeKey(filePath);
+            var key790 = NormalizeKey(filePath, "pss790");
+            var key680 = NormalizeKey(filePath, "pss680");
+            var legacyKey = GetRelativeKeyPart(filePath);
 
             lock (_lock)
             {
-                return _overrides.TryGetValue(key, out var map) && map.Count > 0;
+                if (string.IsNullOrWhiteSpace(model))
+                {
+                    return (_overrides.TryGetValue(key790, out var m790) && m790.Count > 0) ||
+                           (_overrides.TryGetValue(key680, out var m680) && m680.Count > 0) ||
+                           (_overrides.TryGetValue(legacyKey, out var mLeg) && mLeg.Count > 0);
+                }
+
+                if (string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase))
+                {
+                    return _overrides.TryGetValue(key680, out var m680) && m680.Count > 0;
+                }
+
+                return (_overrides.TryGetValue(key790, out var m790Only) && m790Only.Count > 0) ||
+                       (_overrides.TryGetValue(legacyKey, out var mLegOnly) && mLegOnly.Count > 0);
             }
         }
     }

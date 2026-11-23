@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 
@@ -43,6 +44,25 @@ namespace PSS790Player.Core
         public static string GetModelMidiDir(string model) =>
             string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? Pss680MidiDir : Pss790MidiDir;
 
+        private static string EnsureTrailingSeparator(string path) =>
+            path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
+                ? path
+                : path + Path.DirectorySeparatorChar;
+
+        private static bool IsSameOrSubPath(string candidateFullPath, string rootFullPath)
+        {
+            if (string.Equals(candidateFullPath, rootFullPath, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return candidateFullPath.StartsWith(EnsureTrailingSeparator(rootFullPath), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsStrictSubPath(string candidateFullPath, string rootFullPath)
+        {
+            return !string.Equals(candidateFullPath, rootFullPath, StringComparison.OrdinalIgnoreCase) &&
+                   candidateFullPath.StartsWith(EnsureTrailingSeparator(rootFullPath), StringComparison.OrdinalIgnoreCase);
+        }
+
         public static void EnsureDirectoriesExist()
         {
             if (!Directory.Exists(BaseMidiDir))
@@ -72,7 +92,6 @@ namespace PSS790Player.Core
             if (!Directory.Exists(MetadataDir))
             {
                 var dirInfo = Directory.CreateDirectory(MetadataDir);
-                // Optionally mark hidden on Windows
                 try
                 {
                     dirInfo.Attributes |= FileAttributes.Hidden;
@@ -80,7 +99,7 @@ namespace PSS790Player.Core
                 catch { }
             }
 
-            // Seed factory FM voices and Vector presets if library directories are empty
+            // Seed factory FM voices and Vector presets (cached per active library root)
             SoundDesignSeeder.SeedAll();
         }
 
@@ -128,7 +147,7 @@ namespace PSS790Player.Core
             {
                 var fullNorm = Path.GetFullPath(fullPath);
                 var baseNorm = Path.GetFullPath(BaseMidiDir);
-                if (fullNorm.StartsWith(baseNorm, StringComparison.OrdinalIgnoreCase))
+                if (IsSameOrSubPath(fullNorm, baseNorm))
                 {
                     return Path.GetRelativePath(baseNorm, fullNorm);
                 }
@@ -158,20 +177,17 @@ namespace PSS790Player.Core
                     var pss790 = Path.GetFullPath(pss790Dir ?? Pss790MidiDir);
                     var pss680 = Path.GetFullPath(pss680Dir ?? Pss680MidiDir);
 
-                    if (full.StartsWith(gm, StringComparison.OrdinalIgnoreCase))
+                    if (IsSameOrSubPath(full, gm))
                     {
-                        var rel = Path.GetRelativePath(gm, full);
-                        return rel.Replace('\\', '/');
+                        return Path.GetRelativePath(gm, full).Replace('\\', '/');
                     }
-                    if (full.StartsWith(pss790, StringComparison.OrdinalIgnoreCase))
+                    if (IsSameOrSubPath(full, pss790))
                     {
-                        var rel = Path.GetRelativePath(pss790, full);
-                        return rel.Replace('\\', '/');
+                        return Path.GetRelativePath(pss790, full).Replace('\\', '/');
                     }
-                    if (full.StartsWith(pss680, StringComparison.OrdinalIgnoreCase))
+                    if (IsSameOrSubPath(full, pss680))
                     {
-                        var rel = Path.GetRelativePath(pss680, full);
-                        return rel.Replace('\\', '/');
+                        return Path.GetRelativePath(pss680, full).Replace('\\', '/');
                     }
                 }
                 else
@@ -188,7 +204,15 @@ namespace PSS790Player.Core
         {
             if (string.IsNullOrWhiteSpace(librarySubPath)) return string.Empty;
             var normalized = librarySubPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
-            return Path.Combine(libraryRoot, normalized);
+            var rootFull = Path.GetFullPath(libraryRoot);
+            var combinedFull = Path.GetFullPath(Path.Combine(rootFull, normalized));
+
+            if (!IsSameOrSubPath(combinedFull, rootFull))
+            {
+                throw new ArgumentException("Resolved library path escapes target library root.", nameof(librarySubPath));
+            }
+
+            return combinedFull;
         }
 
         public static bool IsPathInsideLibrary(string path, string? gmDir = null, string? pss790Dir = null, string? pss680Dir = null)
@@ -202,12 +226,9 @@ namespace PSS790Player.Core
                 var pss790 = Path.GetFullPath(pss790Dir ?? Pss790MidiDir);
                 var pss680 = Path.GetFullPath(pss680Dir ?? Pss680MidiDir);
 
-                // Must be inside GM Midi, PSS-790 Midi, or PSS-680 Midi, and not equal to the root folder itself
-                var insideGm = full.StartsWith(gm, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, gm, StringComparison.OrdinalIgnoreCase);
-                var inside790 = full.StartsWith(pss790, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, pss790, StringComparison.OrdinalIgnoreCase);
-                var inside680 = full.StartsWith(pss680, StringComparison.OrdinalIgnoreCase) && !string.Equals(full, pss680, StringComparison.OrdinalIgnoreCase);
-
-                return insideGm || inside790 || inside680;
+                return IsStrictSubPath(full, gm) ||
+                       IsStrictSubPath(full, pss790) ||
+                       IsStrictSubPath(full, pss680);
             }
             catch
             {
@@ -231,15 +252,14 @@ namespace PSS790Player.Core
                 var pss680Norm = Path.GetFullPath(Pss680MidiDir);
                 var pss790Norm = Path.GetFullPath(Pss790MidiDir);
 
-                // Auto-detect target model if path is clearly inside one of the PSS directories
                 string effectiveModel = targetModel;
                 if (customPssDir == null)
                 {
-                    if (fullNorm.StartsWith(pss680Norm, StringComparison.OrdinalIgnoreCase))
+                    if (IsSameOrSubPath(fullNorm, pss680Norm))
                     {
                         effectiveModel = "pss680";
                     }
-                    else if (fullNorm.StartsWith(pss790Norm, StringComparison.OrdinalIgnoreCase))
+                    else if (IsSameOrSubPath(fullNorm, pss790Norm))
                     {
                         effectiveModel = "pss790";
                     }
@@ -249,33 +269,29 @@ namespace PSS790Player.Core
                 var is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
                 var suffix = is680 ? "_PSS680" : "_PSS790";
 
-                if (fullNorm.StartsWith(gmNorm, StringComparison.OrdinalIgnoreCase))
+                if (IsSameOrSubPath(fullNorm, gmNorm))
                 {
                     var rel = Path.GetRelativePath(gmNorm, fullNorm);
                     var subDir = Path.GetDirectoryName(rel) ?? "";
                     var fileNameNoExt = Path.GetFileNameWithoutExtension(rel);
                     var ext = Path.GetExtension(rel);
 
-                    // Candidate 1: Exact relative path in target PSS folder
                     var cand1 = Path.Combine(targetPssNorm, rel);
                     if (File.Exists(cand1)) return cand1;
 
-                    // Candidate 2: Appended _PSS... in corresponding subfolder
                     var cand2 = Path.Combine(targetPssNorm, subDir, $"{fileNameNoExt}{suffix}{ext}");
                     if (File.Exists(cand2)) return cand2;
                 }
-                else if (fullNorm.StartsWith(targetPssNorm, StringComparison.OrdinalIgnoreCase))
+                else if (IsSameOrSubPath(fullNorm, targetPssNorm))
                 {
                     var rel = Path.GetRelativePath(targetPssNorm, fullNorm);
                     var subDir = Path.GetDirectoryName(rel) ?? "";
                     var fileNameNoExt = Path.GetFileNameWithoutExtension(rel);
                     var ext = Path.GetExtension(rel);
 
-                    // Candidate 1: Exact relative path in GM Midi
                     var cand1 = Path.Combine(gmNorm, rel);
                     if (File.Exists(cand1)) return cand1;
 
-                    // Candidate 2: Strip _PSS... suffix in corresponding GM subfolder
                     if (fileNameNoExt.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                     {
                         var origName = fileNameNoExt.Substring(0, fileNameNoExt.Length - suffix.Length);
@@ -299,7 +315,7 @@ namespace PSS790Player.Core
                 var fullNorm = Path.GetFullPath(filePath);
                 var gmNorm = Path.GetFullPath(customGmDir ?? GmMidiDir);
 
-                if (fullNorm.StartsWith(gmNorm, StringComparison.OrdinalIgnoreCase))
+                if (IsSameOrSubPath(fullNorm, gmNorm))
                 {
                     var link790 = FindMatchingLinkedFile(fullNorm, "pss790", customGmDir);
                     if (!string.IsNullOrEmpty(link790) && File.Exists(link790))
@@ -315,13 +331,11 @@ namespace PSS790Player.Core
                 }
                 else
                 {
-                    // File is in PSS-790 or PSS-680
                     var linkGm = FindMatchingLinkedFile(fullNorm, customGmDir: customGmDir);
                     if (!string.IsNullOrEmpty(linkGm) && File.Exists(linkGm))
                     {
                         results.Add(linkGm);
-                        // Also find counterpart in the other PSS folder
-                        var isSource680 = fullNorm.StartsWith(Path.GetFullPath(Pss680MidiDir), StringComparison.OrdinalIgnoreCase);
+                        var isSource680 = IsSameOrSubPath(fullNorm, Path.GetFullPath(Pss680MidiDir));
                         var otherModel = isSource680 ? "pss790" : "pss680";
                         var otherLink = FindMatchingLinkedFile(linkGm, otherModel, customGmDir);
                         if (!string.IsNullOrEmpty(otherLink) && File.Exists(otherLink) && !results.Contains(otherLink, StringComparer.OrdinalIgnoreCase))

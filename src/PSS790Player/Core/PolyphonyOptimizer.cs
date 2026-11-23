@@ -13,6 +13,30 @@ namespace PSS790Player.Core
         private readonly int _threshold;
         private readonly string _model;
 
+        private sealed class NoteContext
+        {
+            public long Time { get; }
+            public long OriginalLength { get; }
+            public long EffectiveLength { get; set; }
+            public long EffectiveEndTime => Time + EffectiveLength;
+            public long SoundEndTime { get; set; }
+            public int Channel { get; }
+            public byte NoteNumber { get; }
+            public byte Velocity { get; }
+            public int Priority { get; set; } = 1;
+
+            public NoteContext(Note note)
+            {
+                Time = note.Time;
+                OriginalLength = note.Length;
+                EffectiveLength = Math.Max(1, note.Length);
+                SoundEndTime = Time + EffectiveLength;
+                Channel = (int)note.Channel;
+                NoteNumber = (byte)note.NoteNumber;
+                Velocity = (byte)note.Velocity;
+            }
+        }
+
         public PolyphonyOptimizer(bool enabled = true, int threshold = Constants.PolyphonyGuardThreshold, string model = "pss790")
         {
             _enabled = enabled;
@@ -20,186 +44,372 @@ namespace PSS790Player.Core
             _model = model;
         }
 
-        public MidiFile Optimize(MidiFile midiFile)
+        public MidiFile Optimize(MidiFile midiFile, IReadOnlyDictionary<int, byte>? channelGmPrograms = null)
         {
             if (!_enabled)
                 return midiFile;
 
             var resultFile = midiFile.Clone();
-            var tempoMap = resultFile.GetTempoMap();
+            var tracks = resultFile.GetTrackChunks().ToList();
+            if (tracks.Count == 0) return resultFile;
+
+            // Step 0: Global cross-track deduplication of simultaneous same-channel / same-pitch notes.
+            // Keeps the single highest-velocity (then longest-duration) note across ALL tracks to prevent
+            // hardware voice desync and cross-track key collisions in Type-1 MIDI files.
+            var indexedNotes = new List<(int TrackIndex, int Channel, byte NoteNumber, long Time, byte Velocity, long Length)>();
+            for (int t = 0; t < tracks.Count; t++)
+            {
+                foreach (var note in tracks[t].GetNotes())
+                {
+                    indexedNotes.Add((t, (int)note.Channel, (byte)note.NoteNumber, note.Time, (byte)note.Velocity, note.Length));
+                }
+            }
+
+            if (indexedNotes.Count == 0) return resultFile;
+
+            var duplicatesByTrack = new Dictionary<int, Dictionary<(int Channel, byte NoteNumber, long Time, byte Velocity, long Length), int>>();
+            foreach (var group in indexedNotes.GroupBy(n => (n.Channel, n.NoteNumber, n.Time)))
+            {
+                if (group.Count() <= 1) continue;
+
+                var ranked = group
+                    .OrderByDescending(n => n.Velocity)
+                    .ThenByDescending(n => n.Length)
+                    .ThenBy(n => n.TrackIndex)
+                    .ToList();
+
+                for (int i = 1; i < ranked.Count; i++)
+                {
+                    var loser = ranked[i];
+                    if (!duplicatesByTrack.TryGetValue(loser.TrackIndex, out var trackDict))
+                    {
+                        trackDict = new Dictionary<(int, byte, long, byte, long), int>();
+                        duplicatesByTrack[loser.TrackIndex] = trackDict;
+                    }
+
+                    var exactKey = (loser.Channel, loser.NoteNumber, loser.Time, loser.Velocity, loser.Length);
+                    trackDict[exactKey] = trackDict.TryGetValue(exactKey, out int count) ? count + 1 : 1;
+                }
+            }
+
+            foreach (var (trackIndex, removals) in duplicatesByTrack)
+            {
+                using var notesMgr = tracks[trackIndex].ManageNotes();
+                var toRemove = new HashSet<Note>();
+                foreach (var note in notesMgr.Objects)
+                {
+                    var exactKey = ((int)note.Channel, (byte)note.NoteNumber, note.Time, (byte)note.Velocity, note.Length);
+                    if (removals.TryGetValue(exactKey, out int remaining) && remaining > 0)
+                    {
+                        toRemove.Add(note);
+                        if (remaining == 1) removals.Remove(exactKey);
+                        else removals[exactKey] = remaining - 1;
+                    }
+                }
+
+                if (toRemove.Count > 0)
+                {
+                    notesMgr.Objects.RemoveAll(n => toRemove.Contains(n));
+                }
+            }
 
             var allNotes = resultFile.GetNotes().ToList();
             if (allNotes.Count == 0) return resultFile;
 
-            // Pre-scan channel programs to protect vocal and solo lead instruments
-            var channelPrograms = new Dictionary<int, byte>();
-            foreach (var track in resultFile.GetTrackChunks())
+            var tempoMap = resultFile.GetTempoMap();
+            bool is680 = string.Equals(_model, "pss680", StringComparison.OrdinalIgnoreCase);
+
+            // Resolve GM programs per channel for musical priority shielding.
+            // Prefer caller-supplied GM programs (from Remapper, before patches were remapped to native PSS numbers).
+            var resolvedGmPrograms = new Dictionary<int, byte>();
+            if (channelGmPrograms != null)
             {
-                foreach (var evt in track.Events)
+                foreach (var (ch, gmProg) in channelGmPrograms)
                 {
-                    if (evt is ProgramChangeEvent pc && !channelPrograms.ContainsKey(pc.Channel))
+                    resolvedGmPrograms[ch] = gmProg;
+                }
+            }
+            else
+            {
+                foreach (var track in tracks)
+                {
+                    foreach (var evt in track.Events)
                     {
-                        channelPrograms[pc.Channel] = (byte)pc.ProgramNumber;
+                        if (evt is ProgramChangeEvent pc && !resolvedGmPrograms.ContainsKey(pc.Channel))
+                        {
+                            byte rawProg = (byte)pc.ProgramNumber;
+                            if (is680 && Pss680Constants.Pss680ToGmVoiceMap.TryGetValue(rawProg, out byte mappedGm))
+                            {
+                                resolvedGmPrograms[pc.Channel] = mappedGm;
+                            }
+                            else
+                            {
+                                resolvedGmPrograms[pc.Channel] = rawProg;
+                            }
+                        }
                     }
                 }
             }
 
-            // 1. Clamp Percussion Note Durations & Choke Open Hi-Hats on Channel 15
-            var drumNotes = allNotes.Where(n => n.Channel == (FourBitNumber)15).OrderBy(n => n.Time).ToList();
-            var clampedLengths = new Dictionary<(FourBitNumber Channel, SevenBitNumber NoteNumber, long Time), long>();
-            Note? activeOpenHiHat = null;
-
-            foreach (var note in drumNotes)
+            // Create tracking contexts for all unique surviving notes
+            var allContexts = allNotes.Select(n => new NoteContext(n)).ToList();
+            foreach (var ctx in allContexts)
             {
-                var durationMs = note.LengthAs<MetricTimeSpan>(tempoMap).TotalMilliseconds;
-                var noteNumber = (byte)note.NoteNumber;
-                var noteKey = (note.Channel, note.NoteNumber, note.Time);
+                byte prog = resolvedGmPrograms.TryGetValue(ctx.Channel, out var p) ? p : (byte)0;
+                ctx.Priority = GetInstrumentPriority(ctx.Channel, prog);
+            }
+
+            // Step 1: Clamp Percussion Note Durations & Choke Open Hi-Hats on Channel 15
+            // Uses model-specific drum definitions and tempo-accurate LengthConverter.ConvertFrom(..., ctx.Time, tempoMap).
+            var drumContexts = allContexts.Where(c => c.Channel == 15).OrderBy(c => c.Time).ToList();
+            NoteContext? activeOpenHiHat = null;
+
+            foreach (var ctx in drumContexts)
+            {
+                byte noteNumber = ctx.NoteNumber;
+
+                bool isClosedHiHat;
+                bool isOpenHiHat;
+                bool isCymbal;
+
+                if (is680)
+                {
+                    // PSS-680: 57 = Hi-Hat Closed, 59 = Hi-Hat Open; Cymbals: 59, 60, 61, 62, 63
+                    isClosedHiHat = (noteNumber == 57);
+                    isOpenHiHat = (noteNumber == 59);
+                    isCymbal = (noteNumber is 59 or 60 or 61 or 62 or 63);
+                }
+                else
+                {
+                    // PSS-790: 57 = Hi-Hat Closed, 80 = Hi-Hat Foot, 59 = Hi-Hat Open; Cymbals: 59..63
+                    isClosedHiHat = (noteNumber is 57 or 80);
+                    isOpenHiHat = (noteNumber == 59);
+                    isCymbal = (noteNumber is 59 or 60 or 61 or 62 or 63);
+                }
 
                 // Open Hi-Hat Choking
-                if (noteNumber is 57 or 80) // 57 = Hi-Hat Closed, 80 = Hi-Hat Foot
+                if (isClosedHiHat)
                 {
-                    if (activeOpenHiHat != null && activeOpenHiHat.EndTime > note.Time)
+                    if (activeOpenHiHat != null && activeOpenHiHat.EffectiveEndTime > ctx.Time)
                     {
-                        var chokedLength = Math.Max(1, note.Time - activeOpenHiHat.Time);
-                        var openKey = (activeOpenHiHat.Channel, activeOpenHiHat.NoteNumber, activeOpenHiHat.Time);
-                        clampedLengths[openKey] = chokedLength;
+                        long chokedLength = Math.Max(1, ctx.Time - activeOpenHiHat.Time);
+                        activeOpenHiHat.EffectiveLength = Math.Min(activeOpenHiHat.EffectiveLength, chokedLength);
                         activeOpenHiHat = null;
                     }
                 }
-                else if (noteNumber == 59) // 59 = Hi-Hat Open
+                else if (isOpenHiHat)
                 {
-                    activeOpenHiHat = note;
+                    activeOpenHiHat = ctx;
                 }
 
-                // Decay clamping
-                var isCymbal = noteNumber is 60 or 61 or 62 or 63 or 59;
-                var maxAllowedMs = isCymbal ? 750 : 250;
-
-                if (durationMs > maxAllowedMs)
+                // Decay clamping relative to ctx.Time across mid-song tempo changes
+                int maxAllowedMs = isCymbal ? 750 : 250;
+                var maxTimeSpan = new MetricTimeSpan(0, 0, 0, maxAllowedMs);
+                long maxTicks = LengthConverter.ConvertFrom(maxTimeSpan, ctx.Time, tempoMap);
+                if (maxTicks > 0)
                 {
-                    var newTimeSpan = new MetricTimeSpan(0, 0, 0, (int)maxAllowedMs);
-                    var newLengthTicks = TimeConverter.ConvertFrom(newTimeSpan, tempoMap);
-                    if (!clampedLengths.ContainsKey(noteKey) || newLengthTicks < clampedLengths[noteKey])
-                    {
-                        clampedLengths[noteKey] = newLengthTicks;
-                    }
+                    ctx.EffectiveLength = Math.Min(ctx.EffectiveLength, maxTicks);
                 }
             }
 
-            // 2. Resolve Overlapping Same-Pitch Notes on Same Channel
-            // If a note starts while an earlier note of the exact same pitch on the same channel is still sounding,
-            // clamp the earlier note's duration so it ends when the new note starts, preventing hardware voice desync.
-            var notesByChannelPitch = allNotes.GroupBy(n => (n.Channel, n.NoteNumber));
-            foreach (var group in notesByChannelPitch)
+            // Step 2: Resolve Overlapping Same-Pitch Notes on Same Channel
+            var contextsByChannelPitch = allContexts.GroupBy(c => (c.Channel, c.NoteNumber));
+            foreach (var group in contextsByChannelPitch)
             {
-                var ordered = group.OrderBy(n => n.Time).ToList();
+                var ordered = group.OrderBy(c => c.Time).ToList();
                 for (int i = 0; i < ordered.Count - 1; i++)
                 {
                     var current = ordered[i];
                     var next = ordered[i + 1];
-                    if (current.EndTime > next.Time)
+                    if (current.EffectiveEndTime > next.Time)
                     {
-                        var clampedLen = Math.Max(1, next.Time - current.Time);
-                        var key = (current.Channel, current.NoteNumber, current.Time);
-                        if (!clampedLengths.ContainsKey(key) || clampedLen < clampedLengths[key])
-                        {
-                            clampedLengths[key] = clampedLen;
-                        }
+                        long clampedLen = Math.Max(1, next.Time - current.Time);
+                        current.EffectiveLength = Math.Min(current.EffectiveLength, clampedLen);
                     }
                 }
             }
 
-            // 3. Dynamic Polyphony Protection: Cull Incidental Percussion & Trim Melodic Accompaniment Peaks
-            var notesToCull = new HashSet<(FourBitNumber, SevenBitNumber, long)>();
-            var sortedNotes = allNotes.OrderBy(n => n.Time).ToList();
-            var activeNotes = new List<Note>();
-
-            foreach (var currentNote in sortedNotes)
+            // Step 2b: Model 200ms virtual release-tail window on PSS-680 YM3420 FM melodic voices
+            foreach (var ctx in allContexts)
             {
-                var currentTime = currentNote.Time;
-                activeNotes.RemoveAll(n => n.EndTime <= currentTime);
-                activeNotes.Add(currentNote);
-
-                while (activeNotes.Count >= _threshold)
+                if (is680 && ctx.Channel != 15)
                 {
-                    // Cull incidental low-priority percussion on Channel 15 first (triangles, cowbells, maracas, etc.)
-                    bool is680 = string.Equals(_model, "pss680", StringComparison.OrdinalIgnoreCase);
-                    var incidentalSet = is680 ? Pss680Constants.IncidentalDrums : Constants.IncidentalDrums;
+                    var tailSpan = new MetricTimeSpan(0, 0, 0, 200);
+                    long tailTicks = LengthConverter.ConvertFrom(tailSpan, ctx.EffectiveEndTime, tempoMap);
+                    ctx.SoundEndTime = ctx.EffectiveEndTime + Math.Max(0, tailTicks);
+                }
+                else
+                {
+                    ctx.SoundEndTime = ctx.EffectiveEndTime;
+                }
+            }
 
-                    var incidentalDrum = activeNotes
-                        .Where(n => n.Channel == (FourBitNumber)15 && incidentalSet.Contains((byte)n.NoteNumber))
-                        .OrderBy(n => n.Velocity)
-                        .FirstOrDefault();
+            // Step 3: Dynamic Polyphony Protection & Intelligent Voice Culling
+            var contextsToCull = new HashSet<NoteContext>();
+            var sortedContexts = allContexts.OrderBy(c => c.Time).ToList();
+            var activeContexts = new List<NoteContext>();
+            int effectiveLimit = Math.Max(1, _threshold);
 
-                    if (incidentalDrum != null)
+            foreach (var currentCtx in sortedContexts)
+            {
+                long currentTime = currentCtx.Time;
+                activeContexts.RemoveAll(c => c.SoundEndTime <= currentTime);
+                activeContexts.Add(currentCtx);
+
+                if (is680)
+                {
+                    // PSS-680 Architecture: Strictly separate 4-voice PCM Percussion (Ch 15) from 12-voice YM3420 FM (Ch 0-14).
+                    if (currentCtx.Channel == 15)
                     {
-                        var key = (incidentalDrum.Channel, incidentalDrum.NoteNumber, incidentalDrum.Time);
-                        if (!notesToCull.Contains(key))
+                        var activeDrums = activeContexts.Where(c => c.Channel == 15).ToList();
+                        while (activeDrums.Count > 4)
                         {
-                            notesToCull.Add(key);
-                            activeNotes.Remove(incidentalDrum);
-                            continue;
+                            var drumToDrop = activeDrums
+                                .Where(c => Pss680Constants.IncidentalDrums.Contains(c.NoteNumber))
+                                .OrderBy(c => c.Velocity)
+                                .ThenBy(c => c.Time)
+                                .FirstOrDefault()
+                                ?? activeDrums
+                                    .OrderBy(c => c.Velocity)
+                                    .ThenBy(c => c.Time)
+                                    .First();
+
+                            contextsToCull.Add(drumToDrop);
+                            activeDrums.Remove(drumToDrop);
+                            activeContexts.Remove(drumToDrop);
                         }
                     }
 
-                    // Phase 2: For PSS-680 (12 physical FM voices), if concurrent active notes strictly exceed the hardware limit (> _threshold),
-                    // intelligently cull low-priority accompaniment notes while strictly shielding Lead Melody, Bassline, and Core Drums.
-                    if (is680 && activeNotes.Count > _threshold)
+                    // If overall concurrent notes exceed threshold (12), cull incidental Latin hand percussion on Ch 15 first
+                    while (activeContexts.Count > effectiveLimit)
                     {
-                        var leadNote = activeNotes.OrderByDescending(n => n.NoteNumber).FirstOrDefault();
-                        var bassNote = activeNotes.OrderBy(n => n.NoteNumber).FirstOrDefault();
-
-                        // Candidate accompaniment notes: not lead melody, not bass fundamental, and not drums on Ch 15
-                        var candidate = activeNotes
-                            .Where(n => n != leadNote && n != bassNote && n.Channel != (FourBitNumber)15)
-                            .OrderBy(n => n.Velocity)
+                        var incidentalDrum = activeContexts
+                            .Where(c => c.Channel == 15 && Pss680Constants.IncidentalDrums.Contains(c.NoteNumber))
+                            .OrderBy(c => c.Velocity)
+                            .ThenBy(c => c.Time)
                             .FirstOrDefault();
 
-                        if (candidate != null)
+                        if (incidentalDrum != null)
                         {
-                            var key = (candidate.Channel, candidate.NoteNumber, candidate.Time);
-                            if (!notesToCull.Contains(key))
-                            {
-                                notesToCull.Add(key);
-                                activeNotes.Remove(candidate);
-                                continue;
-                            }
+                            contextsToCull.Add(incidentalDrum);
+                            activeContexts.Remove(incidentalDrum);
+                            continue;
                         }
+
+                        break;
                     }
 
-                    // On PSS-790, or when all remaining notes on PSS-680 are essential, preserve without dropping
-                    break;
+                    var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
+                    while (activeMelodic.Count > effectiveLimit)
+                    {
+                        // Shield highest melodic lead and lowest melodic bass (Ch 15 drums excluded)
+                        var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
+                        var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
+
+                        var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
+                        if (candidates.Count == 0)
+                        {
+                            break;
+                        }
+
+                        // Steal lowest priority tier (pads/strings), then quietest, then oldest decaying note
+                        var candidateToDrop = candidates
+                            .OrderBy(c => c.Priority)
+                            .ThenBy(c => c.Velocity)
+                            .ThenBy(c => c.Time)
+                            .First();
+
+                        contextsToCull.Add(candidateToDrop);
+                        activeMelodic.Remove(candidateToDrop);
+                        activeContexts.Remove(candidateToDrop);
+                    }
+                }
+                else
+                {
+                    // PSS-790 Architecture: 28-voice shared AWM PCM polyphony
+                    while (activeContexts.Count > effectiveLimit)
+                    {
+                        var incidentalDrum = activeContexts
+                            .Where(c => c.Channel == 15 && Constants.IncidentalDrums.Contains(c.NoteNumber))
+                            .OrderBy(c => c.Velocity)
+                            .ThenBy(c => c.Time)
+                            .FirstOrDefault();
+
+                        if (incidentalDrum != null)
+                        {
+                            contextsToCull.Add(incidentalDrum);
+                            activeContexts.Remove(incidentalDrum);
+                            continue;
+                        }
+
+                        // Preserve melodic notes and core drums on PSS-790
+                        break;
+                    }
                 }
             }
 
-            bool hasClamped = clampedLengths.Count > 0;
-            bool hasZeroDuration = allNotes.Any(n => n.Length == 0);
-            if (hasClamped || hasZeroDuration)
+            // Step 4: Apply Clamped Lengths to Surviving Notes (collision-safe map)
+            var clampedLengthMap = new Dictionary<(int Channel, byte NoteNumber, long Time), long>();
+            foreach (var ctx in allContexts)
             {
-                foreach (var trackChunk in resultFile.GetTrackChunks())
+                if (contextsToCull.Contains(ctx)) continue;
+                if (ctx.EffectiveLength == ctx.OriginalLength) continue;
+
+                var key = (ctx.Channel, ctx.NoteNumber, ctx.Time);
+                if (!clampedLengthMap.TryGetValue(key, out long existing) || ctx.EffectiveLength < existing)
+                {
+                    clampedLengthMap[key] = ctx.EffectiveLength;
+                }
+            }
+
+            if (clampedLengthMap.Count > 0)
+            {
+                foreach (var trackChunk in tracks)
                 {
                     using var notesManager = trackChunk.ManageNotes();
                     foreach (var note in notesManager.Objects)
                     {
-                        var key = (note.Channel, note.NoteNumber, note.Time);
-                        if (clampedLengths.TryGetValue(key, out var targetLen))
+                        var key = ((int)note.Channel, (byte)note.NoteNumber, note.Time);
+                        if (clampedLengthMap.TryGetValue(key, out long targetLen))
                         {
-                            note.Length = Math.Max(1, Math.Min(note.Length, targetLen));
-                        }
-                        else if (note.Length == 0)
-                        {
-                            note.Length = 1;
+                            note.Length = Math.Max(1, Math.Min(note.Length == 0 ? targetLen : note.Length, targetLen));
                         }
                     }
                 }
             }
 
-            if (notesToCull.Count > 0)
+            // Step 5: Remove Culled Notes
+            if (contextsToCull.Count > 0)
             {
-                resultFile.RemoveNotes(n => notesToCull.Contains((n.Channel, n.NoteNumber, n.Time)));
+                var culledKeySet = new HashSet<(int Channel, byte NoteNumber, long Time)>(
+                    contextsToCull.Select(c => (c.Channel, c.NoteNumber, c.Time)));
+
+                resultFile.RemoveNotes(n => culledKeySet.Contains(((int)n.Channel, (byte)n.NoteNumber, n.Time)));
             }
 
             return resultFile;
+        }
+
+        private static int GetInstrumentPriority(int channel, byte gmProgram)
+        {
+            if (channel == 15) return 0; // Percussion budgeted separately
+
+            // Tier 3 (Highest): Solo Leads, Vocals/Choirs, Reeds/Winds, Dedicated Basses
+            if ((gmProgram >= 32 && gmProgram <= 39) || gmProgram == 43 || gmProgram == 58 ||
+                (gmProgram >= 52 && gmProgram <= 54) ||
+                (gmProgram >= 64 && gmProgram <= 87))
+            {
+                return 3;
+            }
+
+            // Tier 2 (Medium): Pianos, Chromatic Percussion, Organs, Guitars
+            if (gmProgram <= 31)
+            {
+                return 2;
+            }
+
+            // Tier 1 (Lowest / First to steal): Strings, Ensembles, Brass Sections, Synth Pads, FX
+            return 1;
         }
     }
 }

@@ -29,6 +29,7 @@ namespace PSS790Player.Core
         {
             1,  // Modulation / Vibrato
             7,  // Volume
+            10, // Pan
             91  // Reverb Level (0x5B)
         };
 

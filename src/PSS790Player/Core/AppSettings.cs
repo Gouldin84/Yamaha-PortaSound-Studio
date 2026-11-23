@@ -13,7 +13,7 @@ namespace PSS790Player.Core
     {
         private static readonly object _lock = new();
         private static AppSettingsData _current = new();
-        private static bool _loaded = false;
+        private static volatile bool _loaded;
 
         public static string SettingsDir => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -82,7 +82,9 @@ namespace PSS790Player.Core
                 }
 
                 var json = JsonSerializer.Serialize(_current, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(SettingsFilePath, json);
+                var tempPath = $"{SettingsFilePath}.{Guid.NewGuid():N}.tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, SettingsFilePath, overwrite: true);
             }
             catch { }
         }

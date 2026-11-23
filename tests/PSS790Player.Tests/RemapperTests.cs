@@ -125,8 +125,8 @@ namespace PSS790Player.Tests
             var events = remapped.GetTimedEvents().Select(te => te.Event).ToList();
             Assert.Contains(events, e => e is TextEvent t && t.Text.Contains("PSS790_REMAPPED"));
             var channelEvents = events.OfType<ChannelEvent>().ToList();
-            Assert.Equal(2, channelEvents.Count);
-            Assert.All(channelEvents.OfType<ControlChangeEvent>(), cc => Assert.True((byte)cc.ControlNumber is 1 or 7));
+            Assert.Equal(3, channelEvents.Count);
+            Assert.All(channelEvents.OfType<ControlChangeEvent>(), cc => Assert.True((byte)cc.ControlNumber is 1 or 7 or 10));
             Assert.Empty(channelEvents.OfType<ChannelAftertouchEvent>());
         }
 

@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
@@ -23,14 +22,16 @@ namespace PSS790Player.Core
         {
             var gmMidi = pss790Midi.Clone();
 
-            // 1. Remove PSS-790 native marker events so standard engines recognize it as GM
+            // 1. Remove PSS-790 markers and any stray ProgramChange on Ch 15 via ManageTimedEvents so timestamps never shift
             foreach (var track in gmMidi.GetTrackChunks())
             {
-                track.Events.RemoveAll(e =>
-                    (e is TextEvent te && (te.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                           te.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
-                    (e is MarkerEvent me && (me.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                             me.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))));
+                using var mgr = track.ManageTimedEvents();
+                mgr.Objects.RemoveAll(te =>
+                    (te.Event is TextEvent t && (t.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is MarkerEvent m && (m.Text.Contains("PSS790_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                   m.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is ProgramChangeEvent pc && pc.Channel == 15));
             }
 
             // 2. Analyze which channels are active
@@ -69,7 +70,7 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 4. Move Channel 15 (PSS-790 drums) to Channel 9 (GM drums) and translate drum notes
+            // 4. Move Channel 15 (PSS-790 drums) to Channel 9 (GM drums) and translate voices/notes/pitch bends
             foreach (var track in gmMidi.GetTrackChunks())
             {
                 foreach (var evt in track.Events)
@@ -78,10 +79,8 @@ namespace PSS790Player.Core
                     {
                         if (ce.Channel == 15)
                         {
-                            // Move to GM Drum Channel 10 (0-indexed 9)
                             ce.Channel = (FourBitNumber)9;
 
-                            // Translate Chart 1 Drum Note -> Standard General MIDI Drum Note
                             if (evt is NoteOnEvent noteOn)
                             {
                                 if (Constants.Pss790ToGmDrumMap.TryGetValue((byte)noteOn.NoteNumber, out var gmDrum))
@@ -99,7 +98,6 @@ namespace PSS790Player.Core
                         }
                         else
                         {
-                            // Melodic Channels: Translate Chart 2 Program Changes to GM Instruments (0-127)
                             if (evt is ProgramChangeEvent pc)
                             {
                                 if (Constants.Pss790MidiProgramToGmMap.TryGetValue((byte)pc.ProgramNumber, out var gmProg))
@@ -109,6 +107,7 @@ namespace PSS790Player.Core
                             }
                             else if (evt is PitchBendEvent pb)
                             {
+                                // PSS-790 is +/- 12 semitones vs GM +/- 2 semitones (6x expansion back to GM)
                                 int centered = pb.PitchValue - 8192;
                                 int scaled = (int)Math.Round(centered * 6.0);
                                 int finalValue = Math.Clamp(8192 + scaled, 0, 16383);
@@ -126,14 +125,16 @@ namespace PSS790Player.Core
         {
             var gmMidi = pss680Midi.Clone();
 
-            // 1. Remove PSS-680 native marker events so standard engines recognize it as GM
+            // 1. Remove PSS-680 markers and any stray ProgramChange on Ch 15 via ManageTimedEvents so timestamps never shift
             foreach (var track in gmMidi.GetTrackChunks())
             {
-                track.Events.RemoveAll(e =>
-                    (e is TextEvent te && (te.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                           te.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
-                    (e is MarkerEvent me && (me.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
-                                             me.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))));
+                using var mgr = track.ManageTimedEvents();
+                mgr.Objects.RemoveAll(te =>
+                    (te.Event is TextEvent t && (t.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is MarkerEvent m && (m.Text.Contains("PSS680_REMAPPED", StringComparison.OrdinalIgnoreCase) ||
+                                                   m.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is ProgramChangeEvent pc && pc.Channel == 15));
             }
 
             // 2. Analyze which channels are active
@@ -172,7 +173,7 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 4. Move Channel 15 (PSS-680 drums) to Channel 9 (GM drums) and translate drum notes
+            // 4. Move Channel 15 (PSS-680 drums) to Channel 9 (GM drums) and translate voices/notes
             foreach (var track in gmMidi.GetTrackChunks())
             {
                 foreach (var evt in track.Events)
@@ -181,10 +182,8 @@ namespace PSS790Player.Core
                     {
                         if (ce.Channel == 15)
                         {
-                            // Move to GM Drum Channel 10 (0-indexed 9)
                             ce.Channel = (FourBitNumber)9;
 
-                            // Translate PSS-680 32-Drum Note -> Standard General MIDI Drum Note
                             if (evt is NoteOnEvent noteOn)
                             {
                                 if (Pss680Constants.Pss680ToGmDrumMap.TryGetValue((byte)noteOn.NoteNumber, out var gmDrum))
@@ -200,24 +199,20 @@ namespace PSS790Player.Core
                                 }
                             }
                         }
-                        else
+                        else if (evt is ProgramChangeEvent pc)
                         {
-                            // Melodic Channels: Translate PSS-680 FM Program Changes (0-99) to GM Instruments (0-127)
-                            if (evt is ProgramChangeEvent pc)
+                            int prog = pc.ProgramNumber;
+                            if (prog is >= 100 and <= 104)
                             {
-                                if (Pss680Constants.Pss680ToGmVoiceMap.TryGetValue((int)pc.ProgramNumber, out var gmProg))
-                                {
-                                    pc.ProgramNumber = (SevenBitNumber)gmProg;
-                                }
+                                // Digital Synthesizer User Banks 1-5 -> GM Lead 1 (Square)
+                                pc.ProgramNumber = (SevenBitNumber)80;
                             }
-                            else if (evt is PitchBendEvent pb)
+                            else if (Pss680Constants.Pss680ToGmVoiceMap.TryGetValue(prog, out var gmProg))
                             {
-                                int centered = pb.PitchValue - 8192;
-                                int scaled = (int)Math.Round(centered * 6.0);
-                                int finalValue = Math.Clamp(8192 + scaled, 0, 16383);
-                                pb.PitchValue = (ushort)finalValue;
+                                pc.ProgramNumber = (SevenBitNumber)gmProg;
                             }
                         }
+                        // Note: PSS-680 pitch bend range is +/- 2 semitones (matching standard GM 1:1), so PitchBendEvent values are preserved directly.
                     }
                 }
             }

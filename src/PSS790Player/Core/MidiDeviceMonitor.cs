@@ -36,7 +36,7 @@ namespace PSS790Player.Core
         private List<string> _lastOutputs = new();
         private List<string> _lastInputs = new();
         private CancellationTokenSource? _debounceCts;
-        private bool _isDisposed;
+        private volatile bool _isDisposed;
 
         public event EventHandler<MidiDevicesChangedEventArgs>? DevicesChanged;
 
@@ -58,7 +58,6 @@ namespace PSS790Player.Core
             _getOutputDevices = getOutputDevices ?? MidiPlayer.GetOutputDeviceNames;
             _getInputDevices = getInputDevices ?? MidiRecorder.GetInputDeviceNames;
 
-            // Initial snapshot
             try
             {
                 _lastOutputs = _getOutputDevices() ?? new List<string>();
@@ -75,7 +74,17 @@ namespace PSS790Player.Core
                 AutoReset = true,
                 Enabled = true
             };
-            _pollingTimer.Elapsed += (s, e) => CheckForChanges();
+            _pollingTimer.Elapsed += (s, e) =>
+            {
+                try
+                {
+                    if (!_isDisposed)
+                    {
+                        CheckForChanges();
+                    }
+                }
+                catch { }
+            };
         }
 
         /// <summary>
@@ -85,14 +94,17 @@ namespace PSS790Player.Core
         {
             if (_isDisposed) return;
 
+            CancellationToken token;
             lock (_lock)
             {
-                _debounceCts?.Cancel();
-                _debounceCts?.Dispose();
-                _debounceCts = new CancellationTokenSource();
-            }
+                if (_isDisposed) return;
 
-            var token = _debounceCts.Token;
+                try { _debounceCts?.Cancel(); } catch { }
+                try { _debounceCts?.Dispose(); } catch { }
+
+                _debounceCts = new CancellationTokenSource();
+                token = _debounceCts.Token;
+            }
 
             if (delayMs <= 0)
             {
@@ -102,10 +114,14 @@ namespace PSS790Player.Core
 
             Task.Delay(delayMs, token).ContinueWith(t =>
             {
-                if (!t.IsCanceled && !_isDisposed)
+                try
                 {
-                    CheckForChanges();
+                    if (!t.IsCanceled && !_isDisposed)
+                    {
+                        CheckForChanges();
+                    }
                 }
+                catch { }
             }, TaskScheduler.Default);
         }
 
@@ -116,8 +132,12 @@ namespace PSS790Player.Core
         {
             if (_isDisposed) return null;
 
+            MidiDevicesChangedEventArgs? argsToRaise = null;
+
             lock (_lock)
             {
+                if (_isDisposed) return null;
+
                 List<string> currentOuts;
                 List<string> currentIns;
 
@@ -152,7 +172,7 @@ namespace PSS790Player.Core
 
                 if (hasChanges)
                 {
-                    var args = new MidiDevicesChangedEventArgs
+                    argsToRaise = new MidiDevicesChangedEventArgs
                     {
                         OutputDevices = currentOuts,
                         InputDevices = currentIns,
@@ -161,21 +181,23 @@ namespace PSS790Player.Core
                         AddedInputs = addedInputs,
                         RemovedInputs = removedInputs
                     };
-
-                    Task.Run(() =>
-                    {
-                        try
-                        {
-                            DevicesChanged?.Invoke(this, args);
-                        }
-                        catch { }
-                    });
-
-                    return args;
                 }
-
-                return null;
             }
+
+            if (argsToRaise != null && !_isDisposed)
+            {
+                Task.Run(() =>
+                {
+                    if (_isDisposed) return;
+                    try
+                    {
+                        DevicesChanged?.Invoke(this, argsToRaise);
+                    }
+                    catch { }
+                });
+            }
+
+            return argsToRaise;
         }
 
         public void Dispose()
@@ -185,11 +207,15 @@ namespace PSS790Player.Core
                 if (_isDisposed) return;
                 _isDisposed = true;
 
-                _pollingTimer.Stop();
-                _pollingTimer.Dispose();
+                try
+                {
+                    _pollingTimer.Stop();
+                    _pollingTimer.Dispose();
+                }
+                catch { }
 
-                _debounceCts?.Cancel();
-                _debounceCts?.Dispose();
+                try { _debounceCts?.Cancel(); } catch { }
+                try { _debounceCts?.Dispose(); } catch { }
                 _debounceCts = null;
             }
 

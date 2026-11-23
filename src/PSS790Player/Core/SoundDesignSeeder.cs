@@ -1,27 +1,36 @@
 using System;
 using System.IO;
-using System.Text.Json;
 
 namespace PSS790Player.Core
 {
     /// <summary>
     /// Automatically seeds curated factory FM voices and Vector presets into the user's SysEx library on initial launch.
+    /// Caches completion per target root so repeated EnsureDirectoriesExist() calls incur zero disk I/O.
     /// </summary>
     public static class SoundDesignSeeder
     {
         private static readonly object _seedLock = new();
-        private static bool _isSeeding = false;
+        private static bool _isSeeding;
+        private static string? _lastSeededSignature;
 
-        public static void SeedAll()
+        public static void SeedAll(bool forceRescan = false)
         {
             lock (_seedLock)
             {
                 if (_isSeeding) return;
+
+                string signature = $"{AppPaths.FmVoicesDir}|{AppPaths.VectorPresetsDir}";
+                if (!forceRescan && string.Equals(_lastSeededSignature, signature, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
                 try
                 {
                     _isSeeding = true;
                     SeedFmVoices();
                     SeedVectorPresets();
+                    _lastSeededSignature = signature;
                 }
                 finally
                 {
@@ -44,7 +53,6 @@ namespace PSS790Player.Core
                 {
                     try
                     {
-                        // Validate whether existing seeded files have valid checksums
                         byte[] sample = File.ReadAllBytes(existingFmFiles[0]);
                         PSS680Voice.FromSysExMessage(sample);
                     }
@@ -67,7 +75,6 @@ namespace PSS790Player.Core
                     v.Carrier.Multiplier = 1; v.Carrier.PanelLevel = 92; v.Carrier.Waveform = FmWaveform.Sine; v.Carrier.AttackRate = 63; v.Carrier.Decay1Rate = 22; v.Carrier.ReleaseRate = 8; v.Carrier.FineDetune = -2; v.Carrier.Decay1Level = 7; v.Carrier.Decay2Rate = 4; v.Carrier.SustainReleaseRate = 6; v.Carrier.LevelKeyScalingHigh = 1; v.Carrier.LevelKeyScalingLow = 0; v.Carrier.RateKeyScaling = 1; v.Carrier.AmplitudeModulationEnable = false;
                     File.WriteAllBytes(Path.Combine(AppPaths.FmVoicesDir, "Honky-Tonk Upright Piano.syx"), v.ToSysExMessage());
                 }
-
                 {
                     var v = new PSS680Voice { Name = "Take On Me Lead", BankNumber = 0, Feedback = 6, PitchModulationSensitivity = 3, AmplitudeModulationSensitivity = 0, VibratoDelayTime = 35, Vibrato = true, Sustain = true };
                     v.Modulator.Multiplier = 1; v.Modulator.PanelLevel = 76; v.Modulator.Waveform = FmWaveform.SineHalfWave; v.Modulator.AttackRate = 62; v.Modulator.Decay1Rate = 18; v.Modulator.ReleaseRate = 7; v.Modulator.FineDetune = 2; v.Modulator.Decay1Level = 4; v.Modulator.Decay2Rate = 4; v.Modulator.SustainReleaseRate = 7; v.Modulator.LevelKeyScalingHigh = 3; v.Modulator.RateKeyScaling = 0; v.Modulator.AmplitudeModulationEnable = false;

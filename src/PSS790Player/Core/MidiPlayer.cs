@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
 using Melanchall.DryWetMidi.Interaction;
@@ -27,16 +28,41 @@ namespace PSS790Player.Core
     public class MidiPlayer : IDisposable
     {
         private IOutputDevice? _outputDevice;
+        private string? _currentOutputDeviceName;
         private FilteringOutputDevice? _filteringDevice;
         private Playback? _playback;
         private MidiFile? _currentFile;
-        private readonly object _lock = new();
+        private TimeSpan _cachedTotalDuration = TimeSpan.Zero;
+        private double _speed = 1.0;
+        private bool _loop;
+        private bool _hasFinished;
+        private volatile bool _isDisposed;
 
-        private readonly HashSet<(int Channel, byte Note)> _activeNotes = new();
+        // Strict non-nested lock boundaries:
+        // _stateLock  : _currentFile, _playback, _filteringDevice, _cachedTotalDuration, _speed, _loop, _hasFinished, _channelMutes, _channelSolos, _isDisposed
+        // _deviceLock : _outputDevice, _currentOutputDeviceName, hardware SendEvent / PrepareForEventsSending
+        // _notesLock  : _activeNotes, _activeNoteCounts
+        // INVARIANT: Never nest these locks, never call Playback.Start/Stop/MoveTo*/Dispose under a lock,
+        // and never raise events under a lock.
+        private readonly object _stateLock = new();
+        private readonly object _deviceLock = new();
+        private readonly object _notesLock = new();
+
+        private readonly Dictionary<(int Channel, byte Note), int> _activeNotes = new();
+        private readonly int[] _activeNoteCounts = new int[16];
+
         private readonly bool[] _channelMutes = new bool[16];
         private readonly bool[] _channelSolos = new bool[16];
         private readonly byte[] _channelVolumes = new byte[16];
         private readonly byte[] _lastFileChannelVolumes = new byte[16];
+
+        // Lock-free atomic state for real-time audio path filtering
+        private int _muteMask;
+        private int _soloMask;
+        private volatile bool _isPss680;
+        private string _activeModel = "pss790";
+        private int _vectorQuadPlaybackEnabled;
+
         private readonly System.Timers.Timer _progressTimer;
 
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
@@ -44,29 +70,72 @@ namespace PSS790Player.Core
         public event EventHandler<string>? OutputDeviceDisconnected;
         public event EventHandler? PlaybackFinished;
 
-        public bool IsPlaying => _playback?.IsRunning ?? false;
-        public bool IsPaused => (!IsPlaying) && (_playback?.GetCurrentTime<MetricTimeSpan>().TotalMilliseconds > 0);
-        public TimeSpan TotalDuration => _currentFile?.GetDuration<MetricTimeSpan>() ?? TimeSpan.Zero;
-        public TimeSpan CurrentPosition => _playback?.GetCurrentTime<MetricTimeSpan>() ?? TimeSpan.Zero;
-        public string? CurrentOutputDeviceName { get; private set; }
-        public string ActiveModel { get; set; } = "pss790";
-        public bool VectorQuadPlaybackEnabled { get; set; } = false;
+        public bool IsPlaying => CaptureStateSnapshot().IsPlaying;
+        public bool IsPaused => CaptureStateSnapshot().IsPaused;
+        public TimeSpan TotalDuration => CaptureStateSnapshot().TotalTime;
+        public TimeSpan CurrentPosition => CaptureStateSnapshot().CurrentTime;
+
+        public string? CurrentOutputDeviceName
+        {
+            get
+            {
+                lock (_deviceLock)
+                {
+                    return _currentOutputDeviceName;
+                }
+            }
+        }
+
+        public string ActiveModel
+        {
+            get => _activeModel;
+            set
+            {
+                var normalized = value ?? "pss790";
+                _activeModel = normalized;
+                _isPss680 = string.Equals(normalized, "pss680", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        public bool VectorQuadPlaybackEnabled
+        {
+            get => Volatile.Read(ref _vectorQuadPlaybackEnabled) != 0;
+            set
+            {
+                int previous = Interlocked.Exchange(ref _vectorQuadPlaybackEnabled, value ? 1 : 0);
+                if (previous != 0 && !value)
+                {
+                    // Flush active notes on replicated quad channels 1-3 so held voices never hang
+                    SendChannelNoteOff(1);
+                    SendChannelNoteOff(2);
+                    SendChannelNoteOff(3);
+                }
+            }
+        }
 
         public MidiPlayer()
         {
             for (int i = 0; i < 16; i++)
             {
-                _channelVolumes[i] = 100;
-                _lastFileChannelVolumes[i] = 100;
+                Volatile.Write(ref _channelVolumes[i], (byte)100);
+                Volatile.Write(ref _lastFileChannelVolumes[i], (byte)100);
             }
+
+            _isPss680 = string.Equals(_activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
             _progressTimer = new System.Timers.Timer(100);
             _progressTimer.Elapsed += (s, e) =>
             {
-                if (IsPlaying)
+                try
                 {
-                    NotifyState();
+                    if (_isDisposed) return;
+                    var snapshot = CaptureStateSnapshot();
+                    if (snapshot.IsPlaying)
+                    {
+                        PlaybackStateChanged?.Invoke(this, snapshot);
+                    }
                 }
+                catch { }
             };
         }
 
@@ -86,120 +155,217 @@ namespace PSS790Player.Core
         {
             if (string.IsNullOrWhiteSpace(deviceName))
             {
-                lock (_lock)
-                {
-                    Stop();
-                    _outputDevice?.Dispose();
-                    _outputDevice = null;
-                    CurrentOutputDeviceName = null;
-                }
+                SetOutputDeviceInternal(null, null);
                 return;
             }
 
             try
             {
                 var dev = OutputDevice.GetByName(deviceName);
-                CurrentOutputDeviceName = deviceName;
-                SetOutputDevice(dev);
+                SetOutputDeviceInternal(dev, deviceName);
             }
             catch
             {
-                lock (_lock)
-                {
-                    Stop();
-                    _outputDevice?.Dispose();
-                    _outputDevice = null;
-                    CurrentOutputDeviceName = null;
-                }
+                SetOutputDeviceInternal(null, null);
             }
         }
 
         public void SetOutputDevice(IOutputDevice? outputDevice)
         {
-            lock (_lock)
+            string? resolvedName = outputDevice is OutputDevice concrete ? concrete.Name : null;
+            SetOutputDeviceInternal(outputDevice, resolvedName);
+        }
+
+        private void SetOutputDeviceInternal(IOutputDevice? outputDevice, string? deviceName)
+        {
+            var preState = CaptureStateSnapshot();
+            bool wasPlaying = preState.IsPlaying;
+            TimeSpan currentPos = preState.CurrentTime;
+
+            // 1. Stop and tear down existing playback outside all locks
+            StopAndDetachPlayback(disposePlayback: true);
+
+            // 2. Swap hardware device under _deviceLock, then dispose old device outside the lock
+            IOutputDevice? oldDevice;
+            lock (_deviceLock)
             {
-                var wasPlaying = IsPlaying;
-                var currentPos = CurrentPosition;
-
-                Stop();
-                _outputDevice?.Dispose();
+                oldDevice = _outputDevice;
                 _outputDevice = outputDevice;
-                if (outputDevice == null)
-                {
-                    CurrentOutputDeviceName = null;
-                }
+                _currentOutputDeviceName = outputDevice != null ? deviceName : null;
+            }
 
-                if (_currentFile != null && _outputDevice != null)
+            if (oldDevice != null && !ReferenceEquals(oldDevice, outputDevice))
+            {
+                try { oldDevice.Dispose(); } catch { }
+            }
+
+            // 3. Re-initialize playback if both file and device are ready
+            bool hasFile;
+            lock (_stateLock)
+            {
+                hasFile = _currentFile != null && !_isDisposed;
+            }
+
+            if (hasFile && outputDevice != null)
+            {
+                InitializePlayback();
+                if (wasPlaying)
                 {
-                    InitializePlayback();
-                    if (wasPlaying)
-                    {
-                        Seek(currentPos);
-                        Play();
-                    }
+                    Seek(currentPos);
+                    Play();
+                    return;
                 }
             }
+
+            NotifyState();
         }
 
         public void HandleDeviceDisconnected()
         {
+            HandleDeviceDisconnectedInternal(expectedDevice: null, deferStop: false);
+        }
+
+        private void HandleDeviceDisconnectedInternal(IOutputDevice? expectedDevice, bool deferStop)
+        {
+            IOutputDevice? oldDevice;
             string? disconnectedName;
-            lock (_lock)
+
+            lock (_deviceLock)
             {
-                disconnectedName = CurrentOutputDeviceName;
-                Stop();
-                try
+                // Ignore stale failure notifications if the UI already swapped in a new device
+                if (expectedDevice != null && !ReferenceEquals(_outputDevice, expectedDevice))
                 {
-                    _outputDevice?.Dispose();
+                    return;
                 }
-                catch { }
+
+                oldDevice = _outputDevice;
+                disconnectedName = _currentOutputDeviceName;
                 _outputDevice = null;
-                CurrentOutputDeviceName = null;
+                _currentOutputDeviceName = null;
             }
 
-            if (!string.IsNullOrEmpty(disconnectedName))
+            if (oldDevice != null)
             {
-                OutputDeviceDisconnected?.Invoke(this, disconnectedName);
+                try { oldDevice.Dispose(); } catch { }
+            }
+
+            if (deferStop)
+            {
+                // Never call Playback.Stop() synchronously from DryWetMIDI's own clock callback thread
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Stop();
+                        if (!string.IsNullOrEmpty(disconnectedName))
+                        {
+                            OutputDeviceDisconnected?.Invoke(this, disconnectedName);
+                        }
+                    }
+                    catch { }
+                });
+            }
+            else
+            {
+                Stop();
+                if (!string.IsNullOrEmpty(disconnectedName))
+                {
+                    OutputDeviceDisconnected?.Invoke(this, disconnectedName);
+                }
             }
         }
 
         public void LoadMidi(MidiFile midiFile)
         {
-            lock (_lock)
+            StopAndDetachPlayback(disposePlayback: true);
+
+            TimeSpan duration = midiFile != null ? (TimeSpan)midiFile.GetDuration<MetricTimeSpan>() : TimeSpan.Zero;
+
+            lock (_stateLock)
             {
-                Stop();
+                if (_isDisposed) return;
                 _currentFile = midiFile;
-
-                if (_outputDevice != null)
-                {
-                    InitializePlayback();
-                }
-
-                NotifyState();
+                _cachedTotalDuration = duration;
+                _hasFinished = false;
             }
+
+            if (midiFile != null && HasOutputDevice())
+            {
+                InitializePlayback();
+            }
+
+            NotifyState();
+        }
+
+        private bool HasOutputDevice()
+        {
+            lock (_deviceLock)
+            {
+                return _outputDevice != null;
+            }
+        }
+
+        private void StopAndDetachPlayback(bool disposePlayback)
+        {
+            Playback? oldPlayback = null;
+            FilteringOutputDevice? oldFiltering = null;
+
+            lock (_stateLock)
+            {
+                try { _progressTimer.Stop(); } catch { }
+                _hasFinished = false;
+
+                if (disposePlayback)
+                {
+                    oldPlayback = _playback;
+                    oldFiltering = _filteringDevice;
+                    _playback = null;
+                    _filteringDevice = null;
+                }
+                else
+                {
+                    oldPlayback = _playback;
+                }
+            }
+
+            if (disposePlayback)
+            {
+                oldFiltering?.Dispose();
+                if (oldPlayback != null)
+                {
+                    oldPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                    try { oldPlayback.Stop(); } catch { }
+                    try { oldPlayback.Dispose(); } catch { }
+                }
+            }
+            else if (oldPlayback != null)
+            {
+                try
+                {
+                    oldPlayback.Stop();
+                    oldPlayback.MoveToStart();
+                }
+                catch { }
+            }
+
+            SendPanicNoteOff();
         }
 
         private void InitializePlayback()
         {
-            if (_currentFile == null || _outputDevice == null) return;
+            MidiFile? fileSnapshot;
+            double speedSnapshot;
+            bool loopSnapshot;
 
-            if (_filteringDevice != null)
+            lock (_stateLock)
             {
-                _filteringDevice.Dispose();
-                _filteringDevice = null;
+                if (_isDisposed || _currentFile == null) return;
+                fileSnapshot = _currentFile;
+                speedSnapshot = _speed;
+                loopSnapshot = _loop;
             }
 
-            if (_playback != null)
-            {
-                _playback.EventPlayed -= OnPlaybackEventPlayed;
-                try
-                {
-                    _playback.Stop();
-                    _playback.Dispose();
-                }
-                catch { }
-                _playback = null;
-            }
+            if (!HasOutputDevice()) return;
 
             var settings = new PlaybackSettings
             {
@@ -209,30 +375,85 @@ namespace PSS790Player.Core
                 }
             };
 
-            _filteringDevice = new FilteringOutputDevice(this);
-            _playback = _currentFile.GetPlayback(_filteringDevice, settings);
-            _playback.EventPlayed += OnPlaybackEventPlayed;
+            var newFiltering = new FilteringOutputDevice(this);
+            var newPlayback = fileSnapshot.GetPlayback(newFiltering, settings);
+            newPlayback.TrackProgram = true;
+            newPlayback.TrackControlValue = true;
+            newPlayback.TrackPitchValue = true;
+            newPlayback.TrackNotes = false;
+            newPlayback.Speed = speedSnapshot;
+            newPlayback.Loop = loopSnapshot;
+            newPlayback.EventPlayed += OnPlaybackEventPlayed;
 
-            _playback.Finished += (s, e) =>
+            newPlayback.Finished += (s, e) =>
             {
-                _progressTimer.Stop();
+                lock (_stateLock)
+                {
+                    _hasFinished = true;
+                    try { _progressTimer.Stop(); } catch { }
+                }
                 SendPanicNoteOff();
                 NotifyState();
                 PlaybackFinished?.Invoke(this, EventArgs.Empty);
             };
 
-            _playback.RepeatStarted += (s, e) =>
+            newPlayback.RepeatStarted += (s, e) =>
             {
+                lock (_stateLock)
+                {
+                    _hasFinished = false;
+                }
                 SendPanicNoteOff();
                 RePrimeInitialControllers();
             };
+
+            Playback? displacedPlayback = null;
+            FilteringOutputDevice? displacedFiltering = null;
+            bool commitFailed = false;
+
+            lock (_stateLock)
+            {
+                if (_isDisposed || !ReferenceEquals(_currentFile, fileSnapshot))
+                {
+                    commitFailed = true;
+                }
+                else
+                {
+                    displacedPlayback = _playback;
+                    displacedFiltering = _filteringDevice;
+                    _playback = newPlayback;
+                    _filteringDevice = newFiltering;
+                    _hasFinished = false;
+                }
+            }
+
+            if (commitFailed)
+            {
+                newFiltering.Dispose();
+                newPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                try { newPlayback.Dispose(); } catch { }
+                return;
+            }
+
+            displacedFiltering?.Dispose();
+            if (displacedPlayback != null)
+            {
+                displacedPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                try { displacedPlayback.Stop(); } catch { }
+                try { displacedPlayback.Dispose(); } catch { }
+            }
         }
 
         private void RePrimeInitialControllers()
         {
-            lock (_lock)
+            IOutputDevice? failedDevice = null;
+
+            lock (_deviceLock)
             {
-                if (_outputDevice == null || _currentFile == null) return;
+                var target = _outputDevice;
+                if (target == null) return;
+
+                bool is680 = _isPss680;
 
                 // Re-prime controllers across all 16 channels to guarantee seamless looping
                 for (int ch = 0; ch < 16; ch++)
@@ -240,165 +461,266 @@ namespace PSS790Player.Core
                     try
                     {
                         var fourBitCh = (FourBitNumber)ch;
-                        byte fileVol = _lastFileChannelVolumes[ch];
-                        byte userVol = _channelVolumes[ch];
-                        int scaled = (int)Math.Round((double)fileVol * userVol / 100.0);
-                        scaled = Math.Clamp(scaled, 0, 127);
-
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled) { Channel = fourBitCh });
-                        if (!string.Equals(ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase))
+                        if (!is680)
                         {
-                            _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)56) { Channel = fourBitCh });
+                            byte fileVol = Volatile.Read(ref _lastFileChannelVolumes[ch]);
+                            byte userVol = Volatile.Read(ref _channelVolumes[ch]);
+                            int scaled = Math.Clamp((int)Math.Round((double)fileVol * userVol / 100.0), 0, 127);
+
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled) { Channel = fourBitCh });
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)56) { Channel = fourBitCh });
                         }
-                        _outputDevice.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
+                        target.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
                     }
-                    catch { }
+                    catch
+                    {
+                        failedDevice = target;
+                        break;
+                    }
                 }
+            }
+
+            if (failedDevice != null)
+            {
+                HandleDeviceDisconnectedInternal(failedDevice, deferStop: true);
             }
         }
 
         private void OnPlaybackEventPlayed(object? sender, MidiEventPlayedEventArgs e)
         {
-            if (e.Event is ChannelEvent channelEvent)
+            if (e.Event is not ChannelEvent channelEvent) return;
+
+            int ch = channelEvent.Channel;
+            int soloMask = Volatile.Read(ref _soloMask);
+            int muteMask = Volatile.Read(ref _muteMask);
+            bool isQuad = Volatile.Read(ref _vectorQuadPlaybackEnabled) != 0 && ch == 0;
+            bool is680 = _isPss680;
+
+            if (channelEvent is NoteOnEvent noteOn)
             {
-                int ch = channelEvent.Channel;
+                byte noteNum = (byte)noteOn.NoteNumber;
+                byte vel = (byte)noteOn.Velocity;
 
-                // Mute / Solo handling
-                bool hasSolo = _channelSolos.Any(s => s);
-                bool isMuted = _channelMutes[ch] || (hasSolo && !_channelSolos[ch]);
-
-                if (isMuted)
+                if (vel > 0)
                 {
-                    return;
-                }
+                    bool chMuted = IsChannelMuted(ch, muteMask, soloMask) ||
+                                   (is680 && Volatile.Read(ref _channelVolumes[ch]) == 0);
 
-                if (channelEvent is NoteOnEvent noteOn)
-                {
-                    if (noteOn.Velocity > 0)
+                    bool q1Active = false, q2Active = false, q3Active = false;
+
+                    lock (_notesLock)
                     {
-                        lock (_activeNotes)
+                        if (!chMuted)
                         {
-                            _activeNotes.Add((ch, (byte)noteOn.NoteNumber));
-                            if (VectorQuadPlaybackEnabled && ch == 0)
-                            {
-                                for (int q = 1; q <= 3; q++) _activeNotes.Add((q, (byte)noteOn.NoteNumber));
-                            }
+                            IncrementActiveNoteLocked(ch, noteNum);
                         }
-                        ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                        {
-                            Channel = ch,
-                            IsActive = true,
-                            Velocity = (byte)noteOn.Velocity,
-                            NoteNumber = (byte)noteOn.NoteNumber
-                        });
 
-                        if (VectorQuadPlaybackEnabled && ch == 0)
+                        if (isQuad)
                         {
                             for (int q = 1; q <= 3; q++)
                             {
-                                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                                bool qMuted = IsChannelMuted(q, muteMask, soloMask) ||
+                                              (is680 && Volatile.Read(ref _channelVolumes[q]) == 0);
+                                if (!qMuted)
                                 {
-                                    Channel = q,
-                                    IsActive = true,
-                                    Velocity = (byte)noteOn.Velocity,
-                                    NoteNumber = (byte)noteOn.NoteNumber
-                                });
-                            }
-                        }
-                    }
-                    else
-                    {
-                        bool hasRemaining;
-                        lock (_activeNotes)
-                        {
-                            _activeNotes.Remove((ch, (byte)noteOn.NoteNumber));
-                            if (VectorQuadPlaybackEnabled && ch == 0)
-                            {
-                                for (int q = 1; q <= 3; q++) _activeNotes.Remove((q, (byte)noteOn.NoteNumber));
-                            }
-                            hasRemaining = _activeNotes.Any(n => n.Channel == ch);
-                        }
-                        if (!hasRemaining)
-                        {
-                            ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                            {
-                                Channel = ch,
-                                IsActive = false,
-                                Velocity = 0
-                            });
-                            if (VectorQuadPlaybackEnabled && ch == 0)
-                            {
-                                for (int q = 1; q <= 3; q++)
-                                {
-                                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                                    {
-                                        Channel = q,
-                                        IsActive = false,
-                                        Velocity = 0
-                                    });
+                                    IncrementActiveNoteLocked(q, noteNum);
+                                    if (q == 1) q1Active = true;
+                                    else if (q == 2) q2Active = true;
+                                    else q3Active = true;
                                 }
                             }
                         }
                     }
-                }
-                else if (channelEvent is NoteOffEvent noteOff)
-                {
-                    bool hasRemaining;
-                    lock (_activeNotes)
-                    {
-                        _activeNotes.Remove((ch, (byte)noteOff.NoteNumber));
-                        if (VectorQuadPlaybackEnabled && ch == 0)
-                        {
-                            for (int q = 1; q <= 3; q++) _activeNotes.Remove((q, (byte)noteOff.NoteNumber));
-                        }
-                        hasRemaining = _activeNotes.Any(n => n.Channel == ch);
-                    }
-                    if (!hasRemaining)
+
+                    if (!chMuted)
                     {
                         ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                         {
                             Channel = ch,
-                            IsActive = false,
-                            Velocity = 0
+                            IsActive = true,
+                            Velocity = vel,
+                            NoteNumber = noteNum
                         });
-                        if (VectorQuadPlaybackEnabled && ch == 0)
-                        {
-                            for (int q = 1; q <= 3; q++)
-                            {
-                                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                                {
-                                    Channel = q,
-                                    IsActive = false,
-                                    Velocity = 0
-                                });
-                            }
-                        }
                     }
+
+                    if (q1Active)
+                    {
+                        ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 1, IsActive = true, Velocity = vel, NoteNumber = noteNum });
+                    }
+                    if (q2Active)
+                    {
+                        ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 2, IsActive = true, Velocity = vel, NoteNumber = noteNum });
+                    }
+                    if (q3Active)
+                    {
+                        ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 3, IsActive = true, Velocity = vel, NoteNumber = noteNum });
+                    }
+                }
+                else
+                {
+                    HandleNoteOffActivity(ch, noteNum, isQuad);
+                }
+            }
+            else if (channelEvent is NoteOffEvent noteOff)
+            {
+                HandleNoteOffActivity(ch, (byte)noteOff.NoteNumber, isQuad);
+            }
+        }
+
+        private void IncrementActiveNoteLocked(int ch, byte noteNum)
+        {
+            var key = (ch, noteNum);
+            if (_activeNotes.TryGetValue(key, out int count))
+            {
+                _activeNotes[key] = count + 1;
+            }
+            else
+            {
+                _activeNotes[key] = 1;
+                _activeNoteCounts[ch]++;
+            }
+        }
+
+        private bool DecrementActiveNoteLocked(int ch, byte noteNum)
+        {
+            var key = (ch, noteNum);
+            if (_activeNotes.TryGetValue(key, out int count))
+            {
+                if (count <= 1)
+                {
+                    _activeNotes.Remove(key);
+                    _activeNoteCounts[ch] = Math.Max(0, _activeNoteCounts[ch] - 1);
+                }
+                else
+                {
+                    _activeNotes[key] = count - 1;
+                }
+            }
+            return _activeNoteCounts[ch] == 0;
+        }
+
+        private void HandleNoteOffActivity(int ch, byte noteNum, bool isQuad)
+        {
+            bool chInactive;
+            bool q1Inactive = false;
+            bool q2Inactive = false;
+            bool q3Inactive = false;
+
+            lock (_notesLock)
+            {
+                chInactive = DecrementActiveNoteLocked(ch, noteNum);
+
+                if (isQuad)
+                {
+                    q1Inactive = DecrementActiveNoteLocked(1, noteNum);
+                    q2Inactive = DecrementActiveNoteLocked(2, noteNum);
+                    q3Inactive = DecrementActiveNoteLocked(3, noteNum);
+                }
+            }
+
+            if (chInactive)
+            {
+                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                {
+                    Channel = ch,
+                    IsActive = false,
+                    Velocity = 0,
+                    NoteNumber = noteNum
+                });
+            }
+
+            if (isQuad)
+            {
+                if (q1Inactive)
+                {
+                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 1, IsActive = false, Velocity = 0, NoteNumber = noteNum });
+                }
+                if (q2Inactive)
+                {
+                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 2, IsActive = false, Velocity = 0, NoteNumber = noteNum });
+                }
+                if (q3Inactive)
+                {
+                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs { Channel = 3, IsActive = false, Velocity = 0, NoteNumber = noteNum });
                 }
             }
         }
 
+        private static bool IsChannelMuted(int ch, int muteMask, int soloMask)
+        {
+            int bit = 1 << ch;
+            return ((muteMask & bit) != 0) || (soloMask != 0 && ((soloMask & bit) == 0));
+        }
+
         public void Play()
         {
-            lock (_lock)
+            bool needsInit;
+            lock (_stateLock)
             {
-                if (_playback != null && !_playback.IsRunning)
+                if (_isDisposed) return;
+                needsInit = _playback == null && _currentFile != null;
+            }
+
+            if (needsInit && HasOutputDevice())
+            {
+                InitializePlayback();
+            }
+
+            Playback? p;
+            bool restartFromBeginning;
+            lock (_stateLock)
+            {
+                p = _playback;
+                restartFromBeginning = _hasFinished;
+                if (p != null)
                 {
-                    _playback.Start();
-                    _progressTimer.Start();
-                    NotifyState();
+                    _hasFinished = false;
                 }
+            }
+
+            if (p != null)
+            {
+                try
+                {
+                    if (!p.IsRunning)
+                    {
+                        if (restartFromBeginning)
+                        {
+                            p.MoveToStart();
+                        }
+                        p.Start();
+                        try { _progressTimer.Start(); } catch { }
+                        NotifyState();
+                    }
+                }
+                catch (ObjectDisposedException) { }
             }
         }
 
         public void Pause()
         {
-            lock (_lock)
+            Playback? p;
+            lock (_stateLock)
             {
-                if (_playback != null && _playback.IsRunning)
+                p = _playback;
+                try { _progressTimer.Stop(); } catch { }
+            }
+
+            if (p != null)
+            {
+                bool wasRunning = false;
+                try
                 {
-                    _progressTimer.Stop();
-                    _playback.Stop();
+                    wasRunning = p.IsRunning;
+                    if (wasRunning)
+                    {
+                        p.Stop();
+                    }
+                }
+                catch (ObjectDisposedException) { }
+
+                if (wasRunning)
+                {
                     SendPanicNoteOff();
                     NotifyState();
                 }
@@ -407,79 +729,88 @@ namespace PSS790Player.Core
 
         public void Stop()
         {
-            lock (_lock)
-            {
-                _progressTimer.Stop();
-                if (_filteringDevice != null)
-                {
-                    _filteringDevice.Dispose();
-                    _filteringDevice = null;
-                }
-                if (_playback != null)
-                {
-                    _playback.EventPlayed -= OnPlaybackEventPlayed;
-                    try
-                    {
-                        _playback.Stop();
-                        _playback.MoveToStart();
-                        _playback.Dispose();
-                    }
-                    catch { }
-                    _playback = null;
-                }
-
-                SendPanicNoteOff();
-                NotifyState();
-            }
+            StopAndDetachPlayback(disposePlayback: false);
+            NotifyState();
         }
 
         public void Seek(TimeSpan position)
         {
-            lock (_lock)
+            Playback? p;
+            lock (_stateLock)
             {
-                SendPanicNoteOff();
-                if (_playback != null)
-                {
-                    _playback.MoveToTime(new MetricTimeSpan(position));
-                }
-                NotifyState();
+                p = _playback;
+                _hasFinished = false;
             }
+
+            SendPanicNoteOff();
+
+            if (p != null)
+            {
+                try
+                {
+                    var clampedPos = position < TimeSpan.Zero ? TimeSpan.Zero : position;
+                    p.MoveToTime(new MetricTimeSpan(clampedPos));
+                }
+                catch { }
+            }
+
+            NotifyState();
         }
 
         public void SetSpeed(double speed)
         {
-            lock (_lock)
+            if (speed <= 0.1 || speed >= 3.0) return;
+
+            Playback? p;
+            lock (_stateLock)
             {
-                if (_playback != null && speed > 0.1 && speed < 3.0)
-                {
-                    _playback.Speed = speed;
-                }
+                _speed = speed;
+                p = _playback;
+            }
+
+            if (p != null)
+            {
+                try { p.Speed = speed; } catch (ObjectDisposedException) { }
             }
         }
 
         public void SetLoop(bool loop)
         {
-            lock (_lock)
+            Playback? p;
+            lock (_stateLock)
             {
-                if (_playback != null)
-                {
-                    _playback.Loop = loop;
-                }
+                _loop = loop;
+                p = _playback;
+            }
+
+            if (p != null)
+            {
+                try { p.Loop = loop; } catch (ObjectDisposedException) { }
             }
         }
 
         public void SendEvent(MidiEvent midiEvent)
         {
-            lock (_lock)
+            IOutputDevice? failedDevice = null;
+
+            lock (_deviceLock)
             {
+                var target = _outputDevice;
+                if (target == null) return;
+
                 try
                 {
-                    _outputDevice?.SendEvent(midiEvent);
+                    target.SendEvent(midiEvent);
                 }
                 catch
                 {
-                    HandleDeviceDisconnected();
+                    failedDevice = target;
                 }
+            }
+
+            if (failedDevice != null)
+            {
+                HandleDeviceDisconnectedInternal(failedDevice, deferStop: false);
             }
         }
 
@@ -487,194 +818,228 @@ namespace PSS790Player.Core
         {
             if (rawSysEx == null || rawSysEx.Length == 0) return;
 
+            // DryWetMIDI NormalSysExEvent.Data EXCLUDES leading 0xF0 and MUST INCLUDE trailing 0xF7 (Completed == true)
+            int start = (rawSysEx[0] == 0xF0) ? 1 : 0;
+            bool hasF7 = (rawSysEx.Length > start && rawSysEx[^1] == 0xF7);
+            int dataLen = rawSysEx.Length - start;
+
             byte[] dataPayload;
-            if (rawSysEx.Length >= 2 && rawSysEx[0] == 0xF0 && rawSysEx[^1] == 0xF7)
+            if (hasF7)
             {
-                dataPayload = new byte[rawSysEx.Length - 2];
-                Buffer.BlockCopy(rawSysEx, 1, dataPayload, 0, dataPayload.Length);
-            }
-            else if (rawSysEx.Length >= 1 && rawSysEx[0] == 0xF0)
-            {
-                dataPayload = new byte[rawSysEx.Length - 1];
-                Buffer.BlockCopy(rawSysEx, 1, dataPayload, 0, dataPayload.Length);
+                dataPayload = new byte[dataLen];
+                Buffer.BlockCopy(rawSysEx, start, dataPayload, 0, dataLen);
             }
             else
             {
-                dataPayload = rawSysEx;
+                dataPayload = new byte[dataLen + 1];
+                Buffer.BlockCopy(rawSysEx, start, dataPayload, 0, dataLen);
+                dataPayload[^1] = 0xF7;
             }
 
-            SendEvent(new Melanchall.DryWetMidi.Core.NormalSysExEvent(dataPayload));
+            SendEvent(new NormalSysExEvent(dataPayload));
         }
 
         public void SendVoiceOverride(int channel, int voiceNumber, string? model = null)
         {
-            lock (_lock)
+            if (channel < 0 || channel > 14) return; // Ch 15/16 is drum, ignores PC
+
+            var effectiveModel = model ?? ActiveModel;
+            bool is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+
+            byte programNumber;
+            if (is680)
             {
-                if (_outputDevice == null || channel < 0 || channel > 14) return; // Ch 15/16 is drum, ignores PC
-
-                var effectiveModel = model ?? ActiveModel;
-                bool is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
-
-                byte programNumber;
-                if (is680)
-                {
-                    // PSS-680: Voices 00-99 are factory presets; 100-104 are User Banks 1-5
-                    programNumber = (byte)Math.Clamp(voiceNumber, 0, 104);
-                }
-                else if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
-                {
-                    programNumber = voiceInfo.MidiProgram;
-                }
-                else
-                {
-                    return;
-                }
-
-                var pc = new ProgramChangeEvent((SevenBitNumber)programNumber)
-                {
-                    Channel = (FourBitNumber)channel
-                };
-                try
-                {
-                    _outputDevice.SendEvent(pc);
-                }
-                catch
-                {
-                    HandleDeviceDisconnected();
-                }
+                programNumber = (byte)Math.Clamp(voiceNumber, 0, 104);
             }
+            else if (Constants.Pss790Voices.TryGetValue(voiceNumber, out var voiceInfo))
+            {
+                programNumber = voiceInfo.MidiProgram;
+            }
+            else
+            {
+                return;
+            }
+
+            var pc = new ProgramChangeEvent((SevenBitNumber)programNumber)
+            {
+                Channel = (FourBitNumber)channel
+            };
+
+            SendEvent(pc);
         }
 
         public void SetChannelVolume(int channel, byte volume)
         {
-            lock (_lock)
-            {
-                if (channel >= 0 && channel < 16)
-                {
-                    _channelVolumes[channel] = volume;
-                    if (_outputDevice != null)
-                    {
-                        byte fileVol = _lastFileChannelVolumes[channel];
-                        int scaled = (int)Math.Round((double)fileVol * volume / 100.0);
-                        scaled = Math.Clamp(scaled, 0, 127);
+            if (channel < 0 || channel >= 16) return;
 
-                        var cc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
-                        {
-                            Channel = (FourBitNumber)channel
-                        };
-                        _outputDevice.SendEvent(cc);
-                    }
-                }
-            }
+            Volatile.Write(ref _channelVolumes[channel], volume);
+
+            // PSS-680 ignores CC 7 in Mode 99; live mixer scales Note-On velocities in FilteringOutputDevice
+            if (_isPss680) return;
+
+            byte fileVol = Volatile.Read(ref _lastFileChannelVolumes[channel]);
+            byte scaled = (byte)Math.Clamp((int)Math.Round((double)fileVol * volume / 100.0), 0, 127);
+
+            var cc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+            {
+                Channel = (FourBitNumber)channel
+            };
+
+            SendEvent(cc);
         }
 
         public void SetChannelMute(int channel, bool isMuted)
         {
-            lock (_lock)
+            if (channel < 0 || channel >= 16) return;
+
+            lock (_stateLock)
             {
-                if (channel >= 0 && channel < 16)
-                {
-                    _channelMutes[channel] = isMuted;
-                    if (isMuted)
-                    {
-                        SendChannelNoteOff(channel);
-                    }
-                }
+                _channelMutes[channel] = isMuted;
+                int mask = Volatile.Read(ref _muteMask);
+                mask = isMuted ? (mask | (1 << channel)) : (mask & ~(1 << channel));
+                Volatile.Write(ref _muteMask, mask);
+            }
+
+            if (isMuted)
+            {
+                SendChannelNoteOff(channel);
             }
         }
 
         public void SetChannelSolo(int channel, bool isSolo)
         {
-            lock (_lock)
+            if (channel < 0 || channel >= 16) return;
+
+            List<int> channelsToSilence = new(16);
+            lock (_stateLock)
             {
-                if (channel >= 0 && channel < 16)
+                _channelSolos[channel] = isSolo;
+                int soloMask = Volatile.Read(ref _soloMask);
+                soloMask = isSolo ? (soloMask | (1 << channel)) : (soloMask & ~(1 << channel));
+                Volatile.Write(ref _soloMask, soloMask);
+
+                int muteMask = Volatile.Read(ref _muteMask);
+                for (int ch = 0; ch < 16; ch++)
                 {
-                    _channelSolos[channel] = isSolo;
-                    // Silence notes on newly muted channels
-                    bool hasSolo = _channelSolos.Any(s => s);
-                    for (int ch = 0; ch < 16; ch++)
+                    if (IsChannelMuted(ch, muteMask, soloMask))
                     {
-                        if (_channelMutes[ch] || (hasSolo && !_channelSolos[ch]))
-                        {
-                            SendChannelNoteOff(ch);
-                        }
+                        channelsToSilence.Add(ch);
                     }
                 }
+            }
+
+            foreach (var ch in channelsToSilence)
+            {
+                SendChannelNoteOff(ch);
             }
         }
 
         public void SendPanicNoteOff()
         {
-            lock (_lock)
+            List<(int Channel, byte Note)> notesToKill;
+            lock (_notesLock)
             {
-                if (_outputDevice == null) return;
-
-                // 1. Explicit Note-Off for currently tracked sounding notes
-                lock (_activeNotes)
+                notesToKill = new List<(int Channel, byte Note)>(_activeNotes.Count);
+                foreach (var key in _activeNotes.Keys)
                 {
-                    foreach (var (ch, note) in _activeNotes)
+                    notesToKill.Add(key);
+                }
+                _activeNotes.Clear();
+                Array.Clear(_activeNoteCounts, 0, 16);
+            }
+
+            lock (_deviceLock)
+            {
+                var target = _outputDevice;
+                if (target != null)
+                {
+                    // 1. Explicit Note-Off for currently tracked sounding notes
+                    foreach (var (ch, note) in notesToKill)
                     {
                         try
                         {
-                            _outputDevice.SendEvent(new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0)
+                            target.SendEvent(new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0)
                             {
                                 Channel = (FourBitNumber)ch
                             });
                         }
                         catch { }
                     }
-                    _activeNotes.Clear();
-                }
 
-                // 2. Also send All Notes Off (CC 123), Sustain Release (CC 64), Reset Controllers (CC 121), and Pitch Center (8192)
-                for (int ch = 0; ch < 16; ch++)
-                {
-                    try
+                    // 2. Hardware panic commands across all 16 channels
+                    for (int ch = 0; ch < 16; ch++)
                     {
-                        var fourBitCh = (FourBitNumber)ch;
-                        // All Notes Off
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh });
-                        // Damper / Sustain Pedal Release (CC 64 = 0)
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });
-                        // Reset All Controllers (CC 121 = 0)
-                        _outputDevice.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh });
-                        // Center Pitch Bend (8192)
-                        _outputDevice.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });
+                        try
+                        {
+                            var fourBitCh = (FourBitNumber)ch;
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)120, (SevenBitNumber)0) { Channel = fourBitCh }); // All Sound Off
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh }); // All Notes Off
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });  // Sustain Off
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh }); // Reset All Controllers
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)0) { Channel = fourBitCh });   // Modulation Off
+                            target.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });                                       // Pitch Bend Center
+                        }
+                        catch { }
                     }
-                    catch { }
                 }
+            }
 
-                // 3. Clear all 16 channel activity callbacks
-                for (int ch = 0; ch < 16; ch++)
+            // 3. Clear all 16 channel activity indicators outside locks
+            for (int ch = 0; ch < 16; ch++)
+            {
+                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
                 {
-                    ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
-                    {
-                        Channel = ch,
-                        IsActive = false,
-                        Velocity = 0
-                    });
-                }
+                    Channel = ch,
+                    IsActive = false,
+                    Velocity = 0
+                });
             }
         }
 
         private void SendChannelNoteOff(int channel)
         {
-            if (_outputDevice == null) return;
-
-            lock (_activeNotes)
+            List<byte> notesOnChannel = new();
+            lock (_notesLock)
             {
-                var notesOnChannel = _activeNotes.Where(n => n.Channel == channel).ToList();
-                foreach (var (ch, note) in notesOnChannel)
+                foreach (var key in _activeNotes.Keys)
                 {
+                    if (key.Channel == channel)
+                    {
+                        notesOnChannel.Add(key.Note);
+                    }
+                }
+                foreach (var note in notesOnChannel)
+                {
+                    _activeNotes.Remove((channel, note));
+                }
+                _activeNoteCounts[channel] = 0;
+            }
+
+            lock (_deviceLock)
+            {
+                var target = _outputDevice;
+                if (target != null)
+                {
+                    foreach (var note in notesOnChannel)
+                    {
+                        try
+                        {
+                            target.SendEvent(new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0)
+                            {
+                                Channel = (FourBitNumber)channel
+                            });
+                        }
+                        catch { }
+                    }
+
                     try
                     {
-                        _outputDevice.SendEvent(new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0)
-                        {
-                            Channel = (FourBitNumber)ch
-                        });
+                        var ch = (FourBitNumber)channel;
+                        target.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = ch });
+                        target.SendEvent(new ControlChangeEvent((SevenBitNumber)120, (SevenBitNumber)0) { Channel = ch });
+                        target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = ch });
                     }
                     catch { }
-                    _activeNotes.Remove((ch, note));
                 }
             }
 
@@ -686,30 +1051,77 @@ namespace PSS790Player.Core
             });
         }
 
+        private PlaybackStateEventArgs CaptureStateSnapshot()
+        {
+            Playback? p;
+            TimeSpan totalDuration;
+            bool hasFinished;
+
+            lock (_stateLock)
+            {
+                p = _playback;
+                totalDuration = _cachedTotalDuration;
+                hasFinished = _hasFinished;
+            }
+
+            bool isPlaying = false;
+            TimeSpan currentPos = TimeSpan.Zero;
+
+            if (p != null)
+            {
+                try
+                {
+                    isPlaying = p.IsRunning;
+                    currentPos = p.GetCurrentTime<MetricTimeSpan>();
+                }
+                catch (Exception)
+                {
+                    isPlaying = false;
+                    currentPos = TimeSpan.Zero;
+                }
+            }
+
+            return new PlaybackStateEventArgs
+            {
+                IsPlaying = isPlaying,
+                IsPaused = !isPlaying && !hasFinished && currentPos.TotalMilliseconds > 0,
+                CurrentTime = currentPos,
+                TotalTime = totalDuration
+            };
+        }
+
         private void NotifyState()
         {
-            PlaybackStateChanged?.Invoke(this, new PlaybackStateEventArgs
-            {
-                IsPlaying = IsPlaying,
-                IsPaused = IsPaused,
-                CurrentTime = CurrentPosition,
-                TotalTime = TotalDuration
-            });
+            PlaybackStateChanged?.Invoke(this, CaptureStateSnapshot());
         }
 
         public void Dispose()
         {
-            _progressTimer.Stop();
-            _progressTimer.Dispose();
-            Stop();
-            if (_playback != null)
+            lock (_stateLock)
             {
-                _playback.EventPlayed -= OnPlaybackEventPlayed;
-                _playback.Dispose();
-                _playback = null;
+                if (_isDisposed) return;
+                _isDisposed = true;
             }
-            _outputDevice?.Dispose();
-            _outputDevice = null;
+
+            try
+            {
+                _progressTimer.Stop();
+                _progressTimer.Dispose();
+            }
+            catch { }
+
+            StopAndDetachPlayback(disposePlayback: true);
+
+            IOutputDevice? oldDevice;
+            lock (_deviceLock)
+            {
+                oldDevice = _outputDevice;
+                _outputDevice = null;
+                _currentOutputDeviceName = null;
+            }
+
+            try { oldDevice?.Dispose(); } catch { }
+
             GC.SuppressFinalize(this);
         }
 
@@ -733,103 +1145,196 @@ namespace PSS790Player.Core
             public void SendEvent(MidiEvent midiEvent)
             {
                 if (_isDisposed) return;
-                var target = _player._outputDevice;
-                if (target == null || _isDisposed) return;
 
                 if (midiEvent is ChannelEvent channelEvent)
                 {
                     int ch = channelEvent.Channel;
-                    bool hasSolo = _player._channelSolos.Any(s => s);
-                    bool isMuted = _player._channelMutes[ch] || (hasSolo && !_player._channelSolos[ch]);
+                    int soloMask = Volatile.Read(ref _player._soloMask);
+                    int muteMask = Volatile.Read(ref _player._muteMask);
+                    bool isMuted = IsChannelMuted(ch, muteMask, soloMask);
+                    bool isNoteOnAudible = channelEvent is NoteOnEvent noteOnCheck && noteOnCheck.Velocity > 0;
+                    bool isQuad = Volatile.Read(ref _player._vectorQuadPlaybackEnabled) != 0 &&
+                                  ch == 0 &&
+                                  (channelEvent is NoteOnEvent or NoteOffEvent);
 
-                    if (isMuted && (channelEvent is NoteOnEvent or NoteOffEvent))
+                    // Vector Quad Note Replication (PSS-790):
+                    // Handled BEFORE single-channel mute check so soloing Voices B/C/D (Ch 1-3) still receives notes when Ch 0 is muted.
+                    if (isQuad)
                     {
-                        return; // Suppress note from reaching hardware output
+                        SendVectorQuadEvent(channelEvent, isMuted, isNoteOnAudible, muteMask, soloMask);
+                        return;
                     }
 
-                    // PSS-680 Live Mixer Volume: PSS-680 hardware ignores CC 7 volume in Mode 99.
-                    // Scale Note-On velocity in real-time according to the UI channel volume slider (0-100%).
-                    bool is680 = string.Equals(_player.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+                    // NEVER suppress NoteOffEvent or zero-velocity NoteOnEvent on muted channels.
+                    if (isMuted && isNoteOnAudible)
+                    {
+                        return;
+                    }
+
+                    bool is680 = _player._isPss680;
+
+                    // PSS-680 Live Mixer Volume: scales Note-On velocity in real time (0% suppresses Note-On completely).
                     if (is680 && channelEvent is NoteOnEvent pss680NoteOn && pss680NoteOn.Velocity > 0)
                     {
-                        byte userVol = _player._channelVolumes[ch];
+                        byte userVol = Volatile.Read(ref _player._channelVolumes[ch]);
+                        if (userVol == 0)
+                        {
+                            return;
+                        }
                         if (userVol != 100)
                         {
-                            int scaledV = (int)Math.Round((byte)pss680NoteOn.Velocity * (userVol / 100.0));
-                            scaledV = Math.Clamp(scaledV, 1, 127);
+                            int scaledV = Math.Clamp((int)Math.Round((byte)pss680NoteOn.Velocity * (userVol / 100.0)), 1, 127);
                             channelEvent = new NoteOnEvent(pss680NoteOn.NoteNumber, (SevenBitNumber)scaledV) { Channel = pss680NoteOn.Channel };
                             midiEvent = channelEvent;
                         }
                     }
 
-                    // Vector Quad Note Replication: When Vector Quad playback is enabled on PSS-790 and event is NoteOn/NoteOff on Channel 0,
-                    // send the note to Channel 0 and replicate to Channels 1, 2, 3 (Voice B, C, D)
-                    if (_player.VectorQuadPlaybackEnabled && ch == 0 && (channelEvent is NoteOnEvent or NoteOffEvent))
-                    {
-                        try
-                        {
-                            target.SendEvent(channelEvent);
-                            EventSent?.Invoke(this, new MidiEventSentEventArgs(channelEvent));
-
-                            for (byte qCh = 1; qCh <= 3; qCh++)
-                            {
-                                bool qMuted = _player._channelMutes[qCh] || (hasSolo && !_player._channelSolos[qCh]);
-                                if (qMuted) continue;
-
-                                ChannelEvent qEvt = channelEvent is NoteOnEvent nOn
-                                    ? new NoteOnEvent(nOn.NoteNumber, nOn.Velocity) { Channel = (FourBitNumber)qCh }
-                                    : new NoteOffEvent(((NoteOffEvent)channelEvent).NoteNumber, ((NoteOffEvent)channelEvent).Velocity) { Channel = (FourBitNumber)qCh };
-
-                                target.SendEvent(qEvt);
-                                EventSent?.Invoke(this, new MidiEventSentEventArgs(qEvt));
-                            }
-                        }
-                        catch
-                        {
-                            _player.HandleDeviceDisconnected();
-                        }
-                        return;
-                    }
-
-                    // Proportional Mixer Scaling: scale incoming file CC 7 by user channel volume slider %
+                    // Proportional Mixer Scaling for CC 7 (Volume)
                     if (channelEvent is ControlChangeEvent cc && cc.ControlNumber == 7)
                     {
-                        _player._lastFileChannelVolumes[ch] = (byte)cc.ControlValue;
-                        byte userVolume = _player._channelVolumes[ch];
-                        int scaled = (int)Math.Round((double)cc.ControlValue * userVolume / 100.0);
-                        scaled = Math.Clamp(scaled, 0, 127);
+                        Volatile.Write(ref _player._lastFileChannelVolumes[ch], (byte)cc.ControlValue);
+                        if (is680)
+                        {
+                            // PSS-680 ignores CC 7 in Mode 99; omit from wire to conserve 31.25 kbps MIDI bandwidth
+                            return;
+                        }
 
-                        var scaledCc = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+                        byte userVolume = Volatile.Read(ref _player._channelVolumes[ch]);
+                        int scaled = Math.Clamp((int)Math.Round((double)cc.ControlValue * userVolume / 100.0), 0, 127);
+
+                        midiEvent = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
                         {
                             Channel = cc.Channel
                         };
-                        try
-                        {
-                            target.SendEvent(scaledCc);
-                            EventSent?.Invoke(this, new MidiEventSentEventArgs(scaledCc));
-                        }
-                        catch
-                        {
-                            _player.HandleDeviceDisconnected();
-                        }
-                        return;
                     }
                 }
 
-                try
+                TransmitSingle(midiEvent);
+            }
+
+            private void SendVectorQuadEvent(ChannelEvent baseEvent, bool ch0Muted, bool isNoteOnAudible, int muteMask, int soloMask)
+            {
+                bool is680 = _player._isPss680;
+                List<MidiEvent> eventsToSend = new(4);
+
+                if (!ch0Muted || !isNoteOnAudible)
                 {
-                    target.SendEvent(midiEvent);
+                    if (TryApplyPss680Scale(baseEvent, 0, is680, out var scaledCh0))
+                    {
+                        eventsToSend.Add(scaledCh0);
+                    }
+                }
+
+                for (byte qCh = 1; qCh <= 3; qCh++)
+                {
+                    bool qMuted = IsChannelMuted(qCh, muteMask, soloMask);
+                    if (qMuted && isNoteOnAudible) continue;
+
+                    ChannelEvent qEvt = baseEvent is NoteOnEvent nOn
+                        ? new NoteOnEvent(nOn.NoteNumber, nOn.Velocity) { Channel = (FourBitNumber)qCh }
+                        : new NoteOffEvent(((NoteOffEvent)baseEvent).NoteNumber, ((NoteOffEvent)baseEvent).Velocity) { Channel = (FourBitNumber)qCh };
+
+                    if (TryApplyPss680Scale(qEvt, qCh, is680, out var scaledQ))
+                    {
+                        eventsToSend.Add(scaledQ);
+                    }
+                }
+
+                if (eventsToSend.Count == 0) return;
+
+                IOutputDevice? failedDevice = null;
+                int sentCount = 0;
+
+                lock (_player._deviceLock)
+                {
+                    var target = _player._outputDevice;
+                    if (target == null || _isDisposed) return;
+
+                    try
+                    {
+                        for (int i = 0; i < eventsToSend.Count; i++)
+                        {
+                            target.SendEvent(eventsToSend[i]);
+                            sentCount++;
+                        }
+                    }
+                    catch
+                    {
+                        failedDevice = target;
+                    }
+                }
+
+                for (int i = 0; i < sentCount; i++)
+                {
+                    EventSent?.Invoke(this, new MidiEventSentEventArgs(eventsToSend[i]));
+                }
+
+                if (failedDevice != null)
+                {
+                    _player.HandleDeviceDisconnectedInternal(failedDevice, deferStop: true);
+                }
+            }
+
+            private bool TryApplyPss680Scale(ChannelEvent evt, int ch, bool is680, out ChannelEvent result)
+            {
+                if (is680 && evt is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                {
+                    byte userVol = Volatile.Read(ref _player._channelVolumes[ch]);
+                    if (userVol == 0)
+                    {
+                        result = evt;
+                        return false;
+                    }
+                    if (userVol != 100)
+                    {
+                        int scaledV = Math.Clamp((int)Math.Round((byte)noteOn.Velocity * (userVol / 100.0)), 1, 127);
+                        result = new NoteOnEvent(noteOn.NoteNumber, (SevenBitNumber)scaledV) { Channel = noteOn.Channel };
+                        return true;
+                    }
+                }
+
+                result = evt;
+                return true;
+            }
+
+            private void TransmitSingle(MidiEvent midiEvent)
+            {
+                IOutputDevice? failedDevice = null;
+                bool sent = false;
+
+                lock (_player._deviceLock)
+                {
+                    var target = _player._outputDevice;
+                    if (target == null || _isDisposed) return;
+
+                    try
+                    {
+                        target.SendEvent(midiEvent);
+                        sent = true;
+                    }
+                    catch
+                    {
+                        failedDevice = target;
+                    }
+                }
+
+                if (sent)
+                {
                     EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
                 }
-                catch
+
+                if (failedDevice != null)
                 {
-                    _player.HandleDeviceDisconnected();
+                    _player.HandleDeviceDisconnectedInternal(failedDevice, deferStop: true);
                 }
             }
 
             public void PrepareForEventsSending()
             {
-                _player._outputDevice?.PrepareForEventsSending();
+                lock (_player._deviceLock)
+                {
+                    _player._outputDevice?.PrepareForEventsSending();
+                }
             }
         }
     }

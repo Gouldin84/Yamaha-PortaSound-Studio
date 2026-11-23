@@ -8,13 +8,13 @@ namespace PSS790Player.Core
 {
     public class FavoriteStore
     {
-        private static FavoriteStore? _instance;
-        public static FavoriteStore Instance => _instance ??= new FavoriteStore();
+        private static readonly Lazy<FavoriteStore> _lazyInstance = new(() => new FavoriteStore());
+        public static FavoriteStore Instance => _lazyInstance.Value;
 
         private readonly string _storagePath;
         private readonly object _lock = new();
         private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
-        private bool _isLoaded;
+        private volatile bool _isLoaded;
 
         public FavoriteStore(string? customPath = null)
         {
@@ -23,10 +23,10 @@ namespace PSS790Player.Core
 
         private void EnsureLoaded()
         {
+            if (_isLoaded) return;
             lock (_lock)
             {
                 if (_isLoaded) return;
-                _isLoaded = true;
 
                 try
                 {
@@ -48,33 +48,36 @@ namespace PSS790Player.Core
                 {
                     _favorites = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 }
+                finally
+                {
+                    _isLoaded = true;
+                }
             }
         }
 
         private void SaveInternal()
         {
-            lock (_lock)
+            try
             {
-                try
+                var dir = Path.GetDirectoryName(_storagePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 {
-                    var dir = Path.GetDirectoryName(_storagePath);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    {
-                        Directory.CreateDirectory(dir);
-                    }
+                    Directory.CreateDirectory(dir);
+                }
 
-                    var sorted = _favorites.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
-                    var json = JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(_storagePath, json);
-                }
-                catch
-                {
-                    // Non-fatal
-                }
+                var sorted = _favorites.OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+                var json = JsonSerializer.Serialize(sorted, new JsonSerializerOptions { WriteIndented = true });
+                var tempPath = $"{_storagePath}.{Guid.NewGuid():N}.tmp";
+                File.WriteAllText(tempPath, json);
+                File.Move(tempPath, _storagePath, overwrite: true);
+            }
+            catch
+            {
+                // Non-fatal
             }
         }
 
-        private string NormalizeKey(string path)
+        private static string NormalizeKey(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return string.Empty;
             return AppPaths.GetLibrarySubPath(path);
@@ -192,6 +195,7 @@ namespace PSS790Player.Core
         {
             lock (_lock)
             {
+                _isLoaded = true;
                 _favorites.Clear();
                 SaveInternal();
             }

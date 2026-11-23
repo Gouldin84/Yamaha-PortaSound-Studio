@@ -52,26 +52,54 @@ namespace PSS790Player.Core
 
     public class MidiRecorder : IDisposable
     {
+        private static readonly HashSet<string> WindowsReservedFileNames = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        };
+
         private InputDevice? _inputDevice;
         private Recording? _recording;
         private MidiFile? _lastRecordedFile;
         private readonly object _lock = new();
+        private readonly object _sysExLock = new();
 
-        private RecorderState _state = RecorderState.Idle;
+        // Reassembly buffer for multi-packet WinMM SysEx streams (NormalSysExEvent + EscapeSysExEvent chunks)
+        private readonly List<byte> _sysExAssemblyBuffer = new(256);
+
+        private volatile RecorderState _state = RecorderState.Idle;
         private int _bpm = 120;
         private CancellationTokenSource? _countInCts;
-        private System.Timers.Timer? _tickTimer;
-        private Stopwatch _elapsedStopwatch = new();
+        private readonly System.Timers.Timer _tickTimer;
+        private readonly Stopwatch _elapsedStopwatch = new();
         private int _totalEventsRecorded;
         private int _totalNotesRecorded;
+        private volatile bool _isDisposed;
 
         public bool MidiThruEnabled { get; set; } = false;
         public MidiPlayer? ThruTargetPlayer { get; set; }
 
         public RecorderState State => _state;
-        public int Bpm => _bpm;
-        public MidiFile? LastRecordedFile => _lastRecordedFile;
-        public string? CurrentInputDeviceName => _inputDevice?.Name;
+        public int Bpm
+        {
+            get { lock (_lock) return _bpm; }
+        }
+        public MidiFile? LastRecordedFile
+        {
+            get { lock (_lock) return _lastRecordedFile; }
+        }
+        public string? CurrentInputDeviceName
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    try { return _inputDevice?.Name; }
+                    catch { return null; }
+                }
+            }
+        }
 
         public event EventHandler<ChannelActivityEventArgs>? InputActivity;
         public event EventHandler<RecorderStateEventArgs>? StateChanged;
@@ -99,52 +127,75 @@ namespace PSS790Player.Core
 
         public void SetInputDevice(string? deviceName)
         {
+            if (_state is RecorderState.Recording or RecorderState.CountIn)
+            {
+                StopRecording();
+            }
+
+            InputDevice? oldDevice;
             lock (_lock)
             {
-                if (_state is RecorderState.Recording or RecorderState.CountIn)
-                {
-                    StopRecording();
-                }
+                oldDevice = _inputDevice;
+                _inputDevice = null;
+            }
 
-                if (_inputDevice != null)
-                {
-                    try
-                    {
-                        if (_inputDevice.IsListeningForEvents)
-                        {
-                            _inputDevice.StopEventsListening();
-                        }
-                        _inputDevice.EventReceived -= OnInputEventReceived;
-                        _inputDevice.Dispose();
-                    }
-                    catch { }
-                    _inputDevice = null;
-                }
+            lock (_sysExLock)
+            {
+                _sysExAssemblyBuffer.Clear();
+            }
 
-                if (!string.IsNullOrEmpty(deviceName))
+            if (oldDevice != null)
+            {
+                try
                 {
-                    try
+                    if (oldDevice.IsListeningForEvents)
                     {
-                        _inputDevice = InputDevice.GetByName(deviceName);
-                        _inputDevice.EventReceived += OnInputEventReceived;
-                        _inputDevice.StartEventsListening();
+                        oldDevice.StopEventsListening();
                     }
-                    catch
+                }
+                catch { }
+                try { oldDevice.EventReceived -= OnInputEventReceived; } catch { }
+                try { oldDevice.Dispose(); } catch { }
+            }
+
+            if (string.IsNullOrWhiteSpace(deviceName) || _isDisposed)
+            {
+                return;
+            }
+
+            InputDevice? newDevice = null;
+            try
+            {
+                newDevice = InputDevice.GetByName(deviceName);
+                newDevice.EventReceived += OnInputEventReceived;
+                newDevice.StartEventsListening();
+
+                lock (_lock)
+                {
+                    if (_isDisposed)
                     {
-                        _inputDevice = null;
+                        try { newDevice.StopEventsListening(); } catch { }
+                        newDevice.EventReceived -= OnInputEventReceived;
+                        newDevice.Dispose();
+                        return;
                     }
+                    _inputDevice = newDevice;
+                }
+            }
+            catch
+            {
+                if (newDevice != null)
+                {
+                    try { newDevice.EventReceived -= OnInputEventReceived; } catch { }
+                    try { newDevice.Dispose(); } catch { }
                 }
             }
         }
 
         public void HandleDeviceDisconnected()
         {
-            string? disconnectedName;
-            lock (_lock)
-            {
-                disconnectedName = CurrentInputDeviceName;
-                SetInputDevice(null);
-            }
+            string? disconnectedName = CurrentInputDeviceName;
+            SetInputDevice(null);
 
             if (!string.IsNullOrEmpty(disconnectedName))
             {
@@ -154,9 +205,24 @@ namespace PSS790Player.Core
 
         private void OnInputEventReceived(object? sender, MidiEventReceivedEventArgs e)
         {
-            if (e.Event is NormalSysExEvent sysex)
+            if (_isDisposed || e.Event == null) return;
+
+            // Ignore standalone MIDI Real-Time status events (Active Sensing 0xFE, Clock 0xF8, etc.)
+            if (e.Event is SystemRealTimeEvent)
             {
-                SysExReceived?.Invoke(this, sysex);
+                return;
+            }
+
+            // Reassemble single- or multi-packet WinMM SysEx streams
+            if (e.Event is NormalSysExEvent normalSysEx)
+            {
+                ProcessIncomingSysExChunk(normalSysEx.Data, isStartChunk: true);
+                return;
+            }
+
+            if (e.Event is EscapeSysExEvent escapeSysEx)
+            {
+                ProcessIncomingSysExChunk(escapeSysEx.Data, isStartChunk: false);
                 return;
             }
 
@@ -196,7 +262,6 @@ namespace PSS790Player.Core
                     Interlocked.Increment(ref _totalEventsRecorded);
                 }
 
-                // MIDI Thru forwarding (if enabled and target player is set)
                 if (MidiThruEnabled && ThruTargetPlayer != null)
                 {
                     ThruTargetPlayer.SendEvent(e.Event);
@@ -204,10 +269,72 @@ namespace PSS790Player.Core
             }
         }
 
+        private void ProcessIncomingSysExChunk(byte[]? data, bool isStartChunk)
+        {
+            if (data == null || data.Length == 0) return;
+
+            NormalSysExEvent? completedPacket = null;
+
+            lock (_sysExLock)
+            {
+                if (isStartChunk)
+                {
+                    _sysExAssemblyBuffer.Clear();
+                }
+                else if (_sysExAssemblyBuffer.Count == 0)
+                {
+                    // Orphaned continuation chunk without a leading NormalSysExEvent -> ignore
+                    return;
+                }
+
+                for (int i = 0; i < data.Length; i++)
+                {
+                    byte b = data[i];
+
+                    if (b == 0xF7)
+                    {
+                        if (_sysExAssemblyBuffer.Count > 0)
+                        {
+                            _sysExAssemblyBuffer.Add(0xF7);
+                            completedPacket = new NormalSysExEvent(_sysExAssemblyBuffer.ToArray());
+                        }
+                        _sysExAssemblyBuffer.Clear();
+                        break;
+                    }
+
+                    if (b >= 0xF8)
+                    {
+                        // Strip interleaved MIDI Real-Time bytes (Active Sensing 0xFE, Clock 0xF8)
+                        continue;
+                    }
+
+                    if (b >= 0x80)
+                    {
+                        // Stray non-realtime status byte aborts corrupt SysEx stream
+                        _sysExAssemblyBuffer.Clear();
+                        return;
+                    }
+
+                    _sysExAssemblyBuffer.Add(b);
+                }
+            }
+
+            if (completedPacket != null)
+            {
+                SysExReceived?.Invoke(this, completedPacket);
+            }
+        }
+
         public async Task StartRecordingAsync(int bpm, bool countIn = false)
         {
+            CancellationTokenSource? localCts = null;
+            CancellationToken token = CancellationToken.None;
+            int clampedBpm;
+
             lock (_lock)
             {
+                if (_isDisposed) return;
+
                 if (_inputDevice == null)
                 {
                     throw new InvalidOperationException("No MIDI input device selected.");
@@ -218,105 +345,157 @@ namespace PSS790Player.Core
                     return;
                 }
 
-                _bpm = Math.Clamp(bpm, 40, 240);
-                _totalEventsRecorded = 0;
-                _totalNotesRecorded = 0;
-            }
+                clampedBpm = Math.Clamp(bpm, 40, 240);
+                _bpm = clampedBpm;
+                Interlocked.Exchange(ref _totalEventsRecorded, 0);
+                Interlocked.Exchange(ref _totalNotesRecorded, 0);
 
-            if (countIn)
-            {
-                _state = RecorderState.CountIn;
-                _countInCts = new CancellationTokenSource();
-                var beatIntervalMs = (int)(60000.0 / _bpm);
-
-                for (int beat = 1; beat <= 4; beat++)
+                if (countIn)
                 {
-                    if (_countInCts.IsCancellationRequested)
-                    {
-                        _state = RecorderState.Idle;
-                        NotifyState();
-                        return;
-                    }
-
-                    StateChanged?.Invoke(this, new RecorderStateEventArgs
-                    {
-                        State = RecorderState.CountIn,
-                        CountInBeat = beat,
-                        Bpm = _bpm
-                    });
-
-                    try
-                    {
-                        await Task.Delay(beatIntervalMs, _countInCts.Token);
-                    }
-                    catch (TaskCanceledException)
-                    {
-                        _state = RecorderState.Idle;
-                        NotifyState();
-                        return;
-                    }
+                    _state = RecorderState.CountIn;
+                    localCts = new CancellationTokenSource();
+                    _countInCts = localCts;
+                    token = localCts.Token;
                 }
             }
 
+            if (countIn && localCts != null)
+            {
+                int beatIntervalMs = (int)(60000.0 / clampedBpm);
+                try
+                {
+                    for (int beat = 1; beat <= 4; beat++)
+                    {
+                        if (token.IsCancellationRequested)
+                        {
+                            _state = RecorderState.Idle;
+                            NotifyState();
+                            return;
+                        }
+
+                        StateChanged?.Invoke(this, new RecorderStateEventArgs
+                        {
+                            State = RecorderState.CountIn,
+                            CountInBeat = beat,
+                            Bpm = clampedBpm
+                        });
+
+                        await Task.Delay(beatIntervalMs, token).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    _state = RecorderState.Idle;
+                    NotifyState();
+                    return;
+                }
+                finally
+                {
+                    lock (_lock)
+                    {
+                        if (ReferenceEquals(_countInCts, localCts))
+                        {
+                            _countInCts = null;
+                        }
+                    }
+                    try { localCts.Dispose(); } catch { }
+                }
+            }
+
+            Recording? newRecording = null;
+            bool started = false;
+
             lock (_lock)
             {
-                if (_inputDevice == null) return;
-
-                var tempoMap = TempoMap.Create(Tempo.FromBeatsPerMinute(_bpm));
-                _recording?.Dispose();
-                _recording = new Recording(tempoMap, _inputDevice);
-
-                _state = RecorderState.Recording;
-                _elapsedStopwatch.Restart();
-                _recording.Start();
-                _tickTimer?.Start();
-
-                NotifyState();
+                if (_isDisposed || _inputDevice == null)
+                {
+                    _state = RecorderState.Idle;
+                }
+                else if (!countIn || _state == RecorderState.CountIn)
+                {
+                    var tempoMap = TempoMap.Create(Tempo.FromBeatsPerMinute(_bpm));
+                    _recording?.Dispose();
+                    newRecording = new Recording(tempoMap, _inputDevice);
+                    _recording = newRecording;
+                    _state = RecorderState.Recording;
+                    _elapsedStopwatch.Restart();
+                    started = true;
+                }
             }
+
+            if (started && newRecording != null)
+            {
+                newRecording.Start();
+                try { _tickTimer.Start(); } catch (ObjectDisposedException) { }
+            }
+
+            NotifyState();
         }
 
         public void StopRecording()
         {
+            CancellationTokenSource? ctsToCancel;
+            Recording? recordingToStop;
+
             lock (_lock)
             {
-                if (_countInCts != null)
-                {
-                    _countInCts.Cancel();
-                    _countInCts.Dispose();
-                    _countInCts = null;
-                }
-
-                _tickTimer?.Stop();
-                _elapsedStopwatch.Stop();
-
-                if (_recording != null && _recording.IsRunning)
-                {
-                    try
-                    {
-                        _recording.Stop();
-                        _lastRecordedFile = _recording.ToFile();
-                        if (_lastRecordedFile != null)
-                        {
-                            EmbedRecordingMarker(_lastRecordedFile);
-                        }
-                    }
-                    catch
-                    {
-                        _lastRecordedFile = null;
-                    }
-                }
-
+                ctsToCancel = _countInCts;
+                _countInCts = null;
+                recordingToStop = _recording;
+                _recording = null;
                 _state = RecorderState.Stopped;
-                NotifyState();
             }
+
+            if (ctsToCancel != null)
+            {
+                try { ctsToCancel.Cancel(); } catch { }
+                try { ctsToCancel.Dispose(); } catch { }
+            }
+
+            try { _tickTimer.Stop(); } catch (ObjectDisposedException) { }
+            _elapsedStopwatch.Stop();
+
+            MidiFile? capturedFile = null;
+            if (recordingToStop != null)
+            {
+                try
+                {
+                    if (recordingToStop.IsRunning)
+                    {
+                        recordingToStop.Stop();
+                    }
+                    capturedFile = recordingToStop.ToFile();
+                }
+                catch
+                {
+                    capturedFile = null;
+                }
+                finally
+                {
+                    try { recordingToStop.Dispose(); } catch { }
+                }
+            }
+
+            lock (_lock)
+            {
+                _lastRecordedFile = capturedFile;
+            }
+
+            NotifyState();
         }
 
         private void OnTickTimer()
         {
             if (_state != RecorderState.Recording) return;
 
+            int bpmSnapshot;
+            lock (_lock)
+            {
+                bpmSnapshot = _bpm;
+            }
+
             double elapsedSec = _elapsedStopwatch.Elapsed.TotalSeconds;
-            double beatsPerSec = _bpm / 60.0;
+            double beatsPerSec = bpmSnapshot / 60.0;
             double totalBeats = elapsedSec * beatsPerSec;
             int bar = (int)(totalBeats / 4.0) + 1;
             int beat = (int)(totalBeats % 4.0) + 1;
@@ -324,8 +503,8 @@ namespace PSS790Player.Core
             Tick?.Invoke(this, new RecorderTickEventArgs
             {
                 ElapsedSeconds = elapsedSec,
-                EventCount = _totalEventsRecorded,
-                NoteCount = _totalNotesRecorded,
+                EventCount = Volatile.Read(ref _totalEventsRecorded),
+                NoteCount = Volatile.Read(ref _totalNotesRecorded),
                 CurrentBar = bar,
                 CurrentBeat = beat
             });
@@ -333,21 +512,33 @@ namespace PSS790Player.Core
 
         private void NotifyState()
         {
+            int bpmSnapshot;
+            lock (_lock)
+            {
+                bpmSnapshot = _bpm;
+            }
+
             StateChanged?.Invoke(this, new RecorderStateEventArgs
             {
                 State = _state,
                 CountInBeat = 0,
-                Bpm = _bpm
+                Bpm = bpmSnapshot
             });
         }
 
         public (int noteCount, int eventCount, double durationSeconds) GetLastTakeStats()
         {
-            if (_lastRecordedFile == null) return (0, 0, 0);
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
 
-            var notes = _lastRecordedFile.GetNotes().Count;
-            var timedEvents = _lastRecordedFile.GetTimedEvents().Count();
-            var duration = _lastRecordedFile.GetDuration<MetricTimeSpan>().TotalSeconds;
+            if (fileSnapshot == null) return (0, 0, 0);
+
+            var notes = fileSnapshot.GetNotes().Count;
+            var timedEvents = fileSnapshot.GetTimedEvents().Count();
+            var duration = fileSnapshot.GetDuration<MetricTimeSpan>().TotalSeconds;
 
             return (notes, timedEvents, duration);
         }
@@ -362,45 +553,41 @@ namespace PSS790Player.Core
             }
 
             bool is680 = string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase);
-            if (is680)
+            string targetMarker = is680 ? Remapper.Pss680RecordingMarkerText : Remapper.Pss790RecordingMarkerText;
+
+            // Strip any prior recording markers via ManageTimedEvents so Track 0 timestamps never shift
+            foreach (var track in midi.GetTrackChunks())
             {
-                if (!Remapper.HasPss680Marker(midi))
-                {
-                    firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss680RecordingMarkerText) { DeltaTime = 0 });
-                }
+                using var mgr = track.ManageTimedEvents();
+                mgr.Objects.RemoveAll(te =>
+                    (te.Event is TextEvent t && (t.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase) ||
+                                                 t.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))) ||
+                    (te.Event is MarkerEvent m && (m.Text.Contains("PSS790_RECORDING", StringComparison.OrdinalIgnoreCase) ||
+                                                   m.Text.Contains("PSS680_RECORDING", StringComparison.OrdinalIgnoreCase))));
             }
-            else
-            {
-                if (!Remapper.HasPss790Marker(midi))
-                {
-                    firstTrack.Events.Insert(0, new TextEvent(Remapper.Pss790RecordingMarkerText) { DeltaTime = 0 });
-                }
-            }
+
+            firstTrack.Events.Insert(0, new TextEvent(targetMarker) { DeltaTime = 0 });
         }
 
         public string SaveNativeTake(string fileName, string model = "pss790")
         {
-            if (_lastRecordedFile == null)
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
+
+            if (fileSnapshot == null)
             {
                 throw new InvalidOperationException("No recorded take available to save.");
             }
 
-            if (!fileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName += ".mid";
-            }
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                fileName = fileName.Replace(c, '_');
-            }
-
+            string sanitized = SanitizeFileName(fileName);
             AppPaths.EnsureDirectoriesExist();
             string targetDir = AppPaths.GetModelMidiDir(model);
-            string fullPath = Path.Combine(targetDir, fileName);
+            string fullPath = Path.Combine(targetDir, sanitized);
 
-            // Direct 1:1 clone of the take + ensure recording marker in Track 0
-            var fileToSave = _lastRecordedFile.Clone();
+            var fileToSave = fileSnapshot.Clone();
             EmbedRecordingMarker(fileToSave, model);
 
             fileToSave.Write(fullPath, overwriteFile: true);
@@ -409,25 +596,22 @@ namespace PSS790Player.Core
 
         public string ExportTakeToGeneralMidi(string fileName, string model = "pss790")
         {
-            if (_lastRecordedFile == null)
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
+
+            if (fileSnapshot == null)
             {
                 throw new InvalidOperationException("No recorded take available to save.");
             }
 
-            if (!fileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName += ".mid";
-            }
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                fileName = fileName.Replace(c, '_');
-            }
-
+            string sanitized = SanitizeFileName(fileName);
             AppPaths.EnsureDirectoriesExist();
-            string fullPath = Path.Combine(AppPaths.GmMidiDir, fileName);
+            string fullPath = Path.Combine(AppPaths.GmMidiDir, sanitized);
 
-            var fileToSave = ReverseRemapper.ReverseRemapToGeneralMidi(_lastRecordedFile, model);
+            var fileToSave = ReverseRemapper.ReverseRemapToGeneralMidi(fileSnapshot, model);
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
@@ -437,45 +621,64 @@ namespace PSS790Player.Core
             return remapForPss ? SaveNativeTake(fileName, model) : ExportTakeToGeneralMidi(fileName, model);
         }
 
-        public string? AutoSaveTake()
+        public string? AutoSaveTake(string model = "pss790")
         {
-            if (_lastRecordedFile == null) return null;
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
 
-            var (notes, _, _) = GetLastTakeStats();
+            if (fileSnapshot == null) return null;
+
+            int notes = fileSnapshot.GetNotes().Count;
             if (notes == 0) return null;
 
             AppPaths.EnsureDirectoriesExist();
-            var fileName = $"Take_{DateTime.Now:yyyyMMdd_HHmmss}.mid";
-            var fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+            string fullPath = string.Empty;
 
-            var fileToSave = _lastRecordedFile.Clone();
-            EmbedRecordingMarker(fileToSave);
-            fileToSave.Write(fullPath, overwriteFile: true);
+            for (int attempt = 0; attempt < 1000; attempt++)
+            {
+                string fileName = attempt == 0 ? $"Take_{timestamp}.mid" : $"Take_{timestamp}_{attempt}.mid";
+                string candidate = Path.Combine(AppPaths.RecordingsDir, fileName);
+                if (!File.Exists(candidate))
+                {
+                    fullPath = candidate;
+                    break;
+                }
+            }
+
+            if (string.IsNullOrEmpty(fullPath))
+            {
+                fullPath = Path.Combine(AppPaths.RecordingsDir, $"Take_{timestamp}_{Guid.NewGuid():N}.mid");
+            }
+
+            var fileToSave = fileSnapshot.Clone();
+            EmbedRecordingMarker(fileToSave, model);
+            fileToSave.Write(fullPath, overwriteFile: false);
             return fullPath;
         }
 
-        public string SaveTakeToRecordings(string fileName)
+        public string SaveTakeToRecordings(string fileName, string model = "pss790")
         {
-            if (_lastRecordedFile == null)
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
+
+            if (fileSnapshot == null)
             {
                 throw new InvalidOperationException("No recorded take available to save.");
             }
 
-            if (!fileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName += ".mid";
-            }
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                fileName = fileName.Replace(c, '_');
-            }
-
+            string sanitized = SanitizeFileName(fileName);
             AppPaths.EnsureDirectoriesExist();
-            string fullPath = Path.Combine(AppPaths.RecordingsDir, fileName);
+            string fullPath = Path.Combine(AppPaths.RecordingsDir, sanitized);
 
-            var fileToSave = _lastRecordedFile.Clone();
-            EmbedRecordingMarker(fileToSave);
+            var fileToSave = fileSnapshot.Clone();
+            EmbedRecordingMarker(fileToSave, model);
             fileToSave.Write(fullPath, overwriteFile: true);
             return fullPath;
         }
@@ -543,14 +746,8 @@ namespace PSS790Player.Core
                 throw new FileNotFoundException("Recording file not found.", sourcePath);
 
             AppPaths.EnsureDirectoriesExist();
-            var outFileName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
-            if (!outFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-                outFileName += ".mid";
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                outFileName = outFileName.Replace(c, '_');
-            }
+            var rawName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
+            var outFileName = SanitizeFileName(rawName);
 
             var destPath = Path.Combine(AppPaths.GmMidiDir, outFileName);
             var sourceMidi = MidiFile.Read(sourcePath);
@@ -565,14 +762,8 @@ namespace PSS790Player.Core
                 throw new FileNotFoundException("Recording file not found.", sourcePath);
 
             AppPaths.EnsureDirectoriesExist();
-            var outFileName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
-            if (!outFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-                outFileName += ".mid";
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                outFileName = outFileName.Replace(c, '_');
-            }
+            var rawName = string.IsNullOrWhiteSpace(targetFileName) ? Path.GetFileName(sourcePath) : targetFileName;
+            var outFileName = SanitizeFileName(rawName);
 
             var destPath = Path.Combine(AppPaths.GetModelMidiDir(model), outFileName);
             var sourceMidi = MidiFile.Read(sourcePath);
@@ -604,45 +795,119 @@ namespace PSS790Player.Core
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Recording file not found.", filePath);
 
-            if (!newFileName.EndsWith(".mid", StringComparison.OrdinalIgnoreCase))
-                newFileName += ".mid";
+            if (string.IsNullOrWhiteSpace(newFileName))
+                throw new ArgumentException("New file name cannot be empty.", nameof(newFileName));
+
+            string trimmed = newFileName.Trim();
+            if (trimmed is "." or ".." ||
+                trimmed.Contains("..", StringComparison.Ordinal) ||
+                trimmed.Contains('/') ||
+                trimmed.Contains('\\') ||
+                Path.IsPathRooted(trimmed) ||
+                Path.GetFileName(trimmed) != trimmed ||
+                trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            {
+                throw new ArgumentException("Invalid file name: path traversal or illegal filename characters are not permitted.", nameof(newFileName));
+            }
+
+            string baseName = Path.GetFileNameWithoutExtension(trimmed);
+            if (string.IsNullOrWhiteSpace(baseName) || WindowsReservedFileNames.Contains(baseName))
+            {
+                throw new ArgumentException("Invalid file name: reserved or empty file names are not permitted.", nameof(newFileName));
+            }
+
+            string finalName = trimmed.EndsWith(".mid", StringComparison.OrdinalIgnoreCase)
+                ? trimmed
+                : trimmed + ".mid";
+
+            string dir = Path.GetFullPath(Path.GetDirectoryName(filePath) ?? AppPaths.RecordingsDir);
+            string newPath = Path.GetFullPath(Path.Combine(dir, finalName));
+
+            string dirPrefix = dir.EndsWith(Path.DirectorySeparatorChar) ? dir : dir + Path.DirectorySeparatorChar;
+            if (!newPath.StartsWith(dirPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException("Invalid file name: resolved path escapes target directory.", nameof(newFileName));
+            }
+
+            bool isCaseOnlyRename = string.Equals(Path.GetFullPath(filePath), newPath, StringComparison.OrdinalIgnoreCase);
+            if (File.Exists(newPath) && !isCaseOnlyRename)
+            {
+                throw new InvalidOperationException($"A recording named '{finalName}' already exists.");
+            }
+
+            File.Move(filePath, newPath, overwrite: isCaseOnlyRename);
+            return newPath;
+        }
+
+        private static string SanitizeFileName(string fileName)
+        {
+            string name = Path.GetFileName(fileName.Trim());
+            if (!name.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) &&
+                !name.EndsWith(".midi", StringComparison.OrdinalIgnoreCase))
+            {
+                name += ".mid";
+            }
 
             foreach (char c in Path.GetInvalidFileNameChars())
             {
-                newFileName = newFileName.Replace(c, '_');
+                name = name.Replace(c, '_');
             }
 
-            var dir = Path.GetDirectoryName(filePath) ?? AppPaths.RecordingsDir;
-            var newPath = Path.Combine(dir, newFileName);
-
-            if (string.Equals(filePath, newPath, StringComparison.OrdinalIgnoreCase))
-                return filePath;
-
-            File.Move(filePath, newPath, overwrite: true);
-            return newPath;
+            return name;
         }
 
         public void Dispose()
         {
-            _tickTimer?.Dispose();
-            _countInCts?.Cancel();
-            _countInCts?.Dispose();
-            _recording?.Dispose();
+            if (_isDisposed) return;
+            _isDisposed = true;
 
-            if (_inputDevice != null)
+            try
+            {
+                _tickTimer.Stop();
+                _tickTimer.Dispose();
+            }
+            catch { }
+
+            CancellationTokenSource? cts;
+            Recording? rec;
+            InputDevice? dev;
+
+            lock (_lock)
+            {
+                cts = _countInCts;
+                _countInCts = null;
+                rec = _recording;
+                _recording = null;
+                dev = _inputDevice;
+                _inputDevice = null;
+            }
+
+            if (cts != null)
+            {
+                try { cts.Cancel(); } catch { }
+                try { cts.Dispose(); } catch { }
+            }
+
+            if (rec != null)
+            {
+                try { rec.Dispose(); } catch { }
+            }
+
+            if (dev != null)
             {
                 try
                 {
-                    if (_inputDevice.IsListeningForEvents)
+                    if (dev.IsListeningForEvents)
                     {
-                        _inputDevice.StopEventsListening();
+                        dev.StopEventsListening();
                     }
-                    _inputDevice.EventReceived -= OnInputEventReceived;
-                    _inputDevice.Dispose();
                 }
                 catch { }
-                _inputDevice = null;
+                try { dev.EventReceived -= OnInputEventReceived; } catch { }
+                try { dev.Dispose(); } catch { }
             }
+
+            GC.SuppressFinalize(this);
         }
     }
 }

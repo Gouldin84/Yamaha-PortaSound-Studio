@@ -103,9 +103,9 @@ namespace PSS790Player.Tests
             _store.SetOverride(pssOrphan, 0, 15);
             Assert.True(_store.HasOverrides(pssOrphan));
 
-            // Set GM Song1 newer
+            // Set GM Song1 newer (55 minutes newer than pssSong1, but 5 minutes in the past so newly written files are strictly newer)
             File.SetLastWriteTimeUtc(pssSong1, DateTime.UtcNow.AddHours(-1));
-            File.SetLastWriteTimeUtc(gmSong1, DateTime.UtcNow);
+            File.SetLastWriteTimeUtc(gmSong1, DateTime.UtcNow.AddMinutes(-5));
 
             var options = new LibrarySyncOptions
             {

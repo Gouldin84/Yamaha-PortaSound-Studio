@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Melanchall.DryWetMidi.Common;
 using Melanchall.DryWetMidi.Core;
@@ -46,8 +45,11 @@ namespace PSS790Player.Core
             if (originalMidi == null) return report;
 
             bool is680 = string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase);
-            int hardwareLimit = is680 ? 12 : 28;
+            int hardwareLimit = is680 ? Pss680Constants.PolyphonyMode99 : 28;
             string modelName = is680 ? "Yamaha PSS-680" : "Yamaha PSS-790";
+
+            var detectedFormat = Remapper.DetectMidiFormat(originalMidi);
+            bool isNativePssInput = detectedFormat is MidiFormat.Pss790Native or MidiFormat.Pss680Native;
 
             var ticksPerQuarter = (originalMidi.TimeDivision as TicksPerQuarterNoteTimeDivision)?.TicksPerQuarterNote ?? (short)480;
             long fourMeasuresTicks = ticksPerQuarter * 16;
@@ -55,37 +57,79 @@ namespace PSS790Player.Core
             var allNotes = originalMidi.GetNotes().ToList();
             report.TotalNoteCount = allNotes.Count;
 
-            // 1. Exact Peak Polyphony via Sweep-Line
+            // 1. Identify percussion channels accurately:
+            // Only treat Ch 15 as default drums when input is already native PSS format;
+            // on General MIDI files, Ch 9 is drums and Ch 15 is melodic unless Bank 126/127 or XG SysEx marks it as drums.
+            var drumChannels = isNativePssInput
+                ? new HashSet<int> { 15 }
+                : new HashSet<int> { 9 };
+
+            foreach (var track in originalMidi.GetTrackChunks())
+            {
+                foreach (var evt in track.Events)
+                {
+                    if (evt is ControlChangeEvent cc && cc.ControlNumber == 0 && (cc.ControlValue == 126 || cc.ControlValue == 127))
+                    {
+                        drumChannels.Add(cc.Channel);
+                    }
+                    else if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length > 6)
+                    {
+                        var d = sysex.Data;
+                        if (d[0] == 0x43 && d[2] == 0x4C && d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
+                        {
+                            drumChannels.Add(d[4]);
+                        }
+                    }
+                }
+            }
+
+            // 2. Exact Peak Polyphony via Sweep-Line
             report.PeakPolyphony = CalculatePeakPolyphony(allNotes);
+
+            // On PSS-680, evaluate stress separately for 12 FM melodic voices vs 4 PCM percussion voices
+            int effectiveVoicePeak;
+            bool drumVoiceOverflow = false;
             if (is680)
             {
-                if (report.PeakPolyphony <= 9) report.VoiceStressRating = "Optimal";
-                else if (report.PeakPolyphony <= 12) report.VoiceStressRating = "Moderate";
+                var melodicNotes = allNotes.Where(n => !drumChannels.Contains(n.Channel)).ToList();
+                var drumNotes = allNotes.Where(n => drumChannels.Contains(n.Channel)).ToList();
+                int fmPeak = CalculatePeakPolyphony(melodicNotes);
+                int drumPeak = CalculatePeakPolyphony(drumNotes);
+
+                effectiveVoicePeak = fmPeak;
+                drumVoiceOverflow = drumPeak > 4;
+
+                if (fmPeak <= 9 && !drumVoiceOverflow) report.VoiceStressRating = "Optimal";
+                else if (fmPeak <= 12 && !drumVoiceOverflow) report.VoiceStressRating = "Moderate";
                 else report.VoiceStressRating = "HighPolyphony";
             }
             else
             {
+                effectiveVoicePeak = report.PeakPolyphony;
                 if (report.PeakPolyphony <= 24) report.VoiceStressRating = "Optimal";
                 else if (report.PeakPolyphony <= 28) report.VoiceStressRating = "Moderate";
                 else report.VoiceStressRating = "HighPolyphony";
             }
 
-            // 2. Active Channels and Out-of-Bounds Notes
+            // 3. Active Channels and Out-of-Bounds Melodic Notes
             var activeChannels = new HashSet<int>();
             int outOfBoundsCount = 0;
             foreach (var note in allNotes)
             {
                 activeChannels.Add(note.Channel);
-                byte noteNum = (byte)note.NoteNumber;
-                if (noteNum < 24 || noteNum > 108) // C1 to C8 (7-octave MIDI recognition range)
+                if (!drumChannels.Contains(note.Channel))
                 {
-                    outOfBoundsCount++;
+                    byte noteNum = (byte)note.NoteNumber;
+                    if (noteNum < 24 || noteNum > 108) // C1 to C8 (7-octave MIDI recognition range)
+                    {
+                        outOfBoundsCount++;
+                    }
                 }
             }
             report.ActiveChannelCount = activeChannels.Count;
             report.OutOfBoundsNotesCount = outOfBoundsCount;
 
-            // 3. Scan for Program Changes, XG SysEx, and Inferred Instruments
+            // 4. Scan for Program Changes, XG SysEx, and Inferred Instruments
             var channelPrograms = new Dictionary<int, byte>();
             var tracksWithNotes = new Dictionary<int, TrackChunk>();
 
@@ -101,17 +145,16 @@ namespace PSS790Player.Core
                             report.ExplicitProgramChannels.Add(pc.Channel);
                         }
                     }
-                    else if (evt is NoteOnEvent n && n.Velocity > 0 && n.Channel != (FourBitNumber)9)
+                    else if (evt is NoteOnEvent n && n.Velocity > 0 && !drumChannels.Contains(n.Channel))
                     {
                         tracksWithNotes.TryAdd((int)n.Channel, track);
                     }
-                    else if (evt is NormalSysExEvent sysex && sysex.Data.Length > 6)
+                    else if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length > 6)
                     {
                         var d = sysex.Data;
-                        // Yamaha XG SysEx
                         if (d[0] == 0x43 && d[2] == 0x4C)
                         {
-                            // Bulk Dump: 43 00 4C [sizeH] [sizeL] [addrH] [addrM] [addrL]
+                            // Bulk Dump: 43 00 4C [sizeH] [sizeL] 08 [part] 00 ...
                             if (d[1] == 0x00 && d[5] == 0x08 && d[7] == 0x00 && d.Length > 10)
                             {
                                 int part = d[6];
@@ -123,7 +166,7 @@ namespace PSS790Player.Core
                                     report.XgSysExChannels.Add($"Ch {part + 1}: {voiceName} [XG SysEx]");
                                 }
                             }
-                            // Parameter Change: 43 10 4C [addrH] [addrM] [addrL] [data...]
+                            // Parameter Change: 43 10 4C 08 [part] 03 [prog]
                             else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x03 && d.Length > 6)
                             {
                                 int part = d[4];
@@ -135,7 +178,7 @@ namespace PSS790Player.Core
                                     report.XgSysExChannels.Add($"Ch {part + 1}: {voiceName} [XG SysEx]");
                                 }
                             }
-                            // Part Mode Drum
+                            // Part Mode Drum: 43 10 4C 08 [part] 07 [mode > 0]
                             else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d.Length > 6)
                             {
                                 int part = d[4];
@@ -149,7 +192,6 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Check for Inferred Instruments from Track Names
             foreach (var (ch, tr) in tracksWithNotes)
             {
                 if (!channelPrograms.ContainsKey(ch))
@@ -173,7 +215,7 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 4. Scan Controllers & Pedals (CC 64 Sustain, Bank 127 Drums)
+            // 5. Scan Controllers & Pedals (CC 64 Sustain, Bank 126/127 Drums, Bank 64 SFX)
             int stuckPedalCount = 0;
             var timedEvents = originalMidi.GetTimedEvents().ToList();
 
@@ -186,7 +228,7 @@ namespace PSS790Player.Core
                 {
                     if (te.Event is ControlChangeEvent cc)
                     {
-                        if (cc.ControlNumber == 64) // Sustain
+                        if (cc.ControlNumber == 64)
                         {
                             if (cc.ControlValue >= 64)
                             {
@@ -202,7 +244,7 @@ namespace PSS790Player.Core
                                 }
                             }
                         }
-                        else if (cc.ControlNumber == 0 && (cc.ControlValue == 127 || cc.ControlValue == 128) && ch != 9)
+                        else if (cc.ControlNumber == 0 && (cc.ControlValue == 126 || cc.ControlValue == 127) && ch != 9)
                         {
                             if (!report.NonStandardDrumChannels.Contains(ch))
                             {
@@ -219,16 +261,16 @@ namespace PSS790Player.Core
                     }
                 }
 
-                if (pedalDownTick.HasValue) // Never released before track end
+                if (pedalDownTick.HasValue)
                 {
                     stuckPedalCount++;
                 }
             }
             report.StuckPedalIntervalsCount = stuckPedalCount;
 
-            // 5. Scan Pitch Bends (Dangling at Track End & Acoustic Micro-Bends)
+            // 6. Scan Pitch Bends (Dangling at Track End & PSS-790 Acoustic Bends)
             int danglingBends = 0;
-            int microBendsNeutralized = 0;
+            int acousticBends = 0;
 
             foreach (var track in originalMidi.GetTrackChunks())
             {
@@ -238,13 +280,12 @@ namespace PSS790Player.Core
                     if (evt is PitchBendEvent pb)
                     {
                         bendsPerChannel[pb.Channel] = pb;
-                        int ch = pb.Channel;
-                        byte gmProg = channelPrograms.TryGetValue(ch, out var p) ? p : (byte)0;
-                        if (Remapper.IsAcousticOrKeyboardInstrument(gmProg))
+                        if (!is680 && !drumChannels.Contains(pb.Channel))
                         {
-                            if (pb.PitchValue is >= 8000 and <= 8384 && pb.PitchValue != 8192)
+                            byte gmProg = channelPrograms.TryGetValue(pb.Channel, out var p) ? p : (byte)0;
+                            if (Remapper.IsAcousticOrKeyboardInstrument(gmProg) && pb.PitchValue != 8192)
                             {
-                                microBendsNeutralized++;
+                                acousticBends++;
                             }
                         }
                     }
@@ -258,10 +299,14 @@ namespace PSS790Player.Core
                     }
                 }
             }
-            report.DanglingPitchBendsCount = danglingBends;
-            report.AcousticMicroBendsNeutralized = microBendsNeutralized;
 
-            // 6. Record Auto-Fixes Applied
+            report.DanglingPitchBendsCount = danglingBends;
+            report.AcousticMicroBendsNeutralized = acousticBends;
+
+            // 7. Verify against remappedMidi when provided, and record Auto-Fixes
+            bool remappedVerified = remappedMidi != null;
+            int? remappedPeak = remappedVerified ? CalculatePeakPolyphony(remappedMidi!.GetNotes().ToList()) : null;
+
             report.RunawayPedalCapped = stuckPedalCount > 0;
             report.PitchBendsCenteredAtEof = danglingBends > 0;
 
@@ -281,9 +326,9 @@ namespace PSS790Player.Core
             {
                 report.AppliedAutoFixes.Add($"Auto-centered {report.DanglingPitchBendsCount} dangling pitch bends before track end");
             }
-            if (report.AcousticMicroBendsNeutralized > 0)
+            if (!is680 && report.AcousticMicroBendsNeutralized > 0)
             {
-                report.AppliedAutoFixes.Add($"Neutralized {report.AcousticMicroBendsNeutralized} micro-bends on acoustic/keyboard channels");
+                report.AppliedAutoFixes.Add($"Neutralized {report.AcousticMicroBendsNeutralized} pitch bends on acoustic/keyboard channels");
             }
             if (report.NonStandardDrumChannels.Count > 0)
             {
@@ -298,18 +343,22 @@ namespace PSS790Player.Core
                 report.AppliedAutoFixes.Add($"Clamped {report.OutOfBoundsNotesCount} out-of-range notes to {modelName} keyboard bounds");
             }
 
-            // 7. Compose Badge
-            if (report.PeakPolyphony > hardwareLimit)
+            // 8. Compose Badge
+            bool exceedsHardwareLimit = effectiveVoicePeak > hardwareLimit || drumVoiceOverflow;
+            if (exceedsHardwareLimit)
             {
                 report.BadgeType = "warning";
                 report.BadgeLabel = $"{report.PeakPolyphony} Voices (Guarded)";
-                report.BadgeTooltip = $"Peak polyphony of {report.PeakPolyphony} voices exceeds the {modelName} {hardwareLimit}-voice hardware limit. Polyphony Guard active.";
+                string remappedNote = remappedPeak.HasValue ? $" Guarded output peak: {remappedPeak.Value} voices." : " Polyphony Guard active.";
+                report.BadgeTooltip = drumVoiceOverflow && effectiveVoicePeak <= hardwareLimit
+                    ? $"Percussion density exceeds the {modelName} 4-voice PCM drum budget.{remappedNote}"
+                    : $"Peak polyphony of {report.PeakPolyphony} voices exceeds the {modelName} {hardwareLimit}-voice hardware limit.{remappedNote}";
             }
             else if (report.AppliedAutoFixes.Count > 0)
             {
                 report.BadgeType = "autofixed";
                 report.BadgeLabel = report.AppliedAutoFixes.Count == 1 ? "1 Auto-Fix Applied" : $"{report.AppliedAutoFixes.Count} Auto-Fixes Applied";
-                report.BadgeTooltip = string.Join(" • ", report.AppliedAutoFixes);
+                report.BadgeTooltip = string.Join(" \u2022 ", report.AppliedAutoFixes);
             }
             else
             {

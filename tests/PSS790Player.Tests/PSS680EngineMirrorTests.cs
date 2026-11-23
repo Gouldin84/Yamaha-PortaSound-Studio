@@ -573,8 +573,8 @@ namespace PSS790Player.Tests
             var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pss680Midi, "pss680");
             var pb = gmMidi.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
 
-            // (8359 - 8192) * 6.0 = 167 * 6 = 1002 -> 8192 + 1002 = 9194
-            Assert.True(pb.PitchValue > 9100 && pb.PitchValue < 9250);
+            // PSS-680 pitch bends are +/- 2 semitones, matching General MIDI 1:1
+            Assert.Equal(8359, pb.PitchValue);
         }
 
         [Fact]

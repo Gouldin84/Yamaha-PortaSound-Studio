@@ -169,54 +169,54 @@ namespace PSS790Player.Core
             byte[] bytes = new byte[Pss680Constants.Format00DecodedByteCount];
 
             // Byte 0: Bank Number (0-4)
-            bytes[0] = (byte)(Math.Clamp(BankNumber, 0, 4) & 0x7F);
+            bytes[0] = (byte)Math.Clamp(BankNumber, 0, 4);
 
             // Byte 1 (M) & Byte 2 (C): DT1 (b6..b4) + MUL (b3..b0)
             bytes[1] = EncodeDt1Mul(Modulator);
             bytes[2] = EncodeDt1Mul(Carrier);
 
             // Byte 3 (M) & Byte 4 (C): TL (b6..b0, 0-99 inverted)
-            bytes[3] = (byte)(Modulator.RawSysExTotalLevel & 0x7F);
-            bytes[4] = (byte)(Carrier.RawSysExTotalLevel & 0x7F);
+            bytes[3] = (byte)Math.Clamp(Modulator.RawSysExTotalLevel, 0, 99);
+            bytes[4] = (byte)Math.Clamp(Carrier.RawSysExTotalLevel, 0, 99);
 
             // Byte 5 (M) & Byte 6 (C): LKS(HI) (b7..b4) + LKS(LO) (b3..b0)
-            bytes[5] = (byte)(((Modulator.LevelKeyScalingHigh & 0x0F) << 4) | (Modulator.LevelKeyScalingLow & 0x0F));
-            bytes[6] = (byte)(((Carrier.LevelKeyScalingHigh & 0x0F) << 4) | (Carrier.LevelKeyScalingLow & 0x0F));
+            bytes[5] = (byte)((Math.Clamp(Modulator.LevelKeyScalingHigh, 0, 15) << 4) | Math.Clamp(Modulator.LevelKeyScalingLow, 0, 15));
+            bytes[6] = (byte)((Math.Clamp(Carrier.LevelKeyScalingHigh, 0, 15) << 4) | Math.Clamp(Carrier.LevelKeyScalingLow, 0, 15));
 
             // Byte 7 (M) & Byte 8 (C): RKS (b7..b6) + AR (b5..b0)
-            bytes[7] = (byte)(((Modulator.RateKeyScaling & 0x03) << 6) | (Modulator.AttackRate & 0x3F));
-            bytes[8] = (byte)(((Carrier.RateKeyScaling & 0x03) << 6) | (Carrier.AttackRate & 0x3F));
+            bytes[7] = (byte)((Math.Clamp(Modulator.RateKeyScaling, 0, 3) << 6) | Math.Clamp(Modulator.AttackRate, 0, 63));
+            bytes[8] = (byte)((Math.Clamp(Carrier.RateKeyScaling, 0, 3) << 6) | Math.Clamp(Carrier.AttackRate, 0, 63));
 
             // Byte 9 (M) & Byte 10 (C): AM EN (b7) + DT2 (b6) + D1R (b5..b0)
             bytes[9] = (byte)((Modulator.AmplitudeModulationEnable ? 0x80 : 0x00) |
                               (Modulator.CoarseDetune ? 0x40 : 0x00) |
-                              (Modulator.Decay1Rate & 0x3F));
+                              Math.Clamp(Modulator.Decay1Rate, 0, 63));
             bytes[10] = (byte)((Carrier.AmplitudeModulationEnable ? 0x80 : 0x00) |
                                (Carrier.CoarseDetune ? 0x40 : 0x00) |
-                               (Carrier.Decay1Rate & 0x3F));
+                               Math.Clamp(Carrier.Decay1Rate, 0, 63));
 
             // Byte 11 (M) & Byte 12 (C): SIN TBL (b7..b5) + D2R (b4..b0)
-            bytes[11] = (byte)((((int)Modulator.Waveform & 0x07) << 5) | (Modulator.Decay2Rate & 0x1F));
-            bytes[12] = (byte)((((int)Carrier.Waveform & 0x07) << 5) | (Carrier.Decay2Rate & 0x1F));
+            bytes[11] = (byte)((Math.Clamp((int)Modulator.Waveform, 0, 3) << 5) | Math.Clamp(Modulator.Decay2Rate, 0, 31));
+            bytes[12] = (byte)((Math.Clamp((int)Carrier.Waveform, 0, 3) << 5) | Math.Clamp(Carrier.Decay2Rate, 0, 31));
 
             // Byte 13 (M) & Byte 14 (C): D1L (b7..b4) + RR (b3..b0)
-            bytes[13] = (byte)(((Modulator.Decay1Level & 0x0F) << 4) | (Modulator.ReleaseRate & 0x0F));
-            bytes[14] = (byte)(((Carrier.Decay1Level & 0x0F) << 4) | (Carrier.ReleaseRate & 0x0F));
+            bytes[13] = (byte)((Math.Clamp(Modulator.Decay1Level, 0, 15) << 4) | Math.Clamp(Modulator.ReleaseRate, 0, 15));
+            bytes[14] = (byte)((Math.Clamp(Carrier.Decay1Level, 0, 15) << 4) | Math.Clamp(Carrier.ReleaseRate, 0, 15));
 
             // Byte 15: FB (b5..b3)
-            bytes[15] = (byte)((Feedback & 0x07) << 3);
+            bytes[15] = (byte)(Math.Clamp(Feedback, 0, 7) << 3);
 
             // Byte 16: PMS (b6..b4) + AMS (b1..b0)
-            bytes[16] = (byte)(((PitchModulationSensitivity & 0x07) << 4) | (AmplitudeModulationSensitivity & 0x03));
+            bytes[16] = (byte)((Math.Clamp(PitchModulationSensitivity, 0, 7) << 4) | Math.Clamp(AmplitudeModulationSensitivity, 0, 3));
 
             // Bytes 17-19: Unused (0)
 
             // Byte 20 (M) & Byte 21 (C): SRR (b3..b0)
-            bytes[20] = (byte)(Modulator.SustainReleaseRate & 0x0F);
-            bytes[21] = (byte)(Carrier.SustainReleaseRate & 0x0F);
+            bytes[20] = (byte)Math.Clamp(Modulator.SustainReleaseRate, 0, 15);
+            bytes[21] = (byte)Math.Clamp(Carrier.SustainReleaseRate, 0, 15);
 
             // Byte 22: VDT (b6..b0)
-            bytes[22] = (byte)(VibratoDelayTime & 0x7F);
+            bytes[22] = (byte)Math.Clamp(VibratoDelayTime, 0, 127);
 
             // Byte 23: Unused (0)
 
@@ -271,10 +271,10 @@ namespace PSS790Player.Core
             voice.Carrier.Decay1Rate = bytes[10] & 0x3F;
 
             // Byte 11 & 12: SIN TBL, D2R
-            voice.Modulator.Waveform = (FmWaveform)((bytes[11] >> 5) & 0x07);
+            voice.Modulator.Waveform = (FmWaveform)((bytes[11] >> 5) & 0x03);
             voice.Modulator.Decay2Rate = bytes[11] & 0x1F;
 
-            voice.Carrier.Waveform = (FmWaveform)((bytes[12] >> 5) & 0x07);
+            voice.Carrier.Waveform = (FmWaveform)((bytes[12] >> 5) & 0x03);
             voice.Carrier.Decay2Rate = bytes[12] & 0x1F;
 
             // Byte 13 & 14: D1L, RR
@@ -312,82 +312,50 @@ namespace PSS790Player.Core
         public byte[] ToSysExMessage()
         {
             byte[] decoded = ToDecodedBytes();
-            byte[] sysex = new byte[Pss680Constants.Format00TotalSysExLength];
-
-            sysex[0] = 0xF0;
-            sysex[1] = Pss680Constants.ManufacturerYamaha;
-            sysex[2] = Pss680Constants.InstrumentClassPss;
-            sysex[3] = Pss680Constants.FormatFmVoice;
-
-            // 66 nibbles: high nibble first, low nibble second
-            int outIdx = 4;
-            int sum = 0;
-            for (int i = 0; i < decoded.Length; i++)
-            {
-                byte b = decoded[i];
-                byte hi = (byte)((b >> 4) & 0x0F);
-                byte lo = (byte)(b & 0x0F);
-                sysex[outIdx++] = hi;
-                sysex[outIdx++] = lo;
-                sum += hi + lo;
-            }
-
-            // Two's complement of 7-bit sum of all 66 data nibbles according to Yamaha specification
-            byte checksum = (byte)((128 - (sum & 0x7F)) & 0x7F);
-            sysex[outIdx++] = checksum;
-            sysex[outIdx] = 0xF7;
-
-            return sysex;
+            return Pss680SysExParser.CreateSysEx(Pss680Constants.FormatFmVoice, decoded);
         }
 
         /// <summary>
-        /// Parses a PSS-680 Format 00H SysEx message into a PSS680Voice instance.
+        /// Parses and strictly validates a PSS-680 Format 00H SysEx message into a PSS680Voice instance.
+        /// Accepts canonical 72-byte wire packets (F0..F7), 71-byte packets (with leading F0 or trailing F7),
+        /// as well as 70-byte raw payload without F0 or F7.
         /// </summary>
         public static PSS680Voice FromSysExMessage(byte[] sysex)
         {
             if (sysex == null)
                 throw new ArgumentNullException(nameof(sysex));
 
-            // Defensively normalize framing: allow canonical 72-byte (F0..F7), 71-byte (..F7), or 70-byte payload
-            ReadOnlySpan<byte> span = sysex;
-            if (span.Length > 0 && span[0] == 0xF0) span = span.Slice(1);
-            if (span.Length > 0 && span[^1] == 0xF7) span = span.Slice(0, span.Length - 1);
+            bool hasF0 = sysex.Length > 0 && sysex[0] == 0xF0;
+            bool hasF7 = sysex.Length > 0 && sysex[^1] == 0xF7;
+            int payloadLen = sysex.Length - (hasF0 ? 1 : 0) - (hasF7 ? 1 : 0);
 
-            if (span.Length < 70)
-                throw new ArgumentException($"SysEx message payload must contain at least 70 bytes (got {span.Length}).", nameof(sysex));
-
-            if (span[0] != Pss680Constants.ManufacturerYamaha || span[1] != Pss680Constants.InstrumentClassPss)
-                throw new FormatException($"Invalid Yamaha PSS header: Expected 0x43 0x76, got 0x{span[0]:X2} 0x{span[1]:X2}.");
-
-            if (span[2] != Pss680Constants.FormatFmVoice)
-                throw new FormatException($"Expected Format 00H (FM Voice), got 0x{span[2]:X2}.");
-
-            byte[] decoded = new byte[Pss680Constants.Format00DecodedByteCount];
-            int inIdx = 3;
-            int sum = 0;
-
-            for (int i = 0; i < decoded.Length; i++)
+            if (payloadLen != 70)
             {
-                byte hi = (byte)(span[inIdx++] & 0x0F);
-                byte lo = (byte)(span[inIdx++] & 0x0F);
-                byte b = (byte)((hi << 4) | lo);
-                decoded[i] = b;
-                sum += hi + lo;
+                throw new ArgumentException($"SysEx FM Voice message must contain 70 payload bytes (got {sysex.Length} total).", nameof(sysex));
             }
 
-            byte expectedChecksum = (byte)((128 - (sum & 0x7F)) & 0x7F);
-            byte actualChecksum = (byte)(span[inIdx] & 0x7F);
+            byte[] normalizedBuffer = new byte[72];
+            normalizedBuffer[0] = 0xF0;
+            normalizedBuffer[71] = 0xF7;
+            int srcOffset = hasF0 ? 1 : 0;
+            Buffer.BlockCopy(sysex, srcOffset, normalizedBuffer, 1, 70);
 
-            if (expectedChecksum != actualChecksum)
-                throw new InvalidOperationException($"SysEx checksum verification failed! Expected 0x{expectedChecksum:X2}, received 0x{actualChecksum:X2}.");
+            var packet = Pss680SysExParser.Parse(normalizedBuffer);
+            if (packet.Format != Pss680SysExFormat.FmVoiceData)
+            {
+                throw new FormatException($"Expected Format 00H (FM Voice), got 0x{packet.FormatByte:X2}.");
+            }
 
-            return FromDecodedBytes(decoded);
+            if (!packet.IsChecksumValid)
+            {
+                throw new InvalidOperationException($"SysEx checksum verification failed! Received 0x{packet.Checksum:X2}.");
+            }
+
+            return FromDecodedBytes(packet.DecodedBytes);
         }
 
         private static byte EncodeDt1Mul(FmOperatorParameters op)
         {
-            // Bit 6: sign bit (1 = negative, 0 = positive)
-            // Bits 5..4: 2-bit absolute value (0..3)
             int abs = Math.Clamp(Math.Abs(op.FineDetune), 0, 3);
             int sign = op.FineDetune < 0 ? 0x40 : 0x00;
             int dt1 = sign | ((abs & 0x03) << 4);

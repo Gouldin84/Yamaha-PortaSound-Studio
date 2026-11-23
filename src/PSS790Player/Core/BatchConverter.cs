@@ -59,6 +59,49 @@ namespace PSS790Player.Core
 
     public class BatchConverter
     {
+        private static RemapperOptions CloneOptionsForModel(RemapperOptions? source, string targetModel)
+        {
+            bool is680 = string.Equals(targetModel, "pss680", StringComparison.OrdinalIgnoreCase);
+            return new RemapperOptions
+            {
+                TargetModel = is680 ? "pss680" : "pss790",
+                EnablePolyphonyGuard = source?.EnablePolyphonyGuard ?? true,
+                ScalePitchBend = source?.ScalePitchBend ?? true,
+                PitchBendMode = source?.PitchBendMode ?? PitchBendScaleMode.Auto,
+                NeutralizeAcousticPitchBends = source?.NeutralizeAcousticPitchBends ?? true,
+                AutoCenterDanglingPitchBends = source?.AutoCenterDanglingPitchBends ?? true,
+                EmulateSustainPedal = source?.EmulateSustainPedal ?? true,
+                FoldExpressionPedal = source?.FoldExpressionPedal ?? true,
+                NormalizeAwmVelocities = source?.NormalizeAwmVelocities ?? true,
+                EnsureSetupPreRoll = source?.EnsureSetupPreRoll ?? true,
+                DefaultReverbBoost = is680 ? false : (source?.DefaultReverbBoost ?? true),
+                FilterUnsupportedControllers = source?.FilterUnsupportedControllers ?? true,
+                ForceRemap = source?.ForceRemap ?? false,
+                TempoMultiplier = source?.TempoMultiplier ?? 1.0,
+                AutoNormalizeSluggishTempo = source?.AutoNormalizeSluggishTempo ?? false,
+                MasterTranspose = source?.MasterTranspose ?? 0,
+                ChannelOctaveShifts = source?.ChannelOctaveShifts != null
+                    ? new Dictionary<int, int>(source.ChannelOctaveShifts)
+                    : new Dictionary<int, int>(),
+                ChannelVoiceOverrides = source?.ChannelVoiceOverrides != null
+                    ? new Dictionary<int, int?>(source.ChannelVoiceOverrides)
+                    : new Dictionary<int, int?>()
+            };
+        }
+
+        private static string ResolveTargetModel(string? explicitModel, string targetDirectory)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitModel))
+            {
+                return string.Equals(explicitModel, "pss680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790";
+            }
+
+            return targetDirectory.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) ||
+                   targetDirectory.Contains("PSS680", StringComparison.OrdinalIgnoreCase)
+                ? "pss680"
+                : "pss790";
+        }
+
         public static async Task<int> ConvertDirectoryAsync(
             string sourceDirectory,
             string targetDirectory,
@@ -72,13 +115,8 @@ namespace PSS790Player.Core
             if (!Directory.Exists(targetDirectory))
                 Directory.CreateDirectory(targetDirectory);
 
-            options ??= new RemapperOptions();
-            if (string.IsNullOrEmpty(options.TargetModel))
-            {
-                options.TargetModel = targetDirectory.Contains("PSS-680", StringComparison.OrdinalIgnoreCase) || targetDirectory.Contains("PSS680", StringComparison.OrdinalIgnoreCase)
-                    ? "pss680"
-                    : "pss790";
-            }
+            string resolvedModel = ResolveTargetModel(options?.TargetModel, targetDirectory);
+            var effectiveOptions = CloneOptionsForModel(options, resolvedModel);
 
             var files = Directory.GetFiles(sourceDirectory, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
@@ -106,8 +144,8 @@ namespace PSS790Player.Core
                     try
                     {
                         var sourceMidi = MidiFile.Read(file, Constants.DefaultReadingSettings);
-                        var remapped = Remapper.Remap(sourceMidi, options);
-                        Remapper.SaveRemapped(remapped, destFile, options.TargetModel);
+                        var remapped = Remapper.Remap(sourceMidi, effectiveOptions);
+                        Remapper.SaveRemapped(remapped, destFile, effectiveOptions.TargetModel);
                     }
                     catch (Exception)
                     {
@@ -126,8 +164,8 @@ namespace PSS790Player.Core
             string sourceDirectory,
             string target790Dir,
             string target680Dir,
-            RemapperOptions? options790 = null,
-            RemapperOptions? options680 = null,
+            RemapperOptions? options790,
+            RemapperOptions? options680,
             bool convert790 = true,
             bool convert680 = true,
             IProgress<(int Current, int Total, string FileName)>? progress = null,
@@ -154,12 +192,9 @@ namespace PSS790Player.Core
             int total = files.Count * targetMultiplier;
             int completed = 0;
 
-            var opt790 = options790 != null ? options790 : new RemapperOptions();
-            opt790.TargetModel = "pss790";
-
-            var opt680 = options680 != null ? options680 : new RemapperOptions();
-            opt680.TargetModel = "pss680";
-            opt680.DefaultReverbBoost = false; // PSS-680 has no DSP reverb
+            // Always clone options independently per model so shared instances are never mutated in place
+            var opt790 = CloneOptionsForModel(options790, "pss790");
+            var opt680 = CloneOptionsForModel(options680, "pss680");
 
             await Task.Run(() =>
             {
@@ -260,7 +295,7 @@ namespace PSS790Player.Core
                 Directory.CreateDirectory(targetDir);
             }
 
-            string resolvedModel = targetModel ?? (targetDir.Contains("680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
+            string resolvedModel = ResolveTargetModel(targetModel, targetDir);
 
             var sourceFiles = Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
@@ -280,6 +315,12 @@ namespace PSS790Player.Core
                 var relPath = kvp.Key;
                 var srcFullPath = kvp.Value;
 
+                bool isXg = Remapper.IsXgMidiFile(srcFullPath);
+                if (isXg)
+                {
+                    analysis.TotalXgFiles++;
+                }
+
                 if (!targetFiles.TryGetValue(relPath, out var tgtFullPath))
                 {
                     analysis.MissingInTarget.Add(relPath);
@@ -291,20 +332,10 @@ namespace PSS790Player.Core
 
                     bool isOutdated = srcTime > tgtTime;
 
-                    // Intelligent Algorithm Version Check:
-                    // If source is a Yamaha XG file and target was converted with legacy algorithm (lacking v2 marker),
-                    // flag as outdated for the new XG conversion engine!
-                    if (!isOutdated)
+                    if (!isOutdated && isXg && !Remapper.HasAlgorithmV2MarkerFile(tgtFullPath, resolvedModel))
                     {
-                        if (Remapper.IsXgMidiFile(srcFullPath))
-                        {
-                            analysis.TotalXgFiles++;
-                            if (!Remapper.HasAlgorithmV2MarkerFile(tgtFullPath, resolvedModel))
-                            {
-                                isOutdated = true;
-                                analysis.XgUpgradesInTarget.Add(relPath);
-                            }
-                        }
+                        isOutdated = true;
+                        analysis.XgUpgradesInTarget.Add(relPath);
                     }
 
                     if (isOutdated)
@@ -344,9 +375,23 @@ namespace PSS790Player.Core
             if (!Directory.Exists(targetDir))
                 Directory.CreateDirectory(targetDir);
 
-            AppPaths.SyncMirroredDirectories();
+            // Mirror subdirectories strictly from sourceDir -> targetDir without touching unrelated global folders
+            try
+            {
+                foreach (var dir in Directory.GetDirectories(sourceDir, "*", SearchOption.AllDirectories))
+                {
+                    var rel = Path.GetRelativePath(sourceDir, dir);
+                    var mirroredTarget = Path.Combine(targetDir, rel);
+                    if (!Directory.Exists(mirroredTarget))
+                    {
+                        Directory.CreateDirectory(mirroredTarget);
+                    }
+                }
+            }
+            catch { }
 
-            var analysis = AnalyzeSync(sourceDir, targetDir, options.RemapperOptions?.TargetModel);
+            string targetModel = ResolveTargetModel(options.RemapperOptions?.TargetModel, targetDir);
+            var analysis = AnalyzeSync(sourceDir, targetDir, targetModel);
 
             var filesToConvert = new List<(string RelPath, string Action)>();
 
@@ -386,6 +431,8 @@ namespace PSS790Player.Core
             int totalOps = filesToConvert.Count + orphansToDelete.Count;
             int completedOps = 0;
 
+            var modelOpts = CloneOptionsForModel(options.RemapperOptions, targetModel);
+
             await Task.Run(() =>
             {
                 // 1. Process Conversions & Updates
@@ -403,15 +450,6 @@ namespace PSS790Player.Core
 
                     try
                     {
-                        var targetModel = options.RemapperOptions?.TargetModel ?? (targetDir.Contains("680", StringComparison.OrdinalIgnoreCase) ? "pss680" : "pss790");
-                        var modelOpts = new RemapperOptions
-                        {
-                            TargetModel = targetModel,
-                            EnablePolyphonyGuard = options.RemapperOptions?.EnablePolyphonyGuard ?? true,
-                            DefaultReverbBoost = options.RemapperOptions?.DefaultReverbBoost ?? true,
-                            EmulateSustainPedal = options.RemapperOptions?.EmulateSustainPedal ?? true
-                        };
-
                         var sourceMidi = MidiFile.Read(srcPath, Constants.DefaultReadingSettings);
                         var remapped = Remapper.Remap(sourceMidi, modelOpts);
                         Remapper.SaveRemapped(remapped, destPath, targetModel);
@@ -441,7 +479,7 @@ namespace PSS790Player.Core
                         if (File.Exists(orphanPath))
                         {
                             File.Delete(orphanPath);
-                            overrideStore.RemoveOverrides(orphanPath);
+                            overrideStore.ResetOverrides(orphanPath, targetModel);
                             result.RemovedOrphansCount++;
                         }
                     }
@@ -455,7 +493,7 @@ namespace PSS790Player.Core
                 }
 
                 // 3. Clean up empty directories across target and source
-                if (options?.PruneEmptyDirectories ?? true)
+                if (options.PruneEmptyDirectories)
                 {
                     result.PrunedDirectoriesCount += PruneEmptyDirectories(targetDir);
                     result.PrunedDirectoriesCount += PruneEmptyDirectories(sourceDir);
@@ -467,7 +505,6 @@ namespace PSS790Player.Core
 
         /// <summary>
         /// Recursively removes all empty subdirectories in bottom-up order across a library folder.
-        /// A directory is pruned if it contains zero files and zero remaining subdirectories.
         /// </summary>
         public static int PruneEmptyDirectories(string directoryPath)
         {
@@ -478,20 +515,17 @@ namespace PSS790Player.Core
             try
             {
                 var dirs = Directory.GetDirectories(directoryPath, "*", SearchOption.AllDirectories)
-                    .OrderByDescending(d => d.Length) // Deepest first
+                    .OrderByDescending(d => d.Length)
                     .ToList();
 
                 foreach (var dir in dirs)
                 {
                     try
                     {
-                        if (Directory.Exists(dir))
+                        if (Directory.Exists(dir) && !Directory.EnumerateFileSystemEntries(dir).Any())
                         {
-                            if (Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Length == 0)
-                            {
-                                Directory.Delete(dir, recursive: true);
-                                pruned++;
-                            }
+                            Directory.Delete(dir, recursive: false);
+                            pruned++;
                         }
                     }
                     catch
@@ -528,7 +562,7 @@ namespace PSS790Player.Core
         {
             var combinedResult = new LibrarySyncResult();
 
-            // 1. Sync PSS-790 library
+            // 1. Sync PSS-790 library (preserving caller RemapperOptions)
             var opt790 = new LibrarySyncOptions
             {
                 ConvertMissing = options?.ConvertMissing ?? true,
@@ -536,7 +570,7 @@ namespace PSS790Player.Core
                 RemoveOrphans = options?.RemoveOrphans ?? true,
                 PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
-                RemapperOptions = new RemapperOptions { TargetModel = "pss790" }
+                RemapperOptions = CloneOptionsForModel(options?.RemapperOptions, "pss790")
             };
 
             var res790 = await ExecuteSyncAsync(sourceDir, target790Dir, opt790, overrideStore, progress, cancellationToken);
@@ -547,7 +581,7 @@ namespace PSS790Player.Core
 
             if (cancellationToken.IsCancellationRequested) return combinedResult;
 
-            // 2. Sync PSS-680 library
+            // 2. Sync PSS-680 library (preserving caller RemapperOptions with model-specific overrides)
             var opt680 = new LibrarySyncOptions
             {
                 ConvertMissing = options?.ConvertMissing ?? true,
@@ -555,7 +589,7 @@ namespace PSS790Player.Core
                 RemoveOrphans = options?.RemoveOrphans ?? true,
                 PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
-                RemapperOptions = new RemapperOptions { TargetModel = "pss680" }
+                RemapperOptions = CloneOptionsForModel(options?.RemapperOptions, "pss680")
             };
 
             var res680 = await ExecuteSyncAsync(sourceDir, target680Dir, opt680, overrideStore, progress, cancellationToken);

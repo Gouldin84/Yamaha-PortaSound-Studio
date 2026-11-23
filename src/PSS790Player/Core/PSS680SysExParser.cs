@@ -1,5 +1,4 @@
 using System;
-using System.IO;
 
 namespace PSS790Player.Core
 {
@@ -25,15 +24,36 @@ namespace PSS790Player.Core
     public static class Pss680SysExParser
     {
         /// <summary>
-        /// Calculates the Yamaha 7-bit two's complement checksum across an array of decoded data bytes.
-        /// Formula: Checksum = (128 - (Sum(data) & 0x7F)) & 0x7F
+        /// Calculates the Yamaha 7-bit two's complement checksum across transmitted 4-bit wire data nibbles.
+        /// Formula: Checksum = (128 - (Sum(nibbles) &amp; 0x7F)) &amp; 0x7F
         /// </summary>
-        public static byte CalculateChecksum(ReadOnlySpan<byte> decodedBytes)
+        public static byte CalculateChecksum(ReadOnlySpan<byte> nibbles)
+        {
+            int sum = 0;
+            for (int i = 0; i < nibbles.Length; i++)
+            {
+                byte n = nibbles[i];
+                if (n > 0x0F)
+                {
+                    throw new FormatException($"Invalid nibble 0x{n:X2} at index {i}: wire data nibbles must be <= 0x0F.");
+                }
+                sum += n;
+            }
+            return (byte)((128 - (sum & 0x7F)) & 0x7F);
+        }
+
+        /// <summary>
+        /// Calculates the Yamaha 7-bit wire-nibble checksum directly from decoded 8-bit payload bytes without allocating.
+        /// Equivalent to CalculateChecksum(Nibblize(decodedBytes)).
+        /// </summary>
+        public static byte CalculateChecksumFromDecoded(ReadOnlySpan<byte> decodedBytes)
         {
             int sum = 0;
             for (int i = 0; i < decodedBytes.Length; i++)
             {
-                sum += decodedBytes[i];
+                byte b = decodedBytes[i];
+                sum += (b >> 4) & 0x0F;
+                sum += b & 0x0F;
             }
             return (byte)((128 - (sum & 0x7F)) & 0x7F);
         }
@@ -56,6 +76,7 @@ namespace PSS790Player.Core
 
         /// <summary>
         /// Combines pairs of 4-bit nibbles into bytes where the first nibble is the high 4 bits.
+        /// Strictly validates that every wire nibble is &lt;= 0x0F.
         /// </summary>
         public static byte[] Denibblize(ReadOnlySpan<byte> nibbles)
         {
@@ -66,15 +87,19 @@ namespace PSS790Player.Core
             int inIdx = 0;
             for (int i = 0; i < decoded.Length; i++)
             {
-                byte hi = (byte)(nibbles[inIdx++] & 0x0F);
-                byte lo = (byte)(nibbles[inIdx++] & 0x0F);
+                byte hi = nibbles[inIdx++];
+                byte lo = nibbles[inIdx++];
+                if (hi > 0x0F || lo > 0x0F)
+                {
+                    throw new FormatException($"Corrupt or malformed wire nibble (expected <= 0x0F): hi=0x{hi:X2}, lo=0x{lo:X2} at byte index {i}.");
+                }
                 decoded[i] = (byte)((hi << 4) | lo);
             }
             return decoded;
         }
 
         /// <summary>
-        /// Identifies and parses any Yamaha PSS-680 / 480 / 780 SysEx message.
+        /// Identifies, validates, and parses any Yamaha PSS-680 / 480 / 780 SysEx message.
         /// </summary>
         public static Pss680SysExPacket Parse(ReadOnlySpan<byte> rawPacket)
         {
@@ -88,6 +113,9 @@ namespace PSS790Player.Core
                 throw new FormatException($"Invalid Yamaha PSS header: Expected F0 43 76, got F0 {rawPacket[1]:X2} {rawPacket[2]:X2}.");
 
             byte formatByte = rawPacket[3];
+            if (formatByte > 0x7F)
+                throw new FormatException($"Invalid format byte 0x{formatByte:X2}: must be 7-bit (<= 0x7F).");
+
             var format = formatByte switch
             {
                 0x00 => Pss680SysExFormat.FmVoiceData,
@@ -98,20 +126,44 @@ namespace PSS790Player.Core
             };
 
             int nibbleCount = rawPacket.Length - 6; // Exclude F0, 43, 76, format, checksum, F7
+            if (nibbleCount < 2)
+                throw new FormatException($"SysEx payload too small: expected at least 2 nibbles, got {nibbleCount}.");
+
             if (nibbleCount % 2 != 0)
                 throw new FormatException($"Odd number of nibbles in SysEx payload: {nibbleCount}.");
 
             var nibbleSpan = rawPacket.Slice(4, nibbleCount);
             byte[] decoded = Denibblize(nibbleSpan);
 
-            byte receivedChecksum = (byte)(rawPacket[^2] & 0x7F);
-            byte computedChecksum = CalculateChecksum(decoded);
+            byte receivedChecksum = rawPacket[^2];
+            if (receivedChecksum > 0x7F)
+                throw new FormatException($"Corrupt checksum byte 0x{receivedChecksum:X2}: must be a 7-bit MIDI data byte (<= 0x7F).");
+
+            byte computedChecksum = CalculateChecksum(nibbleSpan);
+
+            int? expectedDecoded = format switch
+            {
+                Pss680SysExFormat.FmVoiceData => Pss680Constants.Format00DecodedByteCount,
+                Pss680SysExFormat.MelodyMemory => Pss680Constants.Format01DecodedByteCount,
+                Pss680SysExFormat.ChordMemory => Pss680Constants.Format02DecodedByteCount,
+                Pss680SysExFormat.RhythmPattern => Pss680Constants.Format03DecodedByteCount,
+                _ => null
+            };
+
+            if (expectedDecoded.HasValue && decoded.Length != expectedDecoded.Value)
+            {
+                throw new FormatException($"Payload size mismatch for Format 0x{formatByte:X2}: expected {expectedDecoded.Value} decoded bytes, got {decoded.Length}.");
+            }
+
+            string bankLabel = decoded.Length > 0 && decoded[0] <= 4
+                ? $"Bank {decoded[0] + 1}"
+                : $"Bank Raw 0x{(decoded.Length > 0 ? decoded[0] : (byte)0):X2}";
 
             string description = format switch
             {
-                Pss680SysExFormat.FmVoiceData => $"FM 2-Operator Voice Data (Bank {(decoded.Length > 0 ? decoded[0] + 1 : 1)})",
+                Pss680SysExFormat.FmVoiceData => $"FM 2-Operator Voice Data ({bankLabel})",
                 Pss680SysExFormat.MelodyMemory => "Melody Memory (5 Banks)",
-                Pss680SysExFormat.ChordMemory => $"Chord Memory Data (Bank {(decoded.Length > 0 ? decoded[0] + 1 : 1)})",
+                Pss680SysExFormat.ChordMemory => $"Chord Memory Data ({bankLabel})",
                 Pss680SysExFormat.RhythmPattern => "Rhythm Pattern Data (Custom Drummer)",
                 _ => $"Unknown PSS Format 0x{formatByte:X2}"
             };
@@ -128,12 +180,32 @@ namespace PSS790Player.Core
         }
 
         /// <summary>
-        /// Creates a full SysEx message given a format ID and decoded data bytes.
+        /// Creates a full wire-framed SysEx message given a format ID and decoded data bytes.
         /// </summary>
         public static byte[] CreateSysEx(byte formatByte, ReadOnlySpan<byte> decodedBytes)
         {
+            if (formatByte > 0x7F)
+                throw new ArgumentException($"Invalid format byte 0x{formatByte:X2}: must be 7-bit (<= 0x7F).", nameof(formatByte));
+
+            if (decodedBytes.Length == 0)
+                throw new ArgumentException("Decoded bytes payload cannot be empty.", nameof(decodedBytes));
+
+            int expectedLen = formatByte switch
+            {
+                Pss680Constants.FormatFmVoice => Pss680Constants.Format00DecodedByteCount,
+                Pss680Constants.FormatMelodyMemory => Pss680Constants.Format01DecodedByteCount,
+                Pss680Constants.FormatChordMemory => Pss680Constants.Format02DecodedByteCount,
+                Pss680Constants.FormatRhythmPattern => Pss680Constants.Format03DecodedByteCount,
+                _ => -1
+            };
+
+            if (expectedLen > 0 && decodedBytes.Length != expectedLen)
+            {
+                throw new ArgumentException($"Decoded byte count {decodedBytes.Length} does not match expected {expectedLen} for format 0x{formatByte:X2}.", nameof(decodedBytes));
+            }
+
             byte[] nibbles = Nibblize(decodedBytes);
-            byte checksum = CalculateChecksum(decodedBytes);
+            byte checksum = CalculateChecksum(nibbles);
 
             byte[] sysex = new byte[4 + nibbles.Length + 2];
             sysex[0] = 0xF0;

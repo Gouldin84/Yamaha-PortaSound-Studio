@@ -45,15 +45,13 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void SysEx_ExtractPackets_FramesRawBytesWithoutF0F7()
+        public void SysEx_ExtractPackets_RejectsRawBytesWithoutF0F7()
         {
             byte[] raw = new byte[] { 0x43, 0x10, 0x27 };
             var extracted = SysExManager.ExtractPackets(raw);
 
-            Assert.Single(extracted);
-            Assert.Equal(0xF0, extracted[0][0]);
-            Assert.Equal(0xF7, extracted[0][^1]);
-            Assert.Equal(0x43, extracted[0][1]);
+            // Secure behavior: unframed or malformed bytes must return empty rather than dangerous auto-framing
+            Assert.Empty(extracted);
         }
 
         [Fact]
