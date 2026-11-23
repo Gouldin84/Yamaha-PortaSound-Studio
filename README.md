@@ -1,6 +1,6 @@
 # Yamaha PortaSound Studio
 
-A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for classic **Yamaha PortaSound** keyboard synthesizers.
+A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for vintage **Yamaha PortaSound** keyboard synthesizers (**PSS-790**, **PSS-680**, **PSS-480**, and **PSS-780**).
 
 [![Release](https://img.shields.io/badge/release-v2.6.12-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -17,14 +17,30 @@ A standalone MIDI workstation, real-time voice remapper, and multi-tab sound des
 
 ---
 
-## Supported Synthesizers
+## Supported Synthesizers & Sister Models
 
-| Model Era | Tone Generator | Voices & Polyphony | Key Hardware Capabilities |
+| Model | Release | Tone Generator | Voices & Polyphony | Key Hardware Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **Yamaha PSS-790** | 1990 | Advanced Wave Memory (AWM PCM) | 100 Voices • 28 Polyphony | Physical Vector joystick, 50 styles, 16-channel multi-timbral MIDI, DSP reverb |
+| **Yamaha PSS-680** | 1988 | 2-Operator FM (YM3420 / OPLL-P) | 100 Voices + 5 User Banks • 12 Polyphony | 32 Hand Percussion pads, 5 FM user banks, Sound Source Mode 99 |
+| **Yamaha PSS-480** | 1988 | 2-Operator FM (YM3420 / OPLL-P) | 100 Voices + 5 User Banks • 12 Polyphony | Compact sibling to PSS-680; identical FM engine and Format 00H SysEx |
+| **Yamaha PSS-780** | 1989 | 2-Operator FM (YM3420 / OPLL-P) | 100 Voices + 5 User Banks • 12 Polyphony | Full-featured sibling to PSS-680; identical FM engine and Format 00H SysEx |
+
+Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI files sound distorted, transposed, or unaligned on original hardware. **Yamaha PortaSound Studio** provides real-time translation, hardware playback, direct recording, deep sound design, and bidirectional SysEx preset management.
+
+---
+
+## Hardware & Protocol Compatibility Matrix
+
+| Feature / Protocol | Yamaha PSS-790 | Yamaha PSS-680 / 480 / 780 | Studio Implementation |
 | :--- | :--- | :--- | :--- |
-| **Yamaha PSS-790** (1990) | Advanced Wave Memory (AWM) | 100 Voices • 28 Polyphony | Vector synth joystick, 50 styles, 16-channel multi-timbral MIDI |
-| **Yamaha PSS-680 / 480 / 780** (1988–89) | 2-Operator FM (YM3420) | 100 Voices + 5 User Banks • 12 Polyphony | 32 Hand Percussion sounds, 5 FM user banks, Sound Source Mode 99 |
-
-Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI files sound distorted or unaligned on original hardware. **Yamaha PortaSound Studio** provides real-time translation, hardware playback, direct recording, deep sound design, and bidirectional SysEx preset management.
+| **Tone Generation** | 16-bit AWM (Sample ROM) | 2-Operator FM Synthesis (YM3420) | Model-aware voice translation tables |
+| **Multi-Timbral Mode** | Multi-Receive (`<E 1>` to `<E 16>`) | Sound Source Mode 99 (`c.99`) | Initialized via 1-click Quick SysEx commands |
+| **Volume & Balance** | Standard CC 7 (Volume) & CC 10 (Pan) | **Velocity-baked dynamics** ($24 \le v \le 118$) | Pre-bakes CC 7 / CC 11 into Note-On velocities for FM hardware |
+| **Percussion Channel** | Channel 16 (AWM Drum Set) | Channel 16 (32 Hand Percussion notes) | Automatic GM percussion note remapping |
+| **Polyphony Guard** | 28 physical voices (culls clutter) | 12 physical FM voices | Phase 2 chord culling shields Melody, Bass & Core Drums |
+| **Voice Editing SysEx** | Vector Synthesis (`overrides.json`) | Format 00H (66-nibble two's complement checksum) | Bidirectional parameter editor (38 voice params) |
+| **Memory Dumps** | Bulk SysEx | Formats 00H, 01H (Melody), 02H (Chord), 03H (Rhythm) | Integrated Hex Viewer & Bulk Dump Explorer |
 
 ---
 
@@ -33,7 +49,7 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 ### 📻 Tab 1: Player & Voice Remapper
 - **Real-Time Translation**: Translates General MIDI files on the fly into native PSS-790 (Chart 2 AWM) or PSS-680 (2-Op FM) instrument tables and percussion notes.
 - **Smart Polyphony Guard**: Prevents hardware voice-stealing bugs by dynamically respecting model limits (28 voices on PSS-790, 12 voices on PSS-680 Mode 99), protecting lead melodies and kick/snare while culling background clutter.
-- **FM User Banks & Library Presets (PSS-680)**: Program Changes 100–107 select the 5 Digital Synthesizer User Banks. Select any of the 23 curated FM presets in the mixer for instant 1-click SysEx upload and playback.
+- **FM User Banks & Library Presets (PSS-680 / 480 / 780)**: Program Changes 100–104 select the 5 Digital Synthesizer User Banks. Select any of the 25 curated FM presets in the mixer for instant 1-click SysEx upload and auditioning.
 - **Vector Quad-Link Mode (PSS-790)**: Clones Channel 1 lead melodies across Channels 1–4 with dynamic CC 7 volume balancing and synchronized LED activity for true 4-voice vector playback during songs.
 - **16-Channel Mixer**: Responsive activity LEDs, volume faders, mute/solo buttons, and per-song voice memory (`overrides.json`).
 - **3-Way Mirrored Library & Sync**: Jukebox tree browser with drag-and-drop reorganization and 1-click symmetrical sync across `GM Midi`, `PSS-790 Midi`, and `PSS-680 Midi`.
@@ -51,7 +67,7 @@ Because vintage Yamaha synthesizers predate General MIDI (GM), standard MIDI fil
 - **PSS-680 FM Sound Designer**:
   - Full 4-strip modular rack layout: Modulator, Carrier, Modulation & LFO, and Bank / Preset Vault.
   - Controls all 38 voice parameters, including **18 hidden synthesis parameters** not accessible from keyboard buttons (fine/coarse detune, decay rates, key scaling, independent carrier waveforms, and AMS tremolo depth).
-  - 23 iconic factory presets (*Take On Me Lead, LatelyBass, DX7 Ballad EP, Axel F Brass, Stranger Things Arp Bass, Sonic 2 Chemical Plant*).
+  - 25 iconic factory & custom presets (*Concert Grand Piano, Honky-Tonk Upright, Take On Me Lead, LatelyBass, DX7 Ballad EP, Axel F Brass, Stranger Things Arp Bass, Sonic 2 Chemical Plant*).
   - Musically constrained intelligent randomizer for instant patch creation.
   - Real-time Format 00H SysEx transmission and hardware audition button.
 - **PSS-790 Vector Synthesizer**:
@@ -78,7 +94,7 @@ Music\Midi\
 ├── PSS-680 Midi\         # Converted & native files for Yamaha PSS-680 (FM)
 ├── Recordings\           # Captured takes from hardware MIDI IN
 └── SysEx Library\
-    ├── PSS-680 Voices\   # 23 Factory & custom .syx FM voices (Format 00H)
+    ├── PSS-680 Voices\   # 25 Factory & custom .syx FM voices (Format 00H)
     ├── PSS-790 Vectors\  # 30 Factory & custom .json vector synthesis presets
     └── Backups\          # Bulk RAM memory and sequencer dumps
 ```
