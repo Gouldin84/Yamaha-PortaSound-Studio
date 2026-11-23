@@ -1,0 +1,44 @@
+name: 💡 Feature Request or Preset Suggestion
+description: Propose a new feature, workflow improvement, or iconic FM / Vector preset.
+title: "[Feature]: <Short title>"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea to make Yamaha PortaSound Studio better? We'd love to hear it!
+
+  - type: dropdown
+    id: feature_category
+    attributes:
+      label: Category
+      options:
+        - Player & Voice Remapper (Tab 1)
+        - Recording Studio & Take Vault (Tab 2)
+        - FM Sound Designer / Vector Synthesizer (Tab 3)
+        - New Preset Suggestion (.syx FM or Vector)
+        - Hardware Compatibility / SysEx Protocol
+        - Handheld & UI Controls
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear description of the limitation or difficulty you encountered.
+      placeholder: e.g. I'm always frustrated when...
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the Solution You'd Like
+      description: A clear description of what you want to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe Alternatives You've Considered
+      description: Any alternative solutions or workarounds you've thought about.

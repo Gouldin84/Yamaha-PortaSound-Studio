@@ -1,0 +1,76 @@
+name: 🎹 Hardware Compatibility & Sound Feedback
+description: Report your testing experience and sound fidelity on physical Yamaha PortaSound hardware.
+title: "[Hardware Test]: <Model> - <Summary>"
+labels: ["hardware-testing", "community-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping test Yamaha PortaSound Studio on physical hardware!
+        Your feedback on voice balance, volume response, polyphony, and USB-MIDI interface timing helps refine the playback engines.
+
+  - type: dropdown
+    id: keyboard_model
+    attributes:
+      label: Synthesizer Model
+      description: Select your physical keyboard synthesizer.
+      options:
+        - Yamaha PSS-790 (AWM)
+        - Yamaha PSS-680 (2-Op FM)
+        - Yamaha PSS-480 (2-Op FM)
+        - Yamaha PSS-780 (2-Op FM)
+        - Other Yamaha PortaSound / FM Synthesizer
+    validations:
+      required: true
+
+  - type: input
+    id: midi_interface
+    attributes:
+      label: USB-MIDI Interface / Sound Card
+      description: What MIDI hardware interface connects your PC to the keyboard?
+      placeholder: e.g. Roland UM-ONE mk2, Yamaha UX16, Focusrite Scarlett 2i4 (DIN), Generic USB-to-MIDI Cable
+    validations:
+      required: true
+
+  - type: input
+    id: os_hardware
+    attributes:
+      label: Operating System & Host Device
+      description: Host device and OS version.
+      placeholder: e.g. Windows 11 Pro 23H2 (Desktop), Windows 11 Home (ASUS ROG Ally Z1 Extreme)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: features_tested
+    attributes:
+      label: Features Tested
+      description: Check all features you evaluated on your hardware.
+      options:
+        - label: Multi-channel MIDI Playback (General MIDI remapping)
+        - label: Channel Volume / Mixer Faders (Dynamic velocity balance on PSS-680 / CC 7 on PSS-790)
+        - label: Polyphony / Note Stealing (No unexpected clicks, voice dropouts, or truncated bass)
+        - label: FM Voice SysEx Upload & Audition (PSS-680 / 480 / 780 Sound Designer)
+        - label: 2D Vector Synthesizer & LFO Orbit Modulation (PSS-790)
+        - label: Direct Hardware Recording (MIDI IN recording in Tab 2)
+        - label: Front-Panel Hand Percussion / Custom Drummer Pad mapping
+
+  - type: textarea
+    id: sound_experience
+    attributes:
+      label: Sound Quality & Playback Experience
+      description: How did the songs sound on your hardware? Were instrument levels balanced? Any clicks, hangs, or distorted timbres?
+      placeholder: |
+        - General Impression:
+        - Bass & Melody Balance:
+        - Drums / Percussion:
+        - Any unexpected behavior:
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_files
+    attributes:
+      label: MIDI Songs or SysEx Files Tested
+      description: List songs or files tested (you can also drag and drop zip/mid files here).
+      placeholder: e.g. Sonic 2 Chemical Plant, Take On Me, Axel F, Touhou Bad Apple

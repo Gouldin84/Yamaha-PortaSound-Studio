@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Community Discussions & Preset Sharing
+    url: https://github.com/Gouldin84/Yamaha-PortaSound-Studio/discussions
+    about: Ask questions, share custom .syx FM presets or Vector presets, and chat with fellow PortaSound owners.
+  - name: 📖 Hardware Setup Guide & Documentation
+    url: https://github.com/Gouldin84/Yamaha-PortaSound-Studio#hardware-setup-guide
+    about: View wiring diagrams, multi-timbral mode settings, and quick start instructions.

@@ -6,7 +6,14 @@ A standalone MIDI workstation, real-time voice remapper, and multi-tab sound des
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-200%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-203%20Passing-brightgreen.svg)]()
+
+> [!TIP]
+> ### 🎹 Community & Hardware Testers Wanted!
+> We actively invite feedback from musicians, retro gamers, and synth enthusiasts testing on physical Yamaha PortaSound hardware (**PSS-790**, **PSS-680**, **PSS-480**, and **PSS-780**).
+> - **Report Hardware Experiences**: Tell us about your USB-MIDI interface, sound balance, or hardware behavior via the [Hardware Compatibility Feedback Form](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/issues/new?template=hardware_feedback.yml).
+> - **Share Sound Patches & Chat**: Share custom `.syx` FM presets and `.json` Vector synth presets in [GitHub Discussions](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/discussions).
+> - **Report Software Issues**: File bug reports using the [Bug Report Form](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/issues/new?template=bug_report.yml).
 
 ---
 
@@ -139,7 +146,7 @@ Pre-built standalone single-file executables are available on the **[GitHub Rele
 git clone https://github.com/Gouldin84/Yamaha-PortaSound-Studio.git
 cd Yamaha-PortaSound-Studio
 
-# Run automated test suite (196 tests)
+# Run automated test suite (203 tests)
 dotnet test
 
 # Build single-file release executable
