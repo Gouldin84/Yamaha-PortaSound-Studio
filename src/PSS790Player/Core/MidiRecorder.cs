@@ -110,7 +110,10 @@ namespace PSS790Player.Core
         public MidiRecorder()
         {
             _tickTimer = new System.Timers.Timer(100);
-            _tickTimer.Elapsed += (s, e) => OnTickTimer();
+            _tickTimer.Elapsed += (s, e) =>
+            {
+                try { OnTickTimer(); } catch { }
+            };
         }
 
         public static List<string> GetInputDeviceNames()
@@ -486,28 +489,31 @@ namespace PSS790Player.Core
 
         private void OnTickTimer()
         {
-            if (_state != RecorderState.Recording) return;
-
-            int bpmSnapshot;
-            lock (_lock)
+            if (_isDisposed || _state != RecorderState.Recording) return;
+            try
             {
-                bpmSnapshot = _bpm;
+                int bpmSnapshot;
+                lock (_lock)
+                {
+                    bpmSnapshot = _bpm;
+                }
+
+                double elapsedSec = _elapsedStopwatch.Elapsed.TotalSeconds;
+                double beatsPerSec = bpmSnapshot / 60.0;
+                double totalBeats = elapsedSec * beatsPerSec;
+                int bar = (int)(totalBeats / 4.0) + 1;
+                int beat = (int)(totalBeats % 4.0) + 1;
+
+                Tick?.Invoke(this, new RecorderTickEventArgs
+                {
+                    ElapsedSeconds = elapsedSec,
+                    EventCount = Volatile.Read(ref _totalEventsRecorded),
+                    NoteCount = Volatile.Read(ref _totalNotesRecorded),
+                    CurrentBar = bar,
+                    CurrentBeat = beat
+                });
             }
-
-            double elapsedSec = _elapsedStopwatch.Elapsed.TotalSeconds;
-            double beatsPerSec = bpmSnapshot / 60.0;
-            double totalBeats = elapsedSec * beatsPerSec;
-            int bar = (int)(totalBeats / 4.0) + 1;
-            int beat = (int)(totalBeats % 4.0) + 1;
-
-            Tick?.Invoke(this, new RecorderTickEventArgs
-            {
-                ElapsedSeconds = elapsedSec,
-                EventCount = Volatile.Read(ref _totalEventsRecorded),
-                NoteCount = Volatile.Read(ref _totalNotesRecorded),
-                CurrentBar = bar,
-                CurrentBeat = beat
-            });
+            catch { }
         }
 
         private void NotifyState()

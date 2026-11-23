@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Interop;
@@ -11,6 +11,7 @@ namespace PSS790Player
     {
         private const int WM_DEVICECHANGE = 0x0219;
         private UiBridge? _uiBridge;
+        private HwndSource? _hwndSource;
 
         public MainWindow()
         {
@@ -34,13 +35,11 @@ namespace PSS790Player
         {
             try
             {
-                // Set userDataFolder to local appdata to ensure single-file exe compatibility
                 var userDataFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PSS790Player", "WebView2");
                 var env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
 
                 await MainWebView.EnsureCoreWebView2Async(env);
 
-                // Locate WebUI directory: prefer dev path if in source tree, then binary base dir, then local app data fallback
                 string webUiDir;
                 var devPath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "WebUI"));
                 var baseWebUi = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI");
@@ -72,7 +71,6 @@ namespace PSS790Player
                 }
                 catch { }
 
-                // Clear HTTP disk cache to ensure fresh assets between updates
                 try
                 {
                     await MainWebView.CoreWebView2.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
@@ -82,10 +80,9 @@ namespace PSS790Player
                 _uiBridge = new UiBridge(MainWebView);
                 MainWebView.CoreWebView2.WebMessageReceived += (s, args) =>
                 {
-                    _uiBridge.HandleMessage(args.WebMessageAsJson);
+                    _uiBridge?.HandleMessage(args.WebMessageAsJson);
                 };
 
-                // Proactively push initial data as soon as web navigation completes
                 MainWebView.CoreWebView2.NavigationCompleted += (s, args) =>
                 {
                     if (args.IsSuccess && _uiBridge != null)
@@ -152,8 +149,8 @@ namespace PSS790Player
             try
             {
                 var helper = new WindowInteropHelper(this);
-                var source = HwndSource.FromHwnd(helper.Handle);
-                source?.AddHook(HwndMessageHook);
+                _hwndSource = HwndSource.FromHwnd(helper.Handle);
+                _hwndSource?.AddHook(HwndMessageHook);
             }
             catch { }
         }
@@ -169,7 +166,15 @@ namespace PSS790Player
 
         private void MainWindow_Closed(object? sender, EventArgs e)
         {
+            try
+            {
+                _hwndSource?.RemoveHook(HwndMessageHook);
+                _hwndSource = null;
+            }
+            catch { }
+
             _uiBridge?.Dispose();
+            _uiBridge = null;
         }
     }
 }

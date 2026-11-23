@@ -99,7 +99,10 @@ namespace PSS790Player.Core
             {
                 AutoReset = false
             };
-            _dumpIdleTimer.Elapsed += (s, e) => OnDumpCompletedAutoSave();
+            _dumpIdleTimer.Elapsed += (s, e) =>
+            {
+                try { OnDumpCompletedAutoSave(); } catch { }
+            };
         }
 
         public void StartCapture()
@@ -213,22 +216,27 @@ namespace PSS790Player.Core
 
         private void OnDumpCompletedAutoSave()
         {
-            List<byte[]> packetsToSave = new();
-
-            lock (_captureLock)
+            if (_isDisposed) return;
+            try
             {
-                if (_isDisposed || !_isCapturing || _capturedPackets.Count == 0) return;
-                _isCapturing = false;
+                List<byte[]> packetsToSave = new();
 
-                packetsToSave = new List<byte[]>(_capturedPackets);
-                _capturedPackets.Clear();
-                _capturedByteCount = 0;
-            }
+                lock (_captureLock)
+                {
+                    if (_isDisposed || !_isCapturing || _capturedPackets.Count == 0) return;
+                    _isCapturing = false;
 
-            if (packetsToSave.Count > 0)
-            {
-                SaveCapturedDumpInternal(packetsToSave);
+                    packetsToSave = new List<byte[]>(_capturedPackets);
+                    _capturedPackets.Clear();
+                    _capturedByteCount = 0;
+                }
+
+                if (packetsToSave.Count > 0)
+                {
+                    SaveCapturedDumpInternal(packetsToSave);
+                }
             }
+            catch { }
         }
 
         private void SaveCapturedDumpInternal(List<byte[]> packets)
