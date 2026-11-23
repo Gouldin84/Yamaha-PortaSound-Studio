@@ -31,6 +31,12 @@ namespace PSS790Player.Bridge
         private CancellationTokenSource? _syncCts;
         private readonly object _loadFileLock = new();
 
+        private readonly bool[] _channelActiveStates = new bool[16];
+        private readonly byte[] _channelVelocities = new byte[16];
+        private readonly object _channelActivityLock = new();
+        private volatile bool _channelActivityDirty = false;
+        private readonly System.Threading.Timer _channelBatchTimer;
+
         public UiBridge(WebView2 webView)
         {
             _webView = webView;
@@ -44,14 +50,37 @@ namespace PSS790Player.Bridge
 
             _player.ChannelActivity += (s, e) =>
             {
-                SendToJs("channel_activity", new
+                if (e.Channel >= 0 && e.Channel < 16)
                 {
-                    channel = e.Channel,
-                    isActive = e.IsActive,
-                    velocity = e.Velocity,
-                    noteNumber = e.NoteNumber
-                });
+                    lock (_channelActivityLock)
+                    {
+                        _channelActiveStates[e.Channel] = e.IsActive;
+                        _channelVelocities[e.Channel] = e.Velocity;
+                        _channelActivityDirty = true;
+                    }
+                }
             };
+
+            // 30 FPS display timer: batches channel activity frames to eliminate IPC flooding and message queue lag
+            _channelBatchTimer = new System.Threading.Timer(_ =>
+            {
+                if (!_channelActivityDirty && !_player.IsPlaying) return;
+
+                bool[] activeCopy;
+                byte[] velCopy;
+                lock (_channelActivityLock)
+                {
+                    _channelActivityDirty = false;
+                    activeCopy = (bool[])_channelActiveStates.Clone();
+                    velCopy = (byte[])_channelVelocities.Clone();
+                }
+
+                SendToJs("channel_activity_batch", new
+                {
+                    active = activeCopy,
+                    velocities = velCopy
+                });
+            }, null, 33, 33);
 
             _player.PlaybackStateChanged += (s, e) =>
             {
@@ -66,6 +95,7 @@ namespace PSS790Player.Bridge
 
             _player.PlaybackFinished += (s, e) =>
             {
+                ResetChannelActivity();
                 SendToJs("playback_finished", new { });
             };
 
@@ -386,6 +416,7 @@ namespace PSS790Player.Bridge
                         break;
                     case "stop":
                         _player.Stop();
+                        ResetChannelActivity();
                         break;
                     case "seek":
                         var seconds = root.GetProperty("seconds").GetDouble();
@@ -2442,6 +2473,7 @@ namespace PSS790Player.Bridge
 
                         _player.Stop();
                         _player.Seek(TimeSpan.Zero);
+                        ResetChannelActivity();
 
                         _currentFilePath = resolvedPath;
                         _loadedOriginalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
@@ -3334,8 +3366,24 @@ namespace PSS790Player.Bridge
             return string.IsNullOrWhiteSpace(clean) ? "Preset" : clean;
         }
 
+        private void ResetChannelActivity()
+        {
+            lock (_channelActivityLock)
+            {
+                Array.Clear(_channelActiveStates, 0, 16);
+                Array.Clear(_channelVelocities, 0, 16);
+                _channelActivityDirty = false;
+            }
+            SendToJs("channel_activity_batch", new
+            {
+                active = new bool[16],
+                velocities = new byte[16]
+            });
+        }
+
         public void Dispose()
         {
+            _channelBatchTimer.Dispose();
             _batchCts?.Cancel();
             _syncCts?.Cancel();
             _deviceMonitor.Dispose();

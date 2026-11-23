@@ -80,14 +80,18 @@ namespace PSS790Player.Tests
                 BankNumber = 0
             };
 
-            byte[] decoded = voice.ToDecodedBytes();
-            int sum = decoded.Sum(b => (int)b);
-            byte expectedChecksum = (byte)((128 - (sum & 0x7F)) & 0x7F);
-
             byte[] sysex = voice.ToSysExMessage();
+            int nibbleSum = 0;
+            for (int i = 4; i < 70; i++)
+            {
+                nibbleSum += sysex[i];
+            }
+            byte expectedChecksum = (byte)((128 - (nibbleSum & 0x7F)) & 0x7F);
             byte actualChecksum = sysex[^2];
 
             Assert.Equal(expectedChecksum, actualChecksum);
+            // Verify that summing all 66 data nibbles plus checksum equals 0 mod 128 (hardware verification property)
+            Assert.Equal(0, (nibbleSum + actualChecksum) & 0x7F);
         }
 
         [Fact]

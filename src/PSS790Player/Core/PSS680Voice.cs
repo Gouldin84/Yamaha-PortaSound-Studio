@@ -325,12 +325,14 @@ namespace PSS790Player.Core
             for (int i = 0; i < decoded.Length; i++)
             {
                 byte b = decoded[i];
-                sum += b;
-                sysex[outIdx++] = (byte)((b >> 4) & 0x0F);
-                sysex[outIdx++] = (byte)(b & 0x0F);
+                byte hi = (byte)((b >> 4) & 0x0F);
+                byte lo = (byte)(b & 0x0F);
+                sysex[outIdx++] = hi;
+                sysex[outIdx++] = lo;
+                sum += hi + lo;
             }
 
-            // Two's complement of 7-bit sum of all decoded data bytes
+            // Two's complement of 7-bit sum of all 66 data nibbles according to Yamaha specification
             byte checksum = (byte)((128 - (sum & 0x7F)) & 0x7F);
             sysex[outIdx++] = checksum;
             sysex[outIdx] = 0xF7;
@@ -370,7 +372,7 @@ namespace PSS790Player.Core
                 byte lo = (byte)(span[inIdx++] & 0x0F);
                 byte b = (byte)((hi << 4) | lo);
                 decoded[i] = b;
-                sum += b;
+                sum += hi + lo;
             }
 
             byte expectedChecksum = (byte)((128 - (sum & 0x7F)) & 0x7F);

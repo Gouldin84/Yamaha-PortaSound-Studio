@@ -536,6 +536,12 @@ function handleHostMessage(msg) {
             updateFmVoiceUI(msg.data);
             break;
 
+        case "channel_activity_batch":
+            if (msg.data && msg.data.active) {
+                updateChannelLedsBatch(msg.data.active, msg.data.velocities);
+            }
+            break;
+
         case "channel_activity":
             updateChannelLed(msg.data.channel, msg.data.isActive, msg.data.velocity);
             if (state.activeTab === "recorder" && msg.data.isActive) {
@@ -2787,10 +2793,53 @@ function applyVectorQuadPreset(presetKey) {
     });
 }
 
+function getVoiceCategoryIcon(voiceNumber, voiceName) {
+    const list = (state.activeModel === "pss680" ? state.pss680Voices : state.pss790Voices) || state.voices || [];
+    let cat = "";
+    if (voiceNumber !== undefined && voiceNumber !== null) {
+        const found = list.find(v => v.number === voiceNumber);
+        if (found && found.category) {
+            cat = found.category.toLowerCase();
+        }
+    }
+    if (!cat && voiceName) {
+        const nameLower = voiceName.toLowerCase();
+        if (nameLower.includes("piano") || nameLower.includes("harpsi") || nameLower.includes("clavi") || nameLower.includes("celesta")) return "🎹";
+        if (nameLower.includes("organ") || nameLower.includes("accordion") || nameLower.includes("choir")) return "🌊";
+        if (nameLower.includes("brass") || nameLower.includes("trumpet") || nameLower.includes("trombone") || nameLower.includes("horn")) return "🎺";
+        if (nameLower.includes("reed") || nameLower.includes("sax") || nameLower.includes("clarinet") || nameLower.includes("oboe")) return "🎷";
+        if (nameLower.includes("pipe") || nameLower.includes("flute") || nameLower.includes("whistle") || nameLower.includes("harmonica")) return "🪈";
+        if (nameLower.includes("string") || nameLower.includes("violin") || nameLower.includes("cello") || nameLower.includes("pizz")) return "🎻";
+        if (nameLower.includes("guitar")) return "🎸";
+        if (nameLower.includes("bass")) return "🎸";
+        if (nameLower.includes("synth") || nameLower.includes("lead") || nameLower.includes("cosmic") || nameLower.includes("fog")) return "⚡";
+        if (nameLower.includes("bell") || nameLower.includes("marimba") || nameLower.includes("vibe") || nameLower.includes("steel") || nameLower.includes("glocken")) return "🔔";
+        if (nameLower.includes("drum") || nameLower.includes("perc") || nameLower.includes("timpani")) return "🥁";
+        return "🎵";
+    }
+
+    switch (cat) {
+        case "keyboard": return "🎹";
+        case "organ": return "🌊";
+        case "brass": return "🎺";
+        case "reed": return "🎷";
+        case "pipe":
+        case "woodwind":
+        case "wind": return "🪈";
+        case "strings": return "🎻";
+        case "guitar": return "🎸";
+        case "bass": return "🎸";
+        case "chromatic": return "🔔";
+        case "percussive": return "🥁";
+        case "synth": return "⚡";
+        default: return "🎵";
+    }
+}
+
 function renderMixer() {
     clearAllChannelLeds();
     const grid = document.getElementById("mixerGrid");
-    grid.innerHTML = "";
+    if (!grid) return;
 
     const vecQuadBox = document.getElementById("vectorQuadControls");
     const btnVecQuad = document.getElementById("btnToggleVectorQuad");
@@ -2850,8 +2899,61 @@ function renderMixer() {
         }
     }
 
+    const canUpdateInPlace = grid.children.length === 16 && state.mixerModelBuilt === state.activeModel && state.mixerLastQuadActive === state.vectorQuadActive;
+    if (canUpdateInPlace) {
+        const is680 = state.activeModel === "pss680";
+        state.channels.forEach(ch => {
+            const card = document.getElementById(`ch-card-${ch.channel}`);
+            if (!card) return;
+            const isDrum = ch.channel === 15;
+            const isVectorQuad = !is680 && state.vectorQuadActive && ch.channel < 4;
+
+            const topAccent = isDrum
+                ? 'border-t-2 border-t-amber-400'
+                : (isVectorQuad ? 'border-t-2 border-t-indigo-400' : (ch.hasNotes ? 'border-t-2 border-t-cyan-400' : 'border-t-2 border-t-slate-800/80'));
+
+            const cardBorder = isDrum
+                ? 'border-2 border-amber-500/50 bg-gradient-to-b from-amber-950/30 via-slate-900/70 to-slate-950/80 shadow-md ring-1 ring-amber-500/30'
+                : (isVectorQuad
+                    ? 'border-2 border-indigo-500/80 bg-indigo-950/30 ring-1 ring-indigo-500/30 shadow-md'
+                    : (ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90'));
+
+            card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${cardBorder}`;
+
+            const instEl = document.getElementById(`ch-inst-${ch.channel}`);
+            if (instEl) {
+                instEl.textContent = ch.detectedInstrument;
+                instEl.title = ch.detectedInstrument;
+            }
+            const autoEl = document.getElementById(`ch-auto-${ch.channel}`);
+            if (autoEl) {
+                const drumSubtitle = is680 ? "32 Drum Fixed" : "Chart 1 Fixed";
+                const drumTooltip = is680 ? "Channel 16 percussion fixed to 32 PSS-680 hand percussion instruments" : "Channel 16 rhythm fixed to Chart 1 drums";
+                const catIcon = getVoiceCategoryIcon(ch.defaultPssVoice, ch.defaultPssVoiceName);
+                autoEl.textContent = isDrum ? drumSubtitle : (ch.defaultPssVoiceName ? `Auto: ${catIcon} ${ch.defaultPssVoiceName}` : 'Auto-Mapped');
+                autoEl.title = isDrum ? drumTooltip : (ch.defaultPssVoiceName ? `Mapped to Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset');
+            }
+            const sel = document.getElementById(`voice-override-${ch.channel}`);
+            if (sel) {
+                if (ch.selectedFmPresetKey) sel.value = `fm:${ch.selectedFmPresetKey}`;
+                else sel.value = ch.selectedVoice !== null && ch.selectedVoice !== undefined ? ch.selectedVoice : "";
+            }
+            const oct = document.getElementById(`ch-oct-${ch.channel}`);
+            if (oct) {
+                oct.textContent = (ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0');
+                oct.className = `font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none`;
+            }
+        });
+        return;
+    }
+
+    state.mixerModelBuilt = state.activeModel;
+    state.mixerLastQuadActive = state.vectorQuadActive;
+    grid.innerHTML = "";
+
     state.channels.forEach(ch => {
         const card = document.createElement("div");
+        card.id = `ch-card-${ch.channel}`;
         const isDrum = ch.channel === 15;
         const is680 = state.activeModel === "pss680";
         const isVectorQuad = !is680 && state.vectorQuadActive && ch.channel < 4;
@@ -2923,22 +3025,26 @@ function renderMixer() {
             `).join('');
         }
 
+        const catIcon = getVoiceCategoryIcon(ch.defaultPssVoice, ch.defaultPssVoiceName);
+
         card.innerHTML = `
             <div class="flex items-center justify-between border-b border-slate-800 pb-1">
                 <div class="flex items-center space-x-1">
                     <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : (isVectorQuad ? 'text-indigo-400' : 'text-cyan-400')}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
-                    ${drumBadgeHtml}
-                    ${quadBadgeHtml}
+                    <div id="ch-badges-${ch.channel}" class="flex items-center space-x-1">
+                        ${drumBadgeHtml}
+                        ${quadBadgeHtml}
+                    </div>
                 </div>
                 <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : (isVectorQuad ? 'bg-indigo-950' : 'bg-emerald-950')} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
             <div class="space-y-0.5">
-                <div class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
+                <div id="ch-inst-${ch.channel}" class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
                     ${ch.detectedInstrument}
                 </div>
-                <div class="text-[9px] text-slate-400 truncate" title="${isDrum ? drumTooltip : (ch.defaultPssVoiceName ? `Mapped to Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset')}">
-                    ${isDrum ? drumSubtitle : (ch.defaultPssVoiceName ? `Auto: ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
+                <div id="ch-auto-${ch.channel}" class="text-[9px] text-slate-400 truncate" title="${isDrum ? drumTooltip : (ch.defaultPssVoiceName ? `Mapped to Voice: ${ch.defaultPssVoiceName}` : 'Auto-Mapped preset')}">
+                    ${isDrum ? drumSubtitle : (ch.defaultPssVoiceName ? `Auto: ${catIcon} ${ch.defaultPssVoiceName}` : 'Auto-Mapped')}
                 </div>
             </div>
 
@@ -2956,7 +3062,7 @@ function renderMixer() {
                 <span class="text-[8px] font-bold text-slate-400 uppercase" title="Channel Octave Shift">Octave</span>
                 <div class="flex items-center space-x-1">
                     <button type="button" class="btn-ch-oct-down w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Down 1 Octave (-12 st)">-</button>
-                    <span class="font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none" title="Current octave shift">${(ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0')}</span>
+                    <span id="ch-oct-${ch.channel}" class="font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none" title="Current octave shift">${(ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0')}</span>
                     <button type="button" class="btn-ch-oct-up w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Up 1 Octave (+12 st)">+</button>
                 </div>
             </div>
@@ -3071,6 +3177,27 @@ function updateMasterTransposeDisplay() {
 
 const channelLedTimers = {};
 const channelLedLastOn = {};
+
+function updateChannelLedsBatch(activeArray, velocitiesArray) {
+    if (!activeArray) return;
+    const isRecorder = state.activeTab === "recorder";
+    for (let ch = 0; ch < 16; ch++) {
+        const led = document.getElementById(`led-${ch}`);
+        if (!led) continue;
+        const isActive = !!activeArray[ch];
+        const isDrum = ch === 15;
+        const activeClass = isDrum ? 'drum-active' : 'active';
+        if (isActive) {
+            led.classList.add(activeClass);
+            if (isRecorder && velocitiesArray) {
+                const vel = velocitiesArray[ch] || 100;
+                feedVuMeter(vel, ch);
+            }
+        } else {
+            led.classList.remove(activeClass);
+        }
+    }
+}
 
 function updateChannelLed(channel, isActive, velocity) {
     const led = document.getElementById(`led-${channel}`);

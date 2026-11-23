@@ -38,7 +38,22 @@ namespace PSS790Player.Core
                 {
                     Directory.CreateDirectory(AppPaths.FmVoicesDir);
                 }
-                if (Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly).Length > 0) return;
+                var existingFmFiles = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly);
+                bool needsFmReseed = existingFmFiles.Length == 0;
+                if (!needsFmReseed)
+                {
+                    try
+                    {
+                        // Validate whether existing seeded files have valid checksums
+                        byte[] sample = File.ReadAllBytes(existingFmFiles[0]);
+                        PSS680Voice.FromSysExMessage(sample);
+                    }
+                    catch
+                    {
+                        needsFmReseed = true;
+                    }
+                }
+                if (!needsFmReseed) return;
 
                 {
                     var v = new PSS680Voice { Name = "Take On Me Lead", BankNumber = 0, Feedback = 6, PitchModulationSensitivity = 3, AmplitudeModulationSensitivity = 0, VibratoDelayTime = 35, Vibrato = true, Sustain = true };
