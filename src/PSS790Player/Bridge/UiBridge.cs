@@ -32,6 +32,7 @@ namespace PSS790Player.Bridge
         private readonly object _ctsLock = new();
         private readonly object _loadFileLock = new();
         private int _loadGeneration;
+        private volatile bool _isLoadingSong;
         private volatile bool _isDisposed;
 
         private readonly bool[] _channelActiveStates = new bool[16];
@@ -406,7 +407,7 @@ namespace PSS790Player.Bridge
                         break;
                     case "load_midi_metadata":
                         var metaPath = root.TryGetProperty("filePath", out var mfp) ? mfp.GetString() : (root.TryGetProperty("path", out var mp) ? mp.GetString() : null);
-                        if (!string.IsNullOrEmpty(metaPath) && !_player.IsPlaying)
+                        if (!string.IsNullOrEmpty(metaPath) && !_player.IsPlaying && !_isLoadingSong)
                         {
                             LoadFileAsync(metaPath, autoPlay: false);
                         }
@@ -2558,7 +2559,7 @@ namespace PSS790Player.Bridge
                 try
                 {
                     _player.Stop();
-                    _player.Seek(TimeSpan.Zero);
+                    ResetChannelActivity();
 
                     var modelSnapshot = _activeModel;
                     lock (_loadFileLock)
@@ -2633,41 +2634,43 @@ namespace PSS790Player.Bridge
 
         private void LoadFileInternal(string pathOrName, bool autoPlay, int gen)
         {
-            lock (_loadFileLock)
+            _isLoadingSong = true;
+            try
             {
-                if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
-
-                try
+                lock (_loadFileLock)
                 {
-                    string resolvedPath = pathOrName;
-                    if (!File.Exists(resolvedPath))
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                    try
                     {
-                        var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
-                        var pss790Candidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
-                        var pss680Candidate = Path.Combine(AppPaths.Pss680MidiDir, pathOrName);
+                        string resolvedPath = pathOrName;
+                        if (!File.Exists(resolvedPath))
+                        {
+                            var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
+                            var pss790Candidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
+                            var pss680Candidate = Path.Combine(AppPaths.Pss680MidiDir, pathOrName);
 
-                        if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
-                        else if (File.Exists(pss790Candidate)) resolvedPath = pss790Candidate;
-                        else if (File.Exists(pss680Candidate)) resolvedPath = pss680Candidate;
-                    }
+                            if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
+                            else if (File.Exists(pss790Candidate)) resolvedPath = pss790Candidate;
+                            else if (File.Exists(pss680Candidate)) resolvedPath = pss680Candidate;
+                        }
 
-                    if (!File.Exists(resolvedPath))
-                    {
-                        SendToJs("error", new { message = $"File not found: {pathOrName}" });
-                        return;
-                    }
+                        if (!File.Exists(resolvedPath))
+                        {
+                            SendToJs("error", new { message = $"File not found: {pathOrName}" });
+                            return;
+                        }
 
-                    if (string.Equals(_currentFilePath, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && _loadedOriginalMidi != null)
-                    {
-                        return;
-                    }
+                        if (string.Equals(_currentFilePath, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && _loadedOriginalMidi != null)
+                        {
+                            return;
+                        }
 
-                    _player.Stop();
-                    _player.Seek(TimeSpan.Zero);
-                    ResetChannelActivity();
+                        _player.Stop();
+                        ResetChannelActivity();
 
-                    var originalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
-                    if (Volatile.Read(ref _loadGeneration) != gen) return;
+                        var originalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
+                        if (Volatile.Read(ref _loadGeneration) != gen) return;
 
                     _currentFilePath = resolvedPath;
                     _loadedOriginalMidi = originalMidi;
@@ -2732,6 +2735,11 @@ namespace PSS790Player.Bridge
                 {
                     SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}" });
                 }
+            }
+            }
+            finally
+            {
+                _isLoadingSong = false;
             }
         }
 
@@ -3437,7 +3445,7 @@ namespace PSS790Player.Bridge
                         var payload = JsonSerializer.Serialize(new { type, data });
                         _webView.CoreWebView2.PostWebMessageAsJson(payload);
 
-                        if (type == "initial_data")
+                        if (type == "initial_data" || type == "file_loaded")
                         {
                             try
                             {

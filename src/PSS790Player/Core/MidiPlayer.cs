@@ -64,6 +64,9 @@ namespace PSS790Player.Core
         private string _activeModel = "pss790";
         private int _vectorQuadPlaybackEnabled;
 
+        private EventHandler? _playbackFinishedHandler;
+        private EventHandler? _repeatStartedHandler;
+
         private readonly System.Timers.Timer _progressTimer;
 
         public event EventHandler<ChannelActivityEventArgs>? ChannelActivity;
@@ -355,6 +358,14 @@ namespace PSS790Player.Core
                 if (oldPlayback != null)
                 {
                     oldPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                    if (_playbackFinishedHandler != null)
+                    {
+                        oldPlayback.Finished -= _playbackFinishedHandler;
+                    }
+                    if (_repeatStartedHandler != null)
+                    {
+                        oldPlayback.RepeatStarted -= _repeatStartedHandler;
+                    }
                     try { oldPlayback.Stop(); } catch { }
                     for (int i = 0; i < 20 && SafeIsRunning(oldPlayback); i++)
                     {
@@ -420,7 +431,7 @@ namespace PSS790Player.Core
                     newPlayback.Loop = loopSnapshot;
                     newPlayback.EventPlayed += OnPlaybackEventPlayed;
 
-                    newPlayback.Finished += (s, e) =>
+                    _playbackFinishedHandler = (s, e) =>
                     {
                         if (_isDisposed) return;
                         try
@@ -437,7 +448,7 @@ namespace PSS790Player.Core
                         catch { }
                     };
 
-                    newPlayback.RepeatStarted += (s, e) =>
+                    _repeatStartedHandler = (s, e) =>
                     {
                         if (_isDisposed) return;
                         try
@@ -451,6 +462,9 @@ namespace PSS790Player.Core
                         }
                         catch { }
                     };
+
+                    newPlayback.Finished += _playbackFinishedHandler;
+                    newPlayback.RepeatStarted += _repeatStartedHandler;
 
                     Playback? displacedPlayback = null;
                     FilteringOutputDevice? displacedFiltering = null;
@@ -476,6 +490,8 @@ namespace PSS790Player.Core
                     {
                         newFiltering.Dispose();
                         newPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                        if (_playbackFinishedHandler != null) newPlayback.Finished -= _playbackFinishedHandler;
+                        if (_repeatStartedHandler != null) newPlayback.RepeatStarted -= _repeatStartedHandler;
                         try { newPlayback.Stop(); } catch { }
                         Thread.Sleep(15);
                         try { newPlayback.Dispose(); } catch { }
@@ -486,6 +502,8 @@ namespace PSS790Player.Core
                     if (displacedPlayback != null)
                     {
                         displacedPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                        if (_playbackFinishedHandler != null) displacedPlayback.Finished -= _playbackFinishedHandler;
+                        if (_repeatStartedHandler != null) displacedPlayback.RepeatStarted -= _repeatStartedHandler;
                         try { displacedPlayback.Stop(); } catch { }
                         Thread.Sleep(15);
                         try { displacedPlayback.Dispose(); } catch { }

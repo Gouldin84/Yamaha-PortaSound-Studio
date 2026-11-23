@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.1] - 2026-11-23
+
+### Fixed
+- **Playback Window & Active Deck Desynchronization on Song Change**:
+  - Eliminated the root cause of the player deck and scrubber getting stuck on a previous song while another song begins playing on physical synthesizer hardware.
+  - Resolved DryWetMIDI `Playback.Dispose()` event firing trap: explicitly detached `Finished` and `RepeatStarted` event handlers prior to stopping and disposing displaced playback instances, preventing phantom `playback_finished` and `isPlaying: false` states from polluting the UI host.
+  - Removed redundant `_player.Seek(TimeSpan.Zero)` on old playback teardown during song loading, eliminating 96 unnecessary hardware CC panic events and initial controller re-priming over serial USB-MIDI.
+  - Added `_isLoadingSong` guard in `UiBridge` to strictly block asynchronous `load_midi_metadata` requests from trampling active playback state while a track is loading.
+  - Hardened `app.js` with `state.isLoadingSong` flag: suppressed premature `playNextSong()` auto-advance triggers and protected row clicks/double-clicks during track transitions.
+  - Enhanced WebView2 message delivery in `SendToJs` by invoking `ExecuteScriptAsync` directly for `file_loaded` and wrapped `handleHostMessage` in a global error handler to ensure UI updates never fail on handheld or high-frequency IPC devices (ASUS ROG Ally).
+
+
 ## [2.0.0] - 2026-11-18
 
 ### Added

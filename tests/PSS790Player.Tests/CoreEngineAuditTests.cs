@@ -820,6 +820,41 @@ namespace PSS790Player.Tests
             Assert.False(AppPaths.IsPathInsideLibrary(siblingBackup, gmRoot));
         }
 
+        [Fact]
+        public void MidiPlayer_StopAndDetachPlayback_DoesNotFireFinished()
+        {
+            var dev = new ThreadSafeMockDevice();
+            var player = new MidiPlayer();
+
+            var deviceField = typeof(MidiPlayer).GetField("_outputDevice", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            deviceField?.SetValue(player, dev);
+
+            var midi1 = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 4800 }
+            ));
+
+            var midi2 = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 4800 }
+            ));
+
+            bool finishedFired = false;
+            player.PlaybackFinished += (s, e) => finishedFired = true;
+
+            player.LoadMidi(midi1);
+            player.Play();
+            Thread.Sleep(50);
+
+            // Switching songs while playing must detach Finished on old playback and NOT fire PlaybackFinished
+            player.LoadMidi(midi2);
+            player.Play();
+            Thread.Sleep(50);
+
+            Assert.False(finishedFired, "Displacing an active playback must not fire PlaybackFinished");
+            player.Stop();
+        }
+
         #endregion
     }
 }

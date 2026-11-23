@@ -92,6 +92,7 @@ let state = {
     recordingsSearchQuery: "",
     activePreviewRecordingPath: null,
     initialDataReceived: false,
+    isLoadingSong: false,
     // Handheld Navigation State
     autoAdvance: localStorage.getItem("pss_auto_advance") !== "false",
     handheldMode: localStorage.getItem("pss_handheld_mode") === "true"
@@ -247,6 +248,7 @@ function switchTab(tab) {
 let bridgeListenerAttached = false;
 const pendingHostMessages = [];
 let bridgePollInterval = null;
+let autoAdvanceTimer = null;
 
 function setupBridgeListener() {
     if (bridgeListenerAttached) return;
@@ -330,7 +332,8 @@ function handleHostMessage(msg) {
     }
     if (!msg || !msg.type) return;
 
-    switch (msg.type) {
+    try {
+        switch (msg.type) {
         case "initial_data":
             state.initialDataReceived = true;
             state.devices = msg.data.devices || [];
@@ -473,6 +476,11 @@ function handleHostMessage(msg) {
             break;
 
         case "file_loaded":
+            state.isLoadingSong = false;
+            if (autoAdvanceTimer) {
+                clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = null;
+            }
             state.currentFile = msg.data.fileName;
             state.currentFilePath = msg.data.filePath;
             state.selectedSongPath = msg.data.filePath;
@@ -570,9 +578,14 @@ function handleHostMessage(msg) {
             break;
 
         case "playback_finished":
+            if (state.isLoadingSong) {
+                break;
+            }
             if (state.autoAdvance && !state.isLooping) {
-                setTimeout(() => {
-                    if (!state.isPlaying) {
+                if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+                autoAdvanceTimer = setTimeout(() => {
+                    autoAdvanceTimer = null;
+                    if (!state.isPlaying && !state.isLoadingSong) {
                         playNextSong();
                     }
                 }, 350);
@@ -756,6 +769,9 @@ function handleHostMessage(msg) {
         case "error":
             showToast(msg.data.message, true);
             break;
+    }
+    } catch (err) {
+        console.error("Error in handleHostMessage for type:", msg.type, err);
     }
 }
 
@@ -2148,6 +2164,15 @@ function createSongItemElement(file) {
                 sendToHost("play");
             } else {
                 state.selectedSongPath = file.fullPath;
+                state.isLoadingSong = true;
+                if (autoAdvanceTimer) {
+                    clearTimeout(autoAdvanceTimer);
+                    autoAdvanceTimer = null;
+                }
+                if (metadataDebounceTimer) {
+                    clearTimeout(metadataDebounceTimer);
+                    metadataDebounceTimer = null;
+                }
                 highlightActiveSongInTree();
                 sendToHost("load_midi_and_play", { path: file.fullPath });
             }
@@ -2223,7 +2248,7 @@ function createSongItemElement(file) {
 
         // Mouse clicks (and ROG Ally RB shoulder clicks) ONLY highlight the row.
         // If not currently playing, stage metadata onto the deck. Active playback is NEVER stopped!
-        if (!state.isPlaying) {
+        if (!state.isPlaying && !state.isLoadingSong) {
             sendToHost("load_midi_metadata", { path: file.fullPath });
         }
     });
@@ -2237,7 +2262,7 @@ function createSongItemElement(file) {
         highlightActiveSongInTree();
 
         // Double-click also strictly highlights without interrupting playback
-        if (!state.isPlaying) {
+        if (!state.isPlaying && !state.isLoadingSong) {
             sendToHost("load_midi_metadata", { path: file.fullPath });
         }
     });
@@ -2363,11 +2388,11 @@ function selectSongByIndex(index) {
 
     // When stopped: debounce metadata update by 100ms so moving across rows is instantaneous and never lags
     // When playing: DO NOT call load_midi_metadata while browsing! Protects uninterrupted playback!
-    if (!state.isPlaying) {
+    if (!state.isPlaying && !state.isLoadingSong) {
         if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer);
         metadataDebounceTimer = setTimeout(() => {
             metadataDebounceTimer = null;
-            if (!state.isPlaying && state.selectedSongPath === song.fullPath) {
+            if (!state.isPlaying && !state.isLoadingSong && state.selectedSongPath === song.fullPath) {
                 sendToHost("load_midi_metadata", { path: song.fullPath });
             }
         }, 100);
@@ -2378,6 +2403,15 @@ function playSongByIndex(index) {
     if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
     const song = state.visibleSongList[index];
     state.selectedSongPath = song.fullPath;
+    state.isLoadingSong = true;
+    if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+    }
+    if (metadataDebounceTimer) {
+        clearTimeout(metadataDebounceTimer);
+        metadataDebounceTimer = null;
+    }
     highlightActiveSongInTree();
     sendToHost("load_midi_and_play", { path: song.fullPath });
 
@@ -2686,6 +2720,15 @@ function setupKeyboardShortcuts() {
             case "Enter": // Play selected song
                 e.preventDefault();
                 if (state.selectedSongPath) {
+                    state.isLoadingSong = true;
+                    if (autoAdvanceTimer) {
+                        clearTimeout(autoAdvanceTimer);
+                        autoAdvanceTimer = null;
+                    }
+                    if (metadataDebounceTimer) {
+                        clearTimeout(metadataDebounceTimer);
+                        metadataDebounceTimer = null;
+                    }
                     sendToHost("load_midi_and_play", { path: state.selectedSongPath });
                 }
                 break;
