@@ -39,7 +39,7 @@ namespace PSS790Player.Core
                     Directory.CreateDirectory(AppPaths.FmVoicesDir);
                 }
                 var existingFmFiles = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly);
-                bool needsFmReseed = existingFmFiles.Length == 0;
+                bool needsFmReseed = existingFmFiles.Length < 25;
                 if (!needsFmReseed)
                 {
                     try
@@ -54,6 +54,19 @@ namespace PSS790Player.Core
                     }
                 }
                 if (!needsFmReseed) return;
+
+                {
+                    var v = new PSS680Voice { Name = "Concert Grand Piano", BankNumber = 0, Feedback = 3, PitchModulationSensitivity = 0, AmplitudeModulationSensitivity = 0, VibratoDelayTime = 0, Vibrato = false, Sustain = true };
+                    v.Modulator.Multiplier = 1; v.Modulator.PanelLevel = 72; v.Modulator.Waveform = FmWaveform.Sine; v.Modulator.AttackRate = 63; v.Modulator.Decay1Rate = 46; v.Modulator.ReleaseRate = 7; v.Modulator.FineDetune = 1; v.Modulator.Decay1Level = 14; v.Modulator.Decay2Rate = 8; v.Modulator.SustainReleaseRate = 6; v.Modulator.LevelKeyScalingHigh = 6; v.Modulator.LevelKeyScalingLow = 1; v.Modulator.RateKeyScaling = 1; v.Modulator.AmplitudeModulationEnable = false;
+                    v.Carrier.Multiplier = 1; v.Carrier.PanelLevel = 92; v.Carrier.Waveform = FmWaveform.Sine; v.Carrier.AttackRate = 63; v.Carrier.Decay1Rate = 20; v.Carrier.ReleaseRate = 7; v.Carrier.FineDetune = -1; v.Carrier.Decay1Level = 6; v.Carrier.Decay2Rate = 3; v.Carrier.SustainReleaseRate = 5; v.Carrier.LevelKeyScalingHigh = 2; v.Carrier.LevelKeyScalingLow = 0; v.Carrier.RateKeyScaling = 1; v.Carrier.AmplitudeModulationEnable = false;
+                    File.WriteAllBytes(Path.Combine(AppPaths.FmVoicesDir, "Concert Grand Piano.syx"), v.ToSysExMessage());
+                }
+                {
+                    var v = new PSS680Voice { Name = "Honky-Tonk Upright Piano", BankNumber = 0, Feedback = 4, PitchModulationSensitivity = 0, AmplitudeModulationSensitivity = 0, VibratoDelayTime = 0, Vibrato = false, Sustain = true };
+                    v.Modulator.Multiplier = 1; v.Modulator.PanelLevel = 75; v.Modulator.Waveform = FmWaveform.SineHalfWave; v.Modulator.AttackRate = 63; v.Modulator.Decay1Rate = 48; v.Modulator.ReleaseRate = 8; v.Modulator.FineDetune = 3; v.Modulator.Decay1Level = 13; v.Modulator.Decay2Rate = 9; v.Modulator.SustainReleaseRate = 7; v.Modulator.LevelKeyScalingHigh = 5; v.Modulator.LevelKeyScalingLow = 0; v.Modulator.RateKeyScaling = 1; v.Modulator.AmplitudeModulationEnable = false;
+                    v.Carrier.Multiplier = 1; v.Carrier.PanelLevel = 92; v.Carrier.Waveform = FmWaveform.Sine; v.Carrier.AttackRate = 63; v.Carrier.Decay1Rate = 22; v.Carrier.ReleaseRate = 8; v.Carrier.FineDetune = -2; v.Carrier.Decay1Level = 7; v.Carrier.Decay2Rate = 4; v.Carrier.SustainReleaseRate = 6; v.Carrier.LevelKeyScalingHigh = 1; v.Carrier.LevelKeyScalingLow = 0; v.Carrier.RateKeyScaling = 1; v.Carrier.AmplitudeModulationEnable = false;
+                    File.WriteAllBytes(Path.Combine(AppPaths.FmVoicesDir, "Honky-Tonk Upright Piano.syx"), v.ToSysExMessage());
+                }
 
                 {
                     var v = new PSS680Voice { Name = "Take On Me Lead", BankNumber = 0, Feedback = 6, PitchModulationSensitivity = 3, AmplitudeModulationSensitivity = 0, VibratoDelayTime = 35, Vibrato = true, Sustain = true };

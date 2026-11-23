@@ -202,13 +202,13 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void SoundDesignSeeder_SeedsAll23FmVoicesAnd30VectorPresets()
+        public void SoundDesignSeeder_SeedsAll25FmVoicesAnd30VectorPresets()
         {
             AppPaths.EnsureDirectoriesExist();
             SoundDesignSeeder.SeedAll();
 
             var fmFiles = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly);
-            Assert.Equal(23, fmFiles.Length);
+            Assert.Equal(25, fmFiles.Length);
 
             foreach (var file in fmFiles)
             {
