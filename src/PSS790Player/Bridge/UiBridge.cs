@@ -2581,7 +2581,6 @@ namespace PSS790Player.Bridge
 
                     var channelInfo = AnalyzeChannels(midi, format);
                     var duration = midi.GetDuration<MetricTimeSpan>();
-                    var health = MidiHealthInspector.Analyze(midi, remappedSnapshot, title, modelSnapshot);
 
                     var modelTag = modelSnapshot == "pss680" ? "PSS-680" : "PSS-790";
                     bool isNativeThisModel = modelSnapshot == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
@@ -2606,7 +2605,24 @@ namespace PSS790Player.Bridge
                         durationFormatted = $"{duration.Minutes:D2}:{duration.Seconds:D2}",
                         channels = channelInfo,
                         hasCustomOverrides = false,
-                        health = BuildHealthPayload(health)
+                        health = (object?)null
+                    });
+
+                    _ = Task.Run(() =>
+                    {
+                        if (Volatile.Read(ref _loadGeneration) != gen) return;
+                        try
+                        {
+                            var health = MidiHealthInspector.Analyze(midi, remappedSnapshot, title, modelSnapshot);
+                            if (Volatile.Read(ref _loadGeneration) == gen)
+                            {
+                                SendToJs("health_updated", new
+                                {
+                                    health = BuildHealthPayload(health)
+                                });
+                            }
+                        }
+                        catch { }
                     });
                 }
                 catch (Exception ex)
@@ -2696,7 +2712,6 @@ namespace PSS790Player.Bridge
 
                     var channelInfo = AnalyzeChannels(_loadedOriginalMidi, format);
                     var duration = _loadedOriginalMidi.GetDuration<MetricTimeSpan>();
-                    var health = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(resolvedPath), modelSnapshot);
 
                     var modelTag = modelSnapshot == "pss680" ? "PSS-680" : "PSS-790";
                     bool isNativeThisModel = modelSnapshot == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
@@ -2723,13 +2738,33 @@ namespace PSS790Player.Bridge
                         channelOctaveShifts = new Dictionary<int, int>(_options.ChannelOctaveShifts),
                         pitchBendMode = _options.PitchBendMode.ToString().ToLowerInvariant(),
                         hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath, modelSnapshot),
-                        health = BuildHealthPayload(health)
+                        health = (object?)null
                     });
 
                     if (autoPlay && Volatile.Read(ref _loadGeneration) == gen)
                     {
                         _player.Play();
                     }
+
+                    var origSnap = _loadedOriginalMidi;
+                    var remapSnap = _loadedRemappedMidi;
+                    var fileNameSnap = Path.GetFileName(resolvedPath);
+                    _ = Task.Run(() =>
+                    {
+                        if (Volatile.Read(ref _loadGeneration) != gen) return;
+                        try
+                        {
+                            var health = MidiHealthInspector.Analyze(origSnap, remapSnap, fileNameSnap, modelSnapshot);
+                            if (Volatile.Read(ref _loadGeneration) == gen)
+                            {
+                                SendToJs("health_updated", new
+                                {
+                                    health = BuildHealthPayload(health)
+                                });
+                            }
+                        }
+                        catch { }
+                    });
                 }
                 catch (Exception ex)
                 {

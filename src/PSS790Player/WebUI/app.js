@@ -98,6 +98,12 @@ let state = {
     handheldMode: localStorage.getItem("pss_handheld_mode") === "true"
 };
 
+// --- Timeline Scrubber & Drag State ---
+let isScrubbing = false;
+let scrubCooldownUntil = 0;
+let lastSeekSeconds = -1;
+let lastSeekTime = 0;
+
 // --- Theme Management ---
 function applyTheme(theme) {
     state.theme = theme;
@@ -489,15 +495,21 @@ function handleHostMessage(msg) {
             document.getElementById("currentSongTitle").textContent = msg.data.fileName;
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
             document.getElementById("timeScrubber").max = state.durationSeconds;
-            document.getElementById("timeScrubber").value = 0;
+            if (!isScrubbing && Date.now() >= scrubCooldownUntil) {
+                document.getElementById("timeScrubber").value = 0;
+            }
             updatePlaybackUi();
 
             // Format Badge Rendering
             renderFormatBadge(msg.data.format, msg.data.isGmPassthrough);
 
             // Health Diagnostics Badge Rendering
-            state.currentHealth = msg.data.health;
-            renderHealthBadge(msg.data.health);
+            if (msg.data.health) {
+                state.currentHealth = msg.data.health;
+                renderHealthBadge(msg.data.health);
+            } else {
+                renderHealthBadge(null);
+            }
 
             if (msg.data.masterTranspose !== undefined) {
                 state.masterTranspose = msg.data.masterTranspose;
@@ -521,6 +533,14 @@ function handleHostMessage(msg) {
                 renderMixer();
             }
             highlightActiveSongInTree();
+            break;
+
+        case "health_updated":
+            const healthData = (msg.data && msg.data.health) ? msg.data.health : msg.data;
+            if (healthData) {
+                state.currentHealth = healthData;
+                renderHealthBadge(healthData);
+            }
             break;
 
         case "master_transpose_changed":
@@ -561,7 +581,9 @@ function handleHostMessage(msg) {
             const playStateChanged = state.isPlaying !== msg.data.isPlaying || state.isPaused !== msg.data.isPaused;
             state.isPlaying = msg.data.isPlaying;
             state.isPaused = msg.data.isPaused;
-            state.currentSeconds = msg.data.currentSeconds || 0;
+            if (!isScrubbing && Date.now() >= scrubCooldownUntil) {
+                state.currentSeconds = msg.data.currentSeconds || 0;
+            }
             if (msg.data.totalSeconds && msg.data.totalSeconds > 0) {
                 state.durationSeconds = msg.data.totalSeconds;
             }
@@ -2163,8 +2185,6 @@ function createSongItemElement(file) {
             } else if (file.fullPath === state.currentFilePath && !state.isPlaying) {
                 sendToHost("play");
             } else {
-                state.selectedSongPath = file.fullPath;
-                state.isLoadingSong = true;
                 if (autoAdvanceTimer) {
                     clearTimeout(autoAdvanceTimer);
                     autoAdvanceTimer = null;
@@ -2173,7 +2193,7 @@ function createSongItemElement(file) {
                     clearTimeout(metadataDebounceTimer);
                     metadataDebounceTimer = null;
                 }
-                highlightActiveSongInTree();
+                stageOptimisticDeck(file, true);
                 sendToHost("load_midi_and_play", { path: file.fullPath });
             }
         });
@@ -2375,6 +2395,57 @@ function navigateSongList(direction) {
 
 let metadataDebounceTimer = null;
 
+function getFileNameFromFullPath(p) {
+    if (!p) return "";
+    const idx = Math.max(p.lastIndexOf("\\"), p.lastIndexOf("/"));
+    return idx >= 0 ? p.substring(idx + 1) : p;
+}
+
+function stageOptimisticDeck(song, willPlay = true) {
+    if (!song) return;
+    state.currentFile = song.fileName || getFileNameFromFullPath(song.fullPath);
+    state.currentFilePath = song.fullPath;
+    state.selectedSongPath = song.fullPath;
+    if (willPlay) {
+        state.isLoadingSong = true;
+        state.isPlaying = true;
+        state.isPaused = false;
+    }
+
+    const titleEl = document.getElementById("currentSongTitle");
+    if (titleEl) titleEl.textContent = state.currentFile;
+
+    const currTime = document.getElementById("currentTimeDisplay");
+    if (currTime) currTime.textContent = "00:00";
+
+    const totalTime = document.getElementById("totalTimeDisplay");
+    if (totalTime) totalTime.textContent = "--:--";
+
+    const scrubber = document.getElementById("timeScrubber");
+    if (scrubber) {
+        scrubber.value = 0;
+    }
+
+    const statusBadge = document.getElementById("fileStatusBadge");
+    if (statusBadge) {
+        if (willPlay) {
+            statusBadge.className = "px-2 py-0.5 rounded-full bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-cyan-950/30";
+            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span><span>Loading...</span>`;
+        }
+    }
+
+    const playIcon = document.getElementById("playIcon");
+    const pauseIcon = document.getElementById("pauseIcon");
+    if (playIcon && pauseIcon && willPlay) {
+        playIcon.classList.add("hidden");
+        pauseIcon.classList.remove("hidden");
+    }
+
+    updateCurrentSongFavoriteButton();
+    highlightActiveSongInTree();
+    renderHealthBadge(null);
+}
+
 function selectSongByIndex(index) {
     if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
     const song = state.visibleSongList[index];
@@ -2389,6 +2460,10 @@ function selectSongByIndex(index) {
     // When stopped: debounce metadata update by 100ms so moving across rows is instantaneous and never lags
     // When playing: DO NOT call load_midi_metadata while browsing! Protects uninterrupted playback!
     if (!state.isPlaying && !state.isLoadingSong) {
+        const titleEl = document.getElementById("currentSongTitle");
+        if (titleEl && !state.currentFile) {
+            titleEl.textContent = song.fileName;
+        }
         if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer);
         metadataDebounceTimer = setTimeout(() => {
             metadataDebounceTimer = null;
@@ -2402,8 +2477,6 @@ function selectSongByIndex(index) {
 function playSongByIndex(index) {
     if (!state.visibleSongList || index < 0 || index >= state.visibleSongList.length) return;
     const song = state.visibleSongList[index];
-    state.selectedSongPath = song.fullPath;
-    state.isLoadingSong = true;
     if (autoAdvanceTimer) {
         clearTimeout(autoAdvanceTimer);
         autoAdvanceTimer = null;
@@ -2412,7 +2485,7 @@ function playSongByIndex(index) {
         clearTimeout(metadataDebounceTimer);
         metadataDebounceTimer = null;
     }
-    highlightActiveSongInTree();
+    stageOptimisticDeck(song, true);
     sendToHost("load_midi_and_play", { path: song.fullPath });
 
     const el = ensureSongElementRendered(song.fullPath);
@@ -2720,7 +2793,6 @@ function setupKeyboardShortcuts() {
             case "Enter": // Play selected song
                 e.preventDefault();
                 if (state.selectedSongPath) {
-                    state.isLoadingSong = true;
                     if (autoAdvanceTimer) {
                         clearTimeout(autoAdvanceTimer);
                         autoAdvanceTimer = null;
@@ -2729,6 +2801,9 @@ function setupKeyboardShortcuts() {
                         clearTimeout(metadataDebounceTimer);
                         metadataDebounceTimer = null;
                     }
+                    const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath) ||
+                        { fileName: getFileNameFromFullPath(state.selectedSongPath), fullPath: state.selectedSongPath };
+                    stageOptimisticDeck(song, true);
                     sendToHost("load_midi_and_play", { path: state.selectedSongPath });
                 }
                 break;
@@ -2754,7 +2829,11 @@ function setupKeyboardShortcuts() {
             case "ArrowLeft": // Seek backward 5s (or collapse folder when stopped)
                 e.preventDefault();
                 if (state.isPlaying && !e.altKey) {
-                    sendToHost("seek", { seconds: Math.max(0, state.currentSeconds - 5) });
+                    const target = Math.max(0, state.currentSeconds - 5);
+                    state.currentSeconds = target;
+                    scrubCooldownUntil = Date.now() + 450;
+                    updatePlaybackUi();
+                    sendToHost("seek", { seconds: target });
                 } else {
                     collapseCurrentFolder();
                 }
@@ -2763,7 +2842,11 @@ function setupKeyboardShortcuts() {
             case "ArrowRight": // Seek forward 5s (or expand folder when stopped)
                 e.preventDefault();
                 if (state.isPlaying && !e.altKey) {
-                    sendToHost("seek", { seconds: Math.min(state.durationSeconds, state.currentSeconds + 5) });
+                    const target = Math.min(state.durationSeconds, state.currentSeconds + 5);
+                    state.currentSeconds = target;
+                    scrubCooldownUntil = Date.now() + 450;
+                    updatePlaybackUi();
+                    sendToHost("seek", { seconds: target });
                 } else {
                     expandCurrentFolder();
                 }
@@ -3847,14 +3930,16 @@ function updatePlaybackUi() {
         pauseIcon.classList.add("hidden");
     }
 
-    if (scrubber && !scrubber.matches(":active")) {
+    const canUpdateScrubber = !isScrubbing && Date.now() >= scrubCooldownUntil;
+
+    if (scrubber && canUpdateScrubber) {
         if (state.durationSeconds > 0) {
             scrubber.max = state.durationSeconds;
         }
         scrubber.value = state.currentSeconds;
     }
 
-    if (currTime) {
+    if (currTime && canUpdateScrubber) {
         const mins = Math.floor(state.currentSeconds / 60);
         const secs = Math.floor(state.currentSeconds % 60);
         currTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
@@ -3952,6 +4037,13 @@ document.getElementById("btnOpenFolder").addEventListener("click", () => {
 document.getElementById("btnPlayPause").addEventListener("click", () => {
     if (state.isPlaying) {
         sendToHost("pause");
+    } else if (state.isPaused) {
+        sendToHost("play");
+    } else if (state.selectedSongPath && state.selectedSongPath !== state.currentFilePath) {
+        const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath) ||
+            { fileName: getFileNameFromFullPath(state.selectedSongPath), fullPath: state.selectedSongPath };
+        stageOptimisticDeck(song, true);
+        sendToHost("load_midi_and_play", { path: state.selectedSongPath });
     } else {
         sendToHost("play");
     }
@@ -3961,44 +4053,96 @@ document.getElementById("btnStop").addEventListener("click", () => {
     sendToHost("stop");
 });
 
-document.getElementById("timeScrubber").addEventListener("input", (e) => {
-    const val = parseFloat(e.target.value);
+// Timeline Scrubber & Drag Tracking
+const scrubberEl = document.getElementById("timeScrubber");
+const scrubTooltip = document.getElementById("scrubTooltip");
+
+function updateScrubberVisuals(val) {
     const currTime = document.getElementById("currentTimeDisplay");
     if (currTime) {
         const mins = Math.floor(val / 60);
         const secs = Math.floor(val % 60);
         currTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-});
-
-document.getElementById("timeScrubber").addEventListener("change", (e) => {
-    sendToHost("seek", { seconds: parseFloat(e.target.value) });
-});
-
-// Timeline Scrubber Hover Tooltip
-const scrubberEl = document.getElementById("timeScrubber");
-const scrubTooltip = document.getElementById("scrubTooltip");
-if (scrubberEl && scrubTooltip) {
-    const updateScrubTooltip = (e) => {
-        if (!state.durationSeconds || state.durationSeconds <= 0) return;
-        const rect = scrubberEl.getBoundingClientRect();
-        const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-        const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-        const targetSec = frac * state.durationSeconds;
-        const mins = Math.floor(targetSec / 60);
-        const secs = Math.floor(targetSec % 60);
+    if (scrubTooltip && state.durationSeconds > 0) {
+        const frac = Math.max(0, Math.min(1, val / state.durationSeconds));
+        const mins = Math.floor(val / 60);
+        const secs = Math.floor(val % 60);
         scrubTooltip.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         scrubTooltip.style.left = `${(frac * 100).toFixed(1)}%`;
         scrubTooltip.classList.remove("hidden");
+    }
+}
+
+if (scrubberEl) {
+    scrubberEl.addEventListener("pointerdown", (e) => {
+        isScrubbing = true;
+        try {
+            scrubberEl.setPointerCapture(e.pointerId);
+        } catch { }
+        updateScrubberVisuals(parseFloat(scrubberEl.value));
+    });
+
+    scrubberEl.addEventListener("input", (e) => {
+        isScrubbing = true;
+        updateScrubberVisuals(parseFloat(e.target.value));
+    });
+
+    const finishScrubbing = (e) => {
+        if (!isScrubbing && e.type !== "change") return;
+
+        try {
+            if (e && e.pointerId !== undefined && scrubberEl.hasPointerCapture(e.pointerId)) {
+                scrubberEl.releasePointerCapture(e.pointerId);
+            }
+        } catch { }
+
+        const targetSec = parseFloat(scrubberEl.value);
+        if (!isNaN(targetSec) && targetSec >= 0 && state.durationSeconds > 0) {
+            const now = Date.now();
+            if (Math.abs(targetSec - lastSeekSeconds) > 0.05 || (now - lastSeekTime) > 300) {
+                lastSeekSeconds = targetSec;
+                lastSeekTime = now;
+                state.currentSeconds = targetSec;
+                sendToHost("seek", { seconds: targetSec });
+            }
+        }
+
+        isScrubbing = false;
+        scrubCooldownUntil = Date.now() + 450;
+
+        if (scrubTooltip) {
+            scrubTooltip.classList.add("hidden");
+        }
     };
 
-    scrubberEl.addEventListener("mouseenter", () => {
-        if (state.durationSeconds > 0) scrubTooltip.classList.remove("hidden");
-    });
-    scrubberEl.addEventListener("mousemove", updateScrubTooltip);
-    scrubberEl.addEventListener("mouseleave", () => {
-        scrubTooltip.classList.add("hidden");
-    });
+    scrubberEl.addEventListener("pointerup", finishScrubbing);
+    scrubberEl.addEventListener("pointercancel", finishScrubbing);
+    scrubberEl.addEventListener("change", finishScrubbing);
+
+    if (scrubTooltip) {
+        const updateScrubTooltip = (e) => {
+            if (isScrubbing) return;
+            if (!state.durationSeconds || state.durationSeconds <= 0) return;
+            const rect = scrubberEl.getBoundingClientRect();
+            const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+            const frac = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+            const targetSec = frac * state.durationSeconds;
+            const mins = Math.floor(targetSec / 60);
+            const secs = Math.floor(targetSec % 60);
+            scrubTooltip.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            scrubTooltip.style.left = `${(frac * 100).toFixed(1)}%`;
+            scrubTooltip.classList.remove("hidden");
+        };
+
+        scrubberEl.addEventListener("mouseenter", () => {
+            if (state.durationSeconds > 0 && !isScrubbing) scrubTooltip.classList.remove("hidden");
+        });
+        scrubberEl.addEventListener("mousemove", updateScrubTooltip);
+        scrubberEl.addEventListener("mouseleave", () => {
+            if (!isScrubbing) scrubTooltip.classList.add("hidden");
+        });
+    }
 }
 
 // Speed Controls
@@ -4631,7 +4775,11 @@ function renderHealthBadge(health) {
     const container = document.getElementById("healthBadgeContainer");
     if (!container) return;
     if (!health) {
-        container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5" title="Song Health Status: Load a song to inspect polyphony voice load, pitch bend range, and sustain health"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Health: Standby</span></span>`;
+        if (state.currentFile) {
+            container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-cyan-300 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5" title="Song Health Status: Auditing polyphony and hardware limits..."><span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span><span>Health: Auditing...</span></span>`;
+        } else {
+            container.innerHTML = `<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-semibold text-[11px] flex items-center space-x-1.5" title="Song Health Status: Load a song to inspect polyphony voice load, pitch bend range, and sustain health"><span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Health: Standby</span></span>`;
+        }
         return;
     }
 

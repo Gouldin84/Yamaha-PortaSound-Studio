@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.2] - 2026-11-24
+
+### Fixed
+- **Instantaneous Playback Deck & Tree Updates (0ms Perceptual Latency)**:
+  - Eliminated UI deck lag when selecting or playing a new song: `app.js` now executes `stageOptimisticDeck` synchronously upon clicking play, pressing Enter, or advancing tracks, immediately switching the title, elapsed time (`00:00`), scrubber (`0`), active tree speaker icon (`🔊`), and showing a pulsing cyan `Loading...` status badge.
+  - Decoupled `MidiHealthInspector.Analyze` off the critical song loading and playback start path: `UiBridge` now dispatches `file_loaded` and starts audio playback immediately after remapping (~5-15ms), running heavy polyphony audits asynchronously in a background `Task.Run` and dispatching `health_updated` once computed.
+  - Added `health_updated` message handling in `app.js` and updated `renderHealthBadge` to render an active `Health: Auditing...` state during background analysis.
+- **Accurate Timeline Scrubber Dragging & Touchscreen Optimization**:
+  - Replaced fragile CSS `:active` selector checks with robust Pointer Event tracking (`isScrubbing`, `setPointerCapture`, `releasePointerCapture`) on `#timeScrubber`.
+  - Added a 450ms seek cooldown window (`scrubCooldownUntil`) on slider release, discarding in-flight stale `playback_state` events from the host that previously snapped the thumb or elapsed time backward before the seek completed.
+  - Real-time `input` tracking continuously updates `currentTimeDisplay` and the hover/drag scrub tooltip without flooding 31,250 baud serial MIDI buffers with premature seek events.
+  - Enhanced `#timeScrubber` CSS with `touch-action: none;`, `user-select: none;`, and expanded touch hit targets for smooth fingertip dragging on handheld gaming devices (ASUS ROG Ally).
+  - Protected keyboard seek operations (`ArrowLeft` / `ArrowRight`) with immediate UI updates and seek cooldown guards.
+
+
 ## [2.8.1] - 2026-11-23
 
 ### Fixed
