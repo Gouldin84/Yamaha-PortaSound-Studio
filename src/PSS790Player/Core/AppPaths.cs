@@ -63,6 +63,23 @@ namespace PSS790Player.Core
                    candidateFullPath.StartsWith(EnsureTrailingSeparator(rootFullPath), StringComparison.OrdinalIgnoreCase);
         }
 
+        public static bool IsPathInsideDirectory(string candidatePath, string parentDirectory)
+        {
+            if (string.IsNullOrWhiteSpace(candidatePath) || string.IsNullOrWhiteSpace(parentDirectory))
+                return false;
+
+            try
+            {
+                var candidateFull = Path.GetFullPath(candidatePath);
+                var parentFull = Path.GetFullPath(parentDirectory);
+                return IsSameOrSubPath(candidateFull, parentFull);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static void EnsureDirectoriesExist()
         {
             if (!Directory.Exists(BaseMidiDir))

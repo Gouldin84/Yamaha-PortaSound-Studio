@@ -89,7 +89,7 @@ namespace PSS790Player.Tests
         #region Section 1: MidiPlayer Concurrency, Lifecycle, Framing & Filtering
 
         [Fact]
-        public void MidiPlayer_ConcurrentStress_PlayStopSeekLoadDisconnect_DoesNotDeadlock()
+        public async Task MidiPlayer_ConcurrentStress_PlayStopSeekLoadDisconnect_DoesNotDeadlock()
         {
             using var player = new MidiPlayer();
             var mockDev = new ThreadSafeMockDevice();
@@ -143,8 +143,10 @@ namespace PSS790Player.Tests
                 })
             };
 
-            bool completedInTime = Task.WaitAll(tasks, TimeSpan.FromSeconds(5));
-            Assert.True(completedInTime, "MidiPlayer deadlocked under concurrent Play/Stop/Seek/SetOutputDevice stress.");
+            var allTasks = Task.WhenAll(tasks);
+            var completedTask = await Task.WhenAny(allTasks, Task.Delay(TimeSpan.FromSeconds(5)));
+            Assert.True(completedTask == allTasks, "MidiPlayer deadlocked under concurrent Play/Stop/Seek/SetOutputDevice stress.");
+            await allTasks;
             player.Stop();
         }
 

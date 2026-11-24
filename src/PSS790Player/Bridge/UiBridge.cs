@@ -828,9 +828,9 @@ namespace PSS790Player.Bridge
                         break;
                     case "delete_recording":
                         var delRecPath = root.TryGetProperty("filePath", out var drProp) ? drProp.GetString() : null;
-                        if (!string.IsNullOrEmpty(delRecPath))
+                        if (!string.IsNullOrEmpty(delRecPath) && AppPaths.IsPathInsideDirectory(delRecPath, AppPaths.RecordingsDir))
                         {
-                            _recorder.DeleteRecording(delRecPath);
+                            _recorder.DeleteRecording(delRecPath, AppPaths.RecordingsDir);
                             SendRecordingsLibraryUpdate();
                             SendToJs("notification", new { message = $"Deleted recording take: {Path.GetFileName(delRecPath)}" });
                         }
@@ -838,11 +838,11 @@ namespace PSS790Player.Bridge
                     case "rename_recording":
                         var renRecPath = root.TryGetProperty("filePath", out var rrProp) ? rrProp.GetString() : null;
                         var newRecName = root.TryGetProperty("newName", out var nrProp) ? nrProp.GetString() : null;
-                        if (!string.IsNullOrEmpty(renRecPath) && !string.IsNullOrWhiteSpace(newRecName))
+                        if (!string.IsNullOrEmpty(renRecPath) && !string.IsNullOrWhiteSpace(newRecName) && AppPaths.IsPathInsideDirectory(renRecPath, AppPaths.RecordingsDir))
                         {
                             try
                             {
-                                var renamedPath = _recorder.RenameRecording(renRecPath, newRecName);
+                                var renamedPath = _recorder.RenameRecording(renRecPath, newRecName, AppPaths.RecordingsDir);
                                 SendRecordingsLibraryUpdate();
                                 SendToJs("notification", new { message = $"Renamed recording to: {Path.GetFileName(renamedPath)}" });
                             }
@@ -923,9 +923,9 @@ namespace PSS790Player.Bridge
                         break;
                     case "delete_sysex_dump":
                         var delPath = root.TryGetProperty("filePath", out var delP) ? delP.GetString() : null;
-                        if (!string.IsNullOrEmpty(delPath))
+                        if (!string.IsNullOrEmpty(delPath) && AppPaths.IsPathInsideDirectory(delPath, AppPaths.SysExDir))
                         {
-                            _sysexManager.DeleteDump(delPath);
+                            _sysexManager.DeleteDump(delPath, AppPaths.SysExDir);
                             SendSysExLibraryUpdate();
                             SendToJs("notification", new { message = "SysEx backup deleted." });
                         }
@@ -933,11 +933,11 @@ namespace PSS790Player.Bridge
                     case "rename_sysex_dump":
                         var renPath = root.TryGetProperty("filePath", out var renP) ? renP.GetString() : null;
                         var newName = root.TryGetProperty("newName", out var nnP) ? nnP.GetString() : null;
-                        if (!string.IsNullOrEmpty(renPath) && !string.IsNullOrEmpty(newName))
+                        if (!string.IsNullOrEmpty(renPath) && !string.IsNullOrEmpty(newName) && AppPaths.IsPathInsideDirectory(renPath, AppPaths.SysExDir))
                         {
                             try
                             {
-                                _sysexManager.RenameDump(renPath, newName);
+                                _sysexManager.RenameDump(renPath, newName, AppPaths.SysExDir);
                                 SendSysExLibraryUpdate();
                                 SendToJs("notification", new { message = $"Renamed to: {newName}" });
                             }
@@ -2823,63 +2823,71 @@ namespace PSS790Player.Bridge
 
         private void ReapplyRemapping(bool preservePosition = false)
         {
-            MidiFile? originalSnap;
-            RemapperOptions optionsSnap;
-
-            lock (_loadFileLock)
+            try
             {
-                if (_loadedOriginalMidi == null) return;
-                originalSnap = _loadedOriginalMidi;
-                _options.TargetModel = _activeModel;
-                optionsSnap = new RemapperOptions
+                MidiFile? originalSnap;
+                RemapperOptions optionsSnap;
+
+                lock (_loadFileLock)
                 {
-                    TargetModel = _options.TargetModel,
-                    EnablePolyphonyGuard = _options.EnablePolyphonyGuard,
-                    ScalePitchBend = _options.ScalePitchBend,
-                    PitchBendMode = _options.PitchBendMode,
-                    NeutralizeAcousticPitchBends = _options.NeutralizeAcousticPitchBends,
-                    AutoCenterDanglingPitchBends = _options.AutoCenterDanglingPitchBends,
-                    EmulateSustainPedal = _options.EmulateSustainPedal,
-                    FoldExpressionPedal = _options.FoldExpressionPedal,
-                    NormalizeAwmVelocities = _options.NormalizeAwmVelocities,
-                    EnsureSetupPreRoll = _options.EnsureSetupPreRoll,
-                    DefaultReverbBoost = _options.DefaultReverbBoost,
-                    FilterUnsupportedControllers = _options.FilterUnsupportedControllers,
-                    ForceRemap = _options.ForceRemap,
-                    TempoMultiplier = _options.TempoMultiplier,
-                    AutoNormalizeSluggishTempo = _options.AutoNormalizeSluggishTempo,
-                    MasterTranspose = _options.MasterTranspose,
-                    ChannelOctaveShifts = new Dictionary<int, int>(_options.ChannelOctaveShifts),
-                    ChannelVoiceOverrides = new Dictionary<int, int?>(_options.ChannelVoiceOverrides)
-                };
+                    if (_loadedOriginalMidi == null) return;
+                    originalSnap = _loadedOriginalMidi;
+                    _options.TargetModel = _activeModel;
+                    optionsSnap = new RemapperOptions
+                    {
+                        TargetModel = _options.TargetModel,
+                        EnablePolyphonyGuard = _options.EnablePolyphonyGuard,
+                        ScalePitchBend = _options.ScalePitchBend,
+                        PitchBendMode = _options.PitchBendMode,
+                        NeutralizeAcousticPitchBends = _options.NeutralizeAcousticPitchBends,
+                        AutoCenterDanglingPitchBends = _options.AutoCenterDanglingPitchBends,
+                        EmulateSustainPedal = _options.EmulateSustainPedal,
+                        FoldExpressionPedal = _options.FoldExpressionPedal,
+                        NormalizeAwmVelocities = _options.NormalizeAwmVelocities,
+                        EnsureSetupPreRoll = _options.EnsureSetupPreRoll,
+                        DefaultReverbBoost = _options.DefaultReverbBoost,
+                        FilterUnsupportedControllers = _options.FilterUnsupportedControllers,
+                        ForceRemap = _options.ForceRemap,
+                        TempoMultiplier = _options.TempoMultiplier,
+                        AutoNormalizeSluggishTempo = _options.AutoNormalizeSluggishTempo,
+                        MasterTranspose = _options.MasterTranspose,
+                        ChannelOctaveShifts = new Dictionary<int, int>(_options.ChannelOctaveShifts),
+                        ChannelVoiceOverrides = new Dictionary<int, int?>(_options.ChannelVoiceOverrides)
+                    };
+                }
+
+                var wasPlaying = _player.IsPlaying;
+                var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
+
+                var remapped = Remapper.Remap(originalSnap, optionsSnap);
+                lock (_loadFileLock)
+                {
+                    _loadedRemappedMidi = remapped;
+                }
+
+                var format = Remapper.DetectMidiFormat(originalSnap);
+                bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
+                bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
+
+                if (isMsGs && !isNative)
+                {
+                    _player.LoadMidi(originalSnap);
+                }
+                else
+                {
+                    _player.LoadMidi(remapped);
+                }
+
+                if (wasPlaying && preservePosition)
+                {
+                    _player.Seek(pos);
+                    _player.Play();
+                }
             }
-
-            var wasPlaying = _player.IsPlaying;
-            var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
-
-            var remapped = Remapper.Remap(originalSnap, optionsSnap);
-            lock (_loadFileLock)
+            catch (Exception ex)
             {
-                _loadedRemappedMidi = remapped;
-            }
-
-            var format = Remapper.DetectMidiFormat(originalSnap);
-            bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-            bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
-
-            if (isMsGs && !isNative)
-            {
-                _player.LoadMidi(originalSnap);
-            }
-            else
-            {
-                _player.LoadMidi(remapped);
-            }
-
-            if (wasPlaying && preservePosition)
-            {
-                _player.Seek(pos);
-                _player.Play();
+                App.WriteCrashLog("UiBridge.ReapplyRemapping", ex, isFatal: false);
+                SendToJs("error", new { message = $"Remapping error: {ex.Message}" });
             }
         }
 
@@ -3470,7 +3478,7 @@ namespace PSS790Player.Bridge
             var app = Application.Current;
             if (app == null) return;
 
-            var action = new Action(async () =>
+            var action = new Action(() =>
             {
                 if (_isDisposed) return;
                 try
@@ -3479,15 +3487,6 @@ namespace PSS790Player.Bridge
                     {
                         var payload = JsonSerializer.Serialize(new { type, data });
                         _webView.CoreWebView2.PostWebMessageAsJson(payload);
-
-                        if (type == "initial_data" || type == "file_loaded")
-                        {
-                            try
-                            {
-                                await _webView.CoreWebView2.ExecuteScriptAsync($"if (window.handleHostMessage) {{ window.handleHostMessage({payload}); }}");
-                            }
-                            catch { }
-                        }
                     }
                 }
                 catch { }
@@ -3619,23 +3618,8 @@ namespace PSS790Player.Bridge
             });
         }
 
-        private static bool IsPathInsideDirectory(string candidatePath, string directoryPath)
-        {
-            try
-            {
-                var candidateFull = Path.GetFullPath(candidatePath);
-                var dirFull = Path.GetFullPath(directoryPath);
-                if (!dirFull.EndsWith(Path.DirectorySeparatorChar))
-                {
-                    dirFull += Path.DirectorySeparatorChar;
-                }
-                return candidateFull.StartsWith(dirFull, StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false;
-            }
-        }
+        private static bool IsPathInsideDirectory(string candidatePath, string directoryPath) =>
+            AppPaths.IsPathInsideDirectory(candidatePath, directoryPath);
 
         private static PSS680Voice ParseVoiceFromJson(JsonElement el)
         {

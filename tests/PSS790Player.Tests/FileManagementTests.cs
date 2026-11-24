@@ -165,7 +165,7 @@ namespace PSS790Player.Tests
         [Fact]
         public void ScanLibraryFiles_ProducesValidSerialization()
         {
-            var bridge = (PSS790Player.Bridge.UiBridge)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(typeof(PSS790Player.Bridge.UiBridge));
+            var bridge = (PSS790Player.Bridge.UiBridge)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(PSS790Player.Bridge.UiBridge));
             var method = typeof(PSS790Player.Bridge.UiBridge).GetMethod("ScanLibraryFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             var result = method!.Invoke(bridge, null);
             var json = System.Text.Json.JsonSerializer.Serialize(result);

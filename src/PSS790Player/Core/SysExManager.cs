@@ -633,8 +633,14 @@ namespace PSS790Player.Core
             }
         }
 
-        public bool DeleteDump(string filePath)
+        public bool DeleteDump(string filePath, string? baseDir = null)
         {
+            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.SysExDir) ? AppPaths.SysExDir : Path.GetDirectoryName(filePath));
+            if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
+            {
+                return false;
+            }
+
             if (File.Exists(filePath))
             {
                 File.Delete(filePath);
@@ -643,8 +649,14 @@ namespace PSS790Player.Core
             return false;
         }
 
-        public string RenameDump(string filePath, string newName)
+        public string RenameDump(string filePath, string newName, string? baseDir = null)
         {
+            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.SysExDir) ? AppPaths.SysExDir : Path.GetDirectoryName(filePath));
+            if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
+            {
+                throw new UnauthorizedAccessException("Cannot rename files outside target directory.");
+            }
+
             if (!File.Exists(filePath)) throw new FileNotFoundException("File not found.", filePath);
 
             if (string.IsNullOrWhiteSpace(newName))

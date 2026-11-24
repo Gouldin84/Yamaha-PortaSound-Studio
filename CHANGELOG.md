@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.3] - 2026-11-24
+
+### Added
+- **Global Host Crash Resilience & Diagnostic Logging (`App.xaml.cs`)**:
+  - Trapped `DispatcherUnhandledException`, `AppDomain.CurrentDomain.UnhandledException`, and `TaskScheduler.UnobservedTaskException`.
+  - Added automated diagnostic crash dumps formatted with UTC timestamps, fault sources, runtime version, OS architecture, and full inner stack traces written to `AppPaths.MetadataDir\crash.log`.
+  - Integrated safe recovery notification dialog to alert the user of non-fatal faults without abruptly closing the application.
+- **WebView2 Process Failure Auto-Recovery (`MainWindow.xaml.cs`)**:
+  - Subscribed to `CoreWebView2.ProcessFailed` to detect unexpected GPU, renderer, or utility crashes (e.g. sleep/wake transitions on handhelds like ROG Ally).
+  - Automatically reloads the WebUI view and logs exit diagnostics.
+  - Hardened browser settings with `AreBrowserAcceleratorKeysEnabled = false` and `AreDefaultContextMenusEnabled = false` to prevent accidental <kbd>F5</kbd>/<kbd>Ctrl+R</kbd> reloads during live MIDI streaming.
+- **Canonical Path Traversal Barrier (`AppPaths.cs`, `SysExManager.cs`, `MidiRecorder.cs`, `UiBridge.cs`)**:
+  - Implemented public canonical method `AppPaths.IsPathInsideDirectory` with path normalization and trailing separator checks.
+  - Enforced strict containment verification across `DeleteDump`, `RenameDump`, `DeleteRecording`, `RenameRecording`, and all UI bridge file/folder manipulation handlers.
+- **Automated Hardening Test Suite (`CodeHardeningTests.cs`)**:
+  - Added 6 dedicated unit tests verifying path traversal rejections, SysEx deletion safety, recording rename safety, crash log generation, and WebUI token integrity.
+
+### Fixed
+- **Channel 16 Mixer Card Layout & Element Overflow**:
+  - Replaced overflowing `🥁 PERCUSSION` badge with compact, non-wrapping `🥁 DRUMS` tag with `truncate`, `shrink-0`, and `overflow-hidden` constraints.
+  - Added a matching `Fixed Map` slot in place of the octave transpose controls, ensuring Channel 16 is identical in pixel height and fader alignment to Channels 1-15.
+  - Clarified Channel 16 Voice Override dropdown to explicitly display `Chart 1 Drums (Fixed)` (PSS-790) or `32 Hand Perc. (Fixed)` (PSS-680).
+- **Timeline Scrubber Seeking Accuracy & Jitter**:
+  - Removed duplicate `change` event listener on `timeScrubber` so that seek commits fire strictly once upon pointer release (`pointerup` / `pointercancel`).
+  - Shortened seek cooldown from 450ms to 150ms to immediately accept authoritative playback updates from the backend without freezing the thumb.
+- **Compiler & Analyzer Warning Cleanup**:
+  - Replaced obsolete `FormatterServices` with `RuntimeHelpers.GetUninitializedObject`.
+  - Converted blocking test operations to asynchronous `WaitAsync`.
+  - Replaced collection count assertions with `Assert.Single`.
+
 ## [2.8.2] - 2026-11-24
 
 ### Fixed

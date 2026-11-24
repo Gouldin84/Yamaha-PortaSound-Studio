@@ -68,8 +68,12 @@ namespace PSS790Player
                 try
                 {
                     MainWebView.CoreWebView2.Settings.AreDevToolsEnabled = true;
+                    MainWebView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+                    MainWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
                 }
                 catch { }
+
+                MainWebView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
 
                 try
                 {
@@ -168,6 +172,15 @@ namespace PSS790Player
         {
             try
             {
+                if (MainWebView?.CoreWebView2 != null)
+                {
+                    MainWebView.CoreWebView2.ProcessFailed -= OnWebViewProcessFailed;
+                }
+            }
+            catch { }
+
+            try
+            {
                 _hwndSource?.RemoveHook(HwndMessageHook);
                 _hwndSource = null;
             }
@@ -175,6 +188,31 @@ namespace PSS790Player
 
             _uiBridge?.Dispose();
             _uiBridge = null;
+        }
+
+        private void OnWebViewProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+        {
+            try
+            {
+                App.WriteCrashLog(
+                    $"CoreWebView2.ProcessFailed: {e.ProcessFailedKind} (ExitCode: {e.ExitCode})",
+                    new Exception($"WebView2 child process failed: {e.ProcessFailedKind}, Reason: {e.Reason}, FailureSource: {e.FailureSourceModulePath}"),
+                    isFatal: false);
+
+                if (e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited ||
+                    e.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+                {
+                    Dispatcher.InvokeAsync(() =>
+                    {
+                        try
+                        {
+                            MainWebView?.CoreWebView2?.Reload();
+                        }
+                        catch { }
+                    });
+                }
+            }
+            catch { }
         }
     }
 }

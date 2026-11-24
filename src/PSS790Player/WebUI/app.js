@@ -1,5 +1,13 @@
 // PSS-790 Modern UI Application Logic & MIDI Studio Engine
 
+// Global Error & Promise Rejection Handlers
+window.addEventListener("error", (e) => {
+    console.error("[WebUI Unhandled Error]", e.message, e.filename, e.lineno, e.error);
+});
+window.addEventListener("unhandledrejection", (e) => {
+    console.error("[WebUI Unhandled Rejection]", e.reason);
+});
+
 let state = {
     activeTab: "player",
     devices: [],
@@ -2278,13 +2286,16 @@ function createSongItemElement(file) {
             e.target.closest(".btn-song-star") || 
             e.target.closest(".btn-song-play")) return;
         e.preventDefault();
-        state.selectedSongPath = file.fullPath;
-        highlightActiveSongInTree();
-
-        // Double-click also strictly highlights without interrupting playback
-        if (!state.isPlaying && !state.isLoadingSong) {
-            sendToHost("load_midi_metadata", { path: file.fullPath });
+        if (autoAdvanceTimer) {
+            clearTimeout(autoAdvanceTimer);
+            autoAdvanceTimer = null;
         }
+        if (metadataDebounceTimer) {
+            clearTimeout(metadataDebounceTimer);
+            metadataDebounceTimer = null;
+        }
+        stageOptimisticDeck(file, true);
+        sendToHost("load_midi_and_play", { path: file.fullPath });
     });
 
     div.addEventListener("contextmenu", (e) => {
@@ -3114,17 +3125,21 @@ function renderMixer() {
         const selectTitle = isDrum ? drumTooltip : `Override Channel ${ch.channelDisplay} voice`;
 
         const drumBadgeHtml = isDrum
-            ? `<span class="px-1 py-0.5 rounded text-[8px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase">🥁 PERCUSSION</span>`
+            ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-tighter shrink-0" title="${drumTooltip}">🥁 DRUMS</span>`
             : '';
 
         const quadBadgeHtml = isVectorQuad
-            ? `<span class="px-1 py-0.5 rounded text-[8px] font-bold bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 uppercase">Quad ${quadPoleNames[ch.channel]}</span>`
+            ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-bold bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 uppercase tracking-tighter shrink-0">Quad ${quadPoleNames[ch.channel]}</span>`
             : (ch.selectedVoice >= 100 && is680
-                ? `<span class="px-1 py-0.5 rounded text-[8px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60 uppercase">FM Bank ${ch.selectedVoice - 99}</span>`
+                ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60 uppercase tracking-tighter shrink-0">Bank ${ch.selectedVoice - 99}</span>`
                 : '');
 
-        let voiceOptionsHtml = `<option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>`;
-        if (is680) {
+        let voiceOptionsHtml = '';
+        if (isDrum) {
+            const fixedDrumName = is680 ? "32 Hand Perc. (Fixed)" : "Chart 1 Drums (Fixed)";
+            voiceOptionsHtml = `<option value="" selected class="bg-slate-900 text-amber-300 font-semibold">${fixedDrumName}</option>`;
+        } else if (is680) {
+            voiceOptionsHtml = `<option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>`;
             const factoryVoices = state.voices.filter(v => v.number < 100);
             const userBanks = state.voices.filter(v => v.number >= 100);
 
@@ -3144,7 +3159,7 @@ function renderMixer() {
                 </optgroup>
             `;
         } else {
-            voiceOptionsHtml += state.voices.map(v => `
+            voiceOptionsHtml = `<option value="" ${ch.selectedVoice === null ? 'selected' : ''}>Auto (GM Map)</option>` + state.voices.map(v => `
                 <option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-slate-900 text-white">
                     ${v.number.toString().padStart(2, '0')}: ${v.name}
                 </option>
@@ -3154,18 +3169,18 @@ function renderMixer() {
         const catIcon = getVoiceCategoryIcon(ch.defaultPssVoice, ch.defaultPssVoiceName);
 
         card.innerHTML = `
-            <div class="flex items-center justify-between border-b border-slate-800 pb-1">
-                <div class="flex items-center space-x-1">
-                    <span class="text-[11px] font-bold ${isDrum ? 'text-amber-400' : (isVectorQuad ? 'text-indigo-400' : 'text-cyan-400')}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
-                    <div id="ch-badges-${ch.channel}" class="flex items-center space-x-1">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1 min-w-0">
+                <div class="flex items-center space-x-1 min-w-0 overflow-hidden">
+                    <span class="text-[11px] font-bold shrink-0 ${isDrum ? 'text-amber-400' : (isVectorQuad ? 'text-indigo-400' : 'text-cyan-400')}" title="Channel ${ch.channelDisplay} (${chHeaderTitle})">CH ${ch.channelDisplay}</span>
+                    <div id="ch-badges-${ch.channel}" class="flex items-center space-x-1 min-w-0 overflow-hidden">
                         ${drumBadgeHtml}
                         ${quadBadgeHtml}
                     </div>
                 </div>
-                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full ${isDrum ? 'bg-amber-950' : (isVectorQuad ? 'bg-indigo-950' : 'bg-emerald-950')} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
+                <span id="led-${ch.channel}" class="meter-led w-2.5 h-2.5 rounded-full shrink-0 ml-1 ${isDrum ? 'bg-amber-950' : (isVectorQuad ? 'bg-indigo-950' : 'bg-emerald-950')} border border-slate-700" title="Signal Activity Meter: Flashes when Channel ${ch.channelDisplay} receives note-on events"></span>
             </div>
 
-            <div class="space-y-0.5">
+            <div class="space-y-0.5 min-w-0 overflow-hidden">
                 <div id="ch-inst-${ch.channel}" class="text-[10px] font-medium text-slate-200 truncate" title="${ch.detectedInstrument}">
                     ${ch.detectedInstrument}
                 </div>
@@ -3175,28 +3190,34 @@ function renderMixer() {
             </div>
 
             <!-- Voice Override Combobox -->
-            <div class="space-y-0.5">
-                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight" title="${overrideTitle}">Voice Override</label>
-                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed" title="${selectTitle}">
+            <div class="space-y-0.5 min-w-0">
+                <label class="text-[9px] font-semibold text-slate-400 uppercase tracking-tight block truncate" title="${overrideTitle}">Voice Override</label>
+                <select id="voice-override-${ch.channel}" ${isDrum ? 'disabled' : ''} class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-cyan-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" title="${selectTitle}">
                     ${voiceOptionsHtml}
                 </select>
             </div>
 
             ${!isDrum ? `
             <!-- Channel Octave Transpose -->
-            <div class="flex items-center justify-between bg-slate-950/70 rounded px-1.5 py-0.5 border border-slate-800/80">
-                <span class="text-[8px] font-bold text-slate-400 uppercase" title="Channel Octave Shift">Octave</span>
-                <div class="flex items-center space-x-1">
+            <div class="flex items-center justify-between bg-slate-950/70 rounded px-1.5 py-0.5 border border-slate-800/80 min-w-0">
+                <span class="text-[8px] font-bold text-slate-400 uppercase shrink-0" title="Channel Octave Shift">Octave</span>
+                <div class="flex items-center space-x-1 shrink-0">
                     <button type="button" class="btn-ch-oct-down w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Down 1 Octave (-12 st)">-</button>
                     <span id="ch-oct-${ch.channel}" class="font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none" title="Current octave shift">${(ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0')}</span>
                     <button type="button" class="btn-ch-oct-up w-4 h-4 rounded bg-slate-800 hover:bg-cyan-600 text-[10px] font-bold text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90" data-channel="${ch.channel}" title="Shift Up 1 Octave (+12 st)">+</button>
                 </div>
             </div>
-            ` : ''}
+            ` : `
+            <!-- Channel 16 Drum Map Slot (Matched to Octave Box Height) -->
+            <div class="flex items-center justify-between bg-slate-950/70 rounded px-1.5 py-0.5 border border-amber-500/30 min-w-0" title="${drumTooltip}">
+                <span class="text-[8px] font-bold text-amber-400/90 uppercase tracking-tight truncate">Fixed Map</span>
+                <span class="font-mono text-[9px] font-bold text-amber-400 select-none px-0.5 shrink-0">CH 16</span>
+            </div>
+            `}
 
             <!-- Fader & Controls -->
-            <div class="flex items-center justify-between space-x-2 pt-1">
-                <div class="flex-1 space-y-1">
+            <div class="flex items-center justify-between space-x-2 pt-1 min-w-0">
+                <div class="flex-1 min-w-0 space-y-1">
                     <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800" title="Channel ${ch.channelDisplay} Volume (CC 7): Adjust playback level (0-127)">
                     <div class="flex justify-between text-[8px] text-slate-400 font-mono select-none pt-0.5 px-0.5">
                         <span title="MIDI Channel Volume (CC 7)">VOL</span>
@@ -4089,7 +4110,7 @@ if (scrubberEl) {
     });
 
     const finishScrubbing = (e) => {
-        if (!isScrubbing && e.type !== "change") return;
+        if (!isScrubbing) return;
 
         try {
             if (e && e.pointerId !== undefined && scrubberEl.hasPointerCapture(e.pointerId)) {
@@ -4099,17 +4120,14 @@ if (scrubberEl) {
 
         const targetSec = parseFloat(scrubberEl.value);
         if (!isNaN(targetSec) && targetSec >= 0 && state.durationSeconds > 0) {
-            const now = Date.now();
-            if (Math.abs(targetSec - lastSeekSeconds) > 0.05 || (now - lastSeekTime) > 300) {
-                lastSeekSeconds = targetSec;
-                lastSeekTime = now;
-                state.currentSeconds = targetSec;
-                sendToHost("seek", { seconds: targetSec });
-            }
+            lastSeekSeconds = targetSec;
+            lastSeekTime = Date.now();
+            state.currentSeconds = targetSec;
+            sendToHost("seek", { seconds: targetSec });
         }
 
         isScrubbing = false;
-        scrubCooldownUntil = Date.now() + 450;
+        scrubCooldownUntil = Date.now() + 150;
 
         if (scrubTooltip) {
             scrubTooltip.classList.add("hidden");
@@ -4118,7 +4136,6 @@ if (scrubberEl) {
 
     scrubberEl.addEventListener("pointerup", finishScrubbing);
     scrubberEl.addEventListener("pointercancel", finishScrubbing);
-    scrubberEl.addEventListener("change", finishScrubbing);
 
     if (scrubTooltip) {
         const updateScrubTooltip = (e) => {

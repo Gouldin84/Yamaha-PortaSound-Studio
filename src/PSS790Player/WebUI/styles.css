@@ -151,6 +151,8 @@ input[type="range"].accent-indigo-400::-webkit-slider-thumb:hover {
 
 /* Hardware Console Channel Card */
 .channel-strip-card {
+    min-width: 0;
+    overflow: hidden;
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, background-color 0.2s ease;
 }
 

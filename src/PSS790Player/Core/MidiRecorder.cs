@@ -782,8 +782,14 @@ namespace PSS790Player.Core
         public string ExportRecordingToPss790(string sourcePath, string? targetFileName = null) =>
             ExportRecordingToPss(sourcePath, targetFileName, "pss790");
 
-        public bool DeleteRecording(string filePath)
+        public bool DeleteRecording(string filePath, string? baseDir = null)
         {
+            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.RecordingsDir) ? AppPaths.RecordingsDir : Path.GetDirectoryName(filePath));
+            if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
+            {
+                return false;
+            }
+
             if (!File.Exists(filePath)) return false;
             try
             {
@@ -796,8 +802,14 @@ namespace PSS790Player.Core
             }
         }
 
-        public string RenameRecording(string filePath, string newFileName)
+        public string RenameRecording(string filePath, string newFileName, string? baseDir = null)
         {
+            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.RecordingsDir) ? AppPaths.RecordingsDir : Path.GetDirectoryName(filePath));
+            if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
+            {
+                throw new UnauthorizedAccessException("Cannot rename files outside recordings directory.");
+            }
+
             if (!File.Exists(filePath))
                 throw new FileNotFoundException("Recording file not found.", filePath);
 

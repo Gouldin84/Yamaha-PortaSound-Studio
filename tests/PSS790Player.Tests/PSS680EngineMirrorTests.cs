@@ -214,8 +214,8 @@ namespace PSS790Player.Tests
             // Dual Sync Analysis
             var analysis = BatchConverter.AnalyzeDualSync(gmDir, pss790Dir, pss680Dir);
             Assert.False(analysis.IsInSync);
-            Assert.Equal(1, analysis.Analysis790.MissingInTarget.Count);
-            Assert.Equal(1, analysis.Analysis680.MissingInTarget.Count);
+            Assert.Single(analysis.Analysis790.MissingInTarget);
+            Assert.Single(analysis.Analysis680.MissingInTarget);
 
             // Execute Dual Sync
             var syncOptions = new LibrarySyncOptions
