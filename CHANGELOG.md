@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.8.4] - 2026-11-24
+
+### Added
+- **Hardware Song & Sequencer Capture Guide (Studio Tab)**:
+  - Added dedicated collapsible guide card (`studioHardwareGuidePanel`) and quick-access toolbar toggle (`📖 Capture Guide`) in the Studio recording deck.
+  - Interactive model tabs for **PSS-790** (8-track linear sequencer) and **PSS-680** (5-part Song Memory).
+  - Detailed physical button sequences: `[SONG MEMORY]` track arming and `[START / STOP]` playback for PSS-790; `[MEMORY]` (`[MELODY 1/2/3]`, `[CHORD]`, `[CUSTOM DRUMMER]`) and `[PLAY / START]` for PSS-680.
+  - Direct guidance for cable hookup (`MIDI OUT` -> `MIDI IN`), local control off, VU monitoring, and saving as Native PSS or General MIDI.
+- **Enhanced SysEx Bulk Dump Hardware Instructions (SysEx Vault Tab)**:
+  - Added quick-switch model tabs for **PSS-790** and **PSS-680** in the live SysEx capture callout.
+  - Detailed physical button steps: PSS-790 `[MEMORY BULK DUMP]` button flashing `b-8` confirmed on second press; PSS-680 key combinations for Formats 00H (FM User Voices), 01H (Melody Memory Tracks 1-3), 02H (Chord Memory), 03H (Custom Drummer), and All Memory.
+- **Comprehensive Hardware Capture & SysEx Modal (`hardwareGuideModal`)**:
+  - Full-screen reference modal accessible from the Studio toolbar, SysEx Vault, and More Tools (⋯) dropdown.
+  - Dual model selectors and method selectors (MIDI Song Capture vs SysEx Bulk Dump) with complete step guides and keyboard navigation (<kbd>Esc</kbd> to close).
+- **Dynamic Hardware Model Synchronization**:
+  - Switching between PSS-790 and PSS-680 synthesizer profiles in the top bar automatically syncs the instructions across both the Studio and SysEx Vault tabs.
+- **Automated Verification Test**:
+  - Added `WebUI_Assets_ContainHardwareCaptureGuideSignatures` to `CodeHardeningTests.cs` (238 unit tests passing).
+
 ## [2.8.3] - 2026-11-24
 
 ### Added

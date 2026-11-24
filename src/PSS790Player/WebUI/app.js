@@ -2654,6 +2654,17 @@ function setupKeyboardShortcuts() {
             return;
         }
 
+        // Hardware Guide modal keyboard shortcuts
+        const hwGuideModal = document.getElementById("hardwareGuideModal");
+        if (hwGuideModal && !hwGuideModal.classList.contains("hidden")) {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                closeHardwareGuideModal();
+                return;
+            }
+            return;
+        }
+
         // Global shortcut: ? or F1 to open DAW hotkeys modal
         if (!isInputFocused && (e.key === "?" || e.key === "F1")) {
             e.preventDefault();
@@ -5566,25 +5577,8 @@ function applyActiveModel(modelKey, syncHost = true) {
         if (btnTransmitSpan) btnTransmitSpan.textContent = is680 ? "Transmit to PSS-680" : "Transmit to PSS-790";
     }
 
-    // Update SysEx Capture Instructions Callout
-    const sysexInstTitle = document.getElementById("sysexInstructionsTitle");
-    const sysexInstList = document.getElementById("sysexInstructionsList");
-    if (sysexInstTitle) {
-        sysexInstTitle.textContent = is680 
-            ? "PSS-680 Voice & Memory Bulk Dump Instructions:" 
-            : "PSS-790 Memory Bulk Dump Instructions:";
-    }
-    if (sysexInstList) {
-        sysexInstList.innerHTML = is680
-            ? `<li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
-               <li>Click <strong class="text-amber-400">"Req Voices"</strong> (or Melody / Chord / Drummer) in the toolbar above, or trigger a dump on your keyboard.</li>
-               <li>Keyboard transmits 72-byte FM voice parameter packets or bulk memory via MIDI.</li>
-               <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file immediately!</li>`
-            : `<li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
-               <li>On keyboard, press <strong class="text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">MEMORY BULK DUMP</strong> (display flashes <code class="text-amber-400 font-bold">b-8</code>).</li>
-               <li>Press it a <strong>second time</strong> to transmit memory to PC.</li>
-               <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file immediately!</li>`;
-    }
+    // Synchronize Hardware Capture & SysEx Guides with active model
+    syncHardwareGuidesToModel(modelKey);
 
     // Update SysEx library empty message if present
     const emptyMsgEl = document.getElementById("sysexLibraryEmptyMsg");
@@ -9038,6 +9032,12 @@ function initMoreToolsMenu() {
         openShortcutsModal();
     });
 
+    document.getElementById("menuItemHardwareGuide")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeMenu();
+        openHardwareGuideModal(state.activeModel, state.activeTab === "sysex" ? "sysex" : "midi");
+    });
+
     document.getElementById("menuItemAbout")?.addEventListener("click", (e) => {
         e.stopPropagation();
         closeMenu();
@@ -9111,6 +9111,238 @@ function initSettingsModal() {
     });
 }
 
+// -------------------------------------------------------------------------
+// HARDWARE CAPTURE & SYSEX GUIDES
+// -------------------------------------------------------------------------
+
+let modalGuideActiveModel = "pss790";
+let modalGuideActiveMethod = "midi";
+
+function syncHardwareGuidesToModel(modelKey) {
+    const is680 = modelKey === "pss680";
+    modalGuideActiveModel = is680 ? "pss680" : "pss790";
+
+    // 1. In-place Studio Recording Guide Panes
+    const studioPane790 = document.getElementById("studioGuidePane790");
+    const studioPane680 = document.getElementById("studioGuidePane680");
+    const btnStudioTab790 = document.getElementById("btnStudioGuideTab790");
+    const btnStudioTab680 = document.getElementById("btnStudioGuideTab680");
+
+    if (studioPane790 && studioPane680) {
+        studioPane790.classList.toggle("hidden", is680);
+        studioPane680.classList.toggle("hidden", !is680);
+    }
+    const tabActiveCls = "px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-indigo-600 shadow-sm transition active:scale-95";
+    const tabInactiveCls = "px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white transition active:scale-95";
+    if (btnStudioTab790) btnStudioTab790.className = is680 ? tabInactiveCls : tabActiveCls;
+    if (btnStudioTab680) btnStudioTab680.className = is680 ? tabActiveCls : tabInactiveCls;
+
+    // 2. In-place SysEx Vault Instructions Callout
+    const sysexCallout790 = document.getElementById("sysexGuideCallout790");
+    const sysexCallout680 = document.getElementById("sysexGuideCallout680");
+    const btnSysexTab790 = document.getElementById("btnSysexInstTab790");
+    const btnSysexTab680 = document.getElementById("btnSysexInstTab680");
+
+    if (sysexCallout790 && sysexCallout680) {
+        sysexCallout790.classList.toggle("hidden", is680);
+        sysexCallout680.classList.toggle("hidden", !is680);
+    }
+    const pillActiveCls = "px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white transition active:scale-95";
+    const pillInactiveCls = "px-2 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white transition active:scale-95";
+    if (btnSysexTab790) btnSysexTab790.className = is680 ? pillInactiveCls : pillActiveCls;
+    if (btnSysexTab680) btnSysexTab680.className = is680 ? pillActiveCls : pillInactiveCls;
+
+    // 3. Update Hardware Guide Modal if open
+    updateModalGuideView();
+}
+
+function openHardwareGuideModal(initialModel = null, initialMethod = "midi") {
+    if (initialModel) {
+        modalGuideActiveModel = initialModel;
+    } else {
+        modalGuideActiveModel = state.activeModel === "pss680" ? "pss680" : "pss790";
+    }
+    modalGuideActiveMethod = initialMethod || "midi";
+
+    updateModalGuideView();
+
+    const modal = document.getElementById("hardwareGuideModal");
+    if (modal) modal.classList.remove("hidden");
+}
+
+function closeHardwareGuideModal() {
+    const modal = document.getElementById("hardwareGuideModal");
+    if (modal) modal.classList.add("hidden");
+}
+
+function updateModalGuideView() {
+    const is680 = modalGuideActiveModel === "pss680";
+    const isMidi = modalGuideActiveMethod === "midi";
+
+    // Nav Model Buttons
+    const btnMod790 = document.getElementById("btnModalGuideModel790");
+    const btnMod680 = document.getElementById("btnModalGuideModel680");
+    const activeModelCls = "px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-sm transition active:scale-95";
+    const inactiveModelCls = "px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95";
+    if (btnMod790) btnMod790.className = is680 ? inactiveModelCls : activeModelCls;
+    if (btnMod680) btnMod680.className = is680 ? activeModelCls : inactiveModelCls;
+
+    // Nav Method Buttons
+    const btnMethMidi = document.getElementById("btnModalGuideMethodMidi");
+    const btnMethSysex = document.getElementById("btnModalGuideMethodSysex");
+    const activeMethCls = "px-3 py-1 rounded-lg text-xs font-bold text-white bg-slate-800 border border-slate-700 shadow-sm transition active:scale-95 flex items-center space-x-1.5";
+    const inactiveMethCls = "px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
+    if (btnMethMidi) btnMethMidi.className = isMidi ? activeMethCls : inactiveMethCls;
+    if (btnMethSysex) btnMethSysex.className = isMidi ? inactiveMethCls : activeMethCls;
+
+    // Sections
+    const sec790Midi = document.getElementById("guideSection790Midi");
+    const sec790Sysex = document.getElementById("guideSection790Sysex");
+    const sec680Midi = document.getElementById("guideSection680Midi");
+    const sec680Sysex = document.getElementById("guideSection680Sysex");
+
+    if (sec790Midi) sec790Midi.classList.toggle("hidden", is680 || !isMidi);
+    if (sec790Sysex) sec790Sysex.classList.toggle("hidden", is680 || isMidi);
+    if (sec680Midi) sec680Midi.classList.toggle("hidden", !is680 || !isMidi);
+    if (sec680Sysex) sec680Sysex.classList.toggle("hidden", !is680 || isMidi);
+}
+
+function initHardwareGuides() {
+    // 1. Studio Guide Toggle & Close
+    const btnToggle = document.getElementById("btnToggleStudioGuide");
+    const btnClose = document.getElementById("btnCloseStudioGuide");
+    const guidePanel = document.getElementById("studioHardwareGuidePanel");
+
+    // Check localStorage preference (default open for guidance)
+    const guidePref = localStorage.getItem("yamaha_studio_guide_open");
+    if (guidePref === "true" && guidePanel) {
+        guidePanel.classList.remove("hidden");
+    }
+
+    if (btnToggle && guidePanel) {
+        btnToggle.addEventListener("click", () => {
+            const isHidden = guidePanel.classList.contains("hidden");
+            guidePanel.classList.toggle("hidden", !isHidden);
+            localStorage.setItem("yamaha_studio_guide_open", isHidden ? "true" : "false");
+        });
+    }
+
+    if (btnClose && guidePanel) {
+        btnClose.addEventListener("click", () => {
+            guidePanel.classList.add("hidden");
+            localStorage.setItem("yamaha_studio_guide_open", "false");
+        });
+    }
+
+    // 2. Studio Guide Model Tabs
+    const btnStudioTab790 = document.getElementById("btnStudioGuideTab790");
+    const btnStudioTab680 = document.getElementById("btnStudioGuideTab680");
+    const pane790 = document.getElementById("studioGuidePane790");
+    const pane680 = document.getElementById("studioGuidePane680");
+
+    const tabActiveCls = "px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-indigo-600 shadow-sm transition active:scale-95";
+    const tabInactiveCls = "px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white transition active:scale-95";
+
+    if (btnStudioTab790) {
+        btnStudioTab790.addEventListener("click", () => {
+            if (pane790) pane790.classList.remove("hidden");
+            if (pane680) pane680.classList.add("hidden");
+            btnStudioTab790.className = tabActiveCls;
+            if (btnStudioTab680) btnStudioTab680.className = tabInactiveCls;
+        });
+    }
+
+    if (btnStudioTab680) {
+        btnStudioTab680.addEventListener("click", () => {
+            if (pane790) pane790.classList.add("hidden");
+            if (pane680) pane680.classList.remove("hidden");
+            btnStudioTab680.className = tabActiveCls;
+            if (btnStudioTab790) btnStudioTab790.className = tabInactiveCls;
+        });
+    }
+
+    // 3. SysEx Vault Callout Tabs
+    const btnSysexTab790 = document.getElementById("btnSysexInstTab790");
+    const btnSysexTab680 = document.getElementById("btnSysexInstTab680");
+    const sysexCallout790 = document.getElementById("sysexGuideCallout790");
+    const sysexCallout680 = document.getElementById("sysexGuideCallout680");
+
+    const pillActiveCls = "px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white transition active:scale-95";
+    const pillInactiveCls = "px-2 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white transition active:scale-95";
+
+    if (btnSysexTab790) {
+        btnSysexTab790.addEventListener("click", () => {
+            if (sysexCallout790) sysexCallout790.classList.remove("hidden");
+            if (sysexCallout680) sysexCallout680.classList.add("hidden");
+            btnSysexTab790.className = pillActiveCls;
+            if (btnSysexTab680) btnSysexTab680.className = pillInactiveCls;
+        });
+    }
+
+    if (btnSysexTab680) {
+        btnSysexTab680.addEventListener("click", () => {
+            if (sysexCallout790) sysexCallout790.classList.add("hidden");
+            if (sysexCallout680) sysexCallout680.classList.remove("hidden");
+            btnSysexTab680.className = pillActiveCls;
+            if (btnSysexTab790) btnSysexTab790.className = pillInactiveCls;
+        });
+    }
+
+    // 4. Open Modal Buttons
+    const btnOpenFull = document.getElementById("btnOpenSysexFullGuide");
+    if (btnOpenFull) {
+        btnOpenFull.addEventListener("click", () => {
+            openHardwareGuideModal(state.activeModel, "sysex");
+        });
+    }
+
+    // 5. Modal Controls
+    const btnCloseModal = document.getElementById("btnCloseHardwareGuideModal");
+    const btnDismissModal = document.getElementById("btnDismissHardwareGuideModal");
+    const modal = document.getElementById("hardwareGuideModal");
+
+    if (btnCloseModal) btnCloseModal.addEventListener("click", closeHardwareGuideModal);
+    if (btnDismissModal) btnDismissModal.addEventListener("click", closeHardwareGuideModal);
+    if (modal) {
+        modal.addEventListener("click", (e) => {
+            if (e.target === modal) closeHardwareGuideModal();
+        });
+    }
+
+    const btnMod790 = document.getElementById("btnModalGuideModel790");
+    const btnMod680 = document.getElementById("btnModalGuideModel680");
+    if (btnMod790) {
+        btnMod790.addEventListener("click", () => {
+            modalGuideActiveModel = "pss790";
+            updateModalGuideView();
+        });
+    }
+    if (btnMod680) {
+        btnMod680.addEventListener("click", () => {
+            modalGuideActiveModel = "pss680";
+            updateModalGuideView();
+        });
+    }
+
+    const btnMethMidi = document.getElementById("btnModalGuideMethodMidi");
+    const btnMethSysex = document.getElementById("btnModalGuideMethodSysex");
+    if (btnMethMidi) {
+        btnMethMidi.addEventListener("click", () => {
+            modalGuideActiveMethod = "midi";
+            updateModalGuideView();
+        });
+    }
+    if (btnMethSysex) {
+        btnMethSysex.addEventListener("click", () => {
+            modalGuideActiveMethod = "sysex";
+            updateModalGuideView();
+        });
+    }
+
+    // Initialize with active model
+    syncHardwareGuidesToModel(state.activeModel);
+}
+
 // Trigger initial handshake and keyboard shortcuts
 function startApp() {
     initTheme();
@@ -9123,6 +9355,7 @@ function startApp() {
     initMoreToolsMenu();
     initSettingsModal();
     initHandheldMode();
+    initHardwareGuides();
 
     // Sound Designer & SysEx Workstation initializers
     initSysexViewSwitcher();

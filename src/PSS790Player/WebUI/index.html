@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.8.3">
+    <link rel="stylesheet" href="styles.css?v=2.8.4">
     <script>
         tailwind.config = {
             theme: {
@@ -249,6 +249,11 @@
                     <button type="button" id="menuItemShortcuts" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition-all text-left cursor-pointer">
                         <span class="text-xs shrink-0">⌨️</span>
                         <span>Hotkeys &amp; Controller (? / F1)</span>
+                    </button>
+
+                    <button type="button" id="menuItemHardwareGuide" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition-all text-left cursor-pointer">
+                        <span class="text-xs shrink-0">🎹</span>
+                        <span>Hardware Capture Guide</span>
                     </button>
 
                     <button type="button" id="menuItemAbout" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition-all text-left cursor-pointer">
@@ -593,6 +598,11 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                             </svg>
                         </button>
+                        <!-- Keyboard Capture Hardware Guide Toggle Button -->
+                        <button id="btnToggleStudioGuide" title="Keyboard Capture Guide: View step-by-step instructions and button sequences for recording from PSS-790 8-track recorder or PSS-680 Song Memory" class="px-3 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700/80 transition-all text-xs font-semibold flex items-center space-x-1.5 active:scale-95 shadow-sm">
+                            <span class="text-amber-400">📖</span>
+                            <span>Capture Guide</span>
+                        </button>
                     </div>
 
                     <!-- Safety Guard & Thru Settings -->
@@ -625,6 +635,139 @@
                                 <input type="checkbox" id="chkMetronome" title="Click Track: Generates an audible metronome click track during recording" checked class="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0">
                                 <span>Click Track</span>
                             </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Collapsible Hardware Song & Sequencer Capture Guide -->
+            <section id="studioHardwareGuidePanel" class="hidden glass-panel p-5 rounded-2xl border border-indigo-800/60 bg-gradient-to-r from-slate-950 via-slate-900/90 to-slate-950 shadow-2xl space-y-4 transition-all">
+                <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm border border-amber-500/30">
+                            🎹
+                        </div>
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <h3 class="text-xs sm:text-sm font-bold text-white tracking-wide">Hardware Song &amp; Sequencer Capture Guide</h3>
+                                <span class="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-indigo-950 text-indigo-300 border border-indigo-700/60">MIDI Stream</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Step-by-step button sequences to capture onboard song memory playback into Studio as a multi-track MIDI file</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <!-- Model Selection Tabs -->
+                        <div class="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
+                            <button id="btnStudioGuideTab790" class="px-2.5 py-1 rounded-lg text-[11px] font-bold text-white bg-indigo-600 shadow-sm transition active:scale-95">PSS-790 (8-Track)</button>
+                            <button id="btnStudioGuideTab680" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-white transition active:scale-95">PSS-680 (5-Part)</button>
+                        </div>
+                        <button id="btnCloseStudioGuide" title="Close hardware capture guide" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pane 1: PSS-790 8-Track Capture Guide -->
+                <div id="studioGuidePane790" class="space-y-3">
+                    <div class="flex items-center space-x-2 text-[11px] text-slate-300 bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                        <span class="text-cyan-400 font-bold">Cable Hookup:</span>
+                        <span class="font-mono text-slate-300">PSS-790 <strong class="text-amber-300">[MIDI OUT]</strong> &rarr; USB MIDI Interface <strong class="text-cyan-300">[MIDI IN]</strong></span>
+                        <span class="text-slate-500 text-[10px] ml-auto hidden sm:inline">&bull; 8 Independent Melodic/Rhythm Tracks</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-cyan-950 text-cyan-400 flex items-center justify-center text-[10px] border border-cyan-800">1</span>
+                                <span>Select MIDI In Port</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                In the toolbar above, choose your USB MIDI adapter under <strong class="text-white">MIDI In</strong>. Keep <strong class="text-amber-400">MIDI Thru Forward</strong> off to prevent double-note echo.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-rose-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-rose-950 text-rose-400 flex items-center justify-center text-[10px] border border-rose-800">2</span>
+                                <span>Arm Studio Recorder</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                Click <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold text-[10px]">Start Recording</kbd>. Uncheck <em>1-Bar Count-In</em> if you prefer instant capture upon pressing Play.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-amber-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-amber-950 text-amber-400 flex items-center justify-center text-[10px] border border-amber-800">3</span>
+                                <span>Hardware Keys to Press</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                On PSS-790 under <strong class="text-white">SONG MEMORY</strong>, make sure your desired tracks (<kbd class="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 text-[10px]">1-8</kbd>) are active, then press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold text-[10px]">START / STOP</kbd>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-emerald-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-emerald-950 text-emerald-400 flex items-center justify-center text-[10px] border border-emerald-800">4</span>
+                                <span>Stop &amp; Save Take</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                When song finishes, press <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold text-[10px]">Stop Recording</kbd>. Save as <strong class="text-emerald-400">Native PSS Take</strong> (for keyboard) or <strong class="text-indigo-400">General MIDI</strong> (for DAWs).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pane 2: PSS-680 5-Part Song Memory Capture Guide -->
+                <div id="studioGuidePane680" class="space-y-3 hidden">
+                    <div class="flex items-center space-x-2 text-[11px] text-slate-300 bg-slate-900/80 px-3 py-2 rounded-xl border border-slate-800">
+                        <span class="text-amber-400 font-bold">Cable Hookup:</span>
+                        <span class="font-mono text-slate-300">PSS-680 <strong class="text-amber-300">[MIDI OUT]</strong> &rarr; USB MIDI Interface <strong class="text-cyan-300">[MIDI IN]</strong></span>
+                        <span class="text-slate-500 text-[10px] ml-auto hidden sm:inline">&bull; Melody 1-3 + Chord + Custom Drummer</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-cyan-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-cyan-950 text-cyan-400 flex items-center justify-center text-[10px] border border-cyan-800">1</span>
+                                <span>Select Port &amp; Profile</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                Choose your interface under <strong class="text-white">MIDI In</strong> and verify top-left synthesizer model is set to <strong class="text-amber-400">PSS-680 (FM Engine)</strong>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-rose-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-rose-950 text-rose-400 flex items-center justify-center text-[10px] border border-rose-800">2</span>
+                                <span>Arm Studio Recorder</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                Click <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold text-[10px]">Start Recording</kbd>. The live meter and event counter will arm for incoming events.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-amber-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-amber-950 text-amber-400 flex items-center justify-center text-[10px] border border-amber-800">3</span>
+                                <span>Hardware Keys to Press</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                On PSS-680 under <strong class="text-white">MEMORY</strong>, press <kbd class="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700 text-[10px]">MELODY 1/2/3</kbd>, <kbd class="px-1 py-0.2 rounded bg-slate-800 text-emerald-300 border border-slate-700 text-[10px]">CHORD</kbd>, or <kbd class="px-1 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700 text-[10px]">CUSTOM DRUMMER</kbd>, then press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold text-[10px]">PLAY / START</kbd>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+                            <div class="flex items-center space-x-1.5 text-emerald-400 font-bold text-[11px]">
+                                <span class="w-4 h-4 rounded-full bg-emerald-950 text-emerald-400 flex items-center justify-center text-[10px] border border-emerald-800">4</span>
+                                <span>Stop &amp; Save Take</span>
+                            </div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                When playback ends, click <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold text-[10px]">Stop Recording</kbd>. Save as <strong class="text-emerald-400">Native PSS Take</strong> (preserves FM voices 00-99) or <strong class="text-indigo-400">General MIDI</strong>.
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -1788,17 +1931,54 @@
                         </div>
 
                         <!-- Hardware Instructions Callout -->
-                        <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-[11px] space-y-1.5">
-                            <div class="flex items-center space-x-1.5 text-cyan-400 font-semibold">
-                                <span>💡</span>
-                                <span id="sysexInstructionsTitle">PSS-790 Memory Bulk Dump Instructions:</span>
+                        <div class="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] space-y-2">
+                            <div class="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
+                                <div class="flex items-center space-x-1.5 text-cyan-400 font-semibold">
+                                    <span>💡</span>
+                                    <span id="sysexInstructionsTitle">Memory Bulk Dump Hardware Instructions:</span>
+                                </div>
+                                <div class="flex items-center space-x-1.5">
+                                    <div class="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
+                                        <button id="btnSysexInstTab790" class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-600 text-white transition active:scale-95">PSS-790</button>
+                                        <button id="btnSysexInstTab680" class="px-2 py-0.5 rounded text-[10px] font-semibold text-slate-400 hover:text-white transition active:scale-95">PSS-680</button>
+                                    </div>
+                                    <button id="btnOpenSysexFullGuide" title="Open comprehensive hardware capture &amp; dump guide modal" class="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition">
+                                        📖
+                                    </button>
+                                </div>
                             </div>
-                            <ol id="sysexInstructionsList" class="list-decimal list-inside text-slate-300 space-y-1 pl-1">
-                                <li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
-                                <li>On keyboard, press <strong class="text-white bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">MEMORY BULK DUMP</strong> (display flashes <code class="text-amber-400 font-bold">b-8</code>).</li>
-                                <li>Press it a <strong>second time</strong> to transmit memory to PC.</li>
-                                <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file immediately!</li>
-                            </ol>
+
+                            <!-- PSS-790 SysEx Steps -->
+                            <div id="sysexGuideCallout790" class="space-y-1.5">
+                                <div class="text-[10px] text-slate-400 font-mono">
+                                    Cable: PSS-790 <strong class="text-amber-300">[MIDI OUT]</strong> &rarr; USB MIDI Interface <strong class="text-cyan-300">[MIDI IN]</strong>
+                                </div>
+                                <ol class="list-decimal list-inside text-slate-300 space-y-1 pl-1">
+                                    <li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below (listener turns green).</li>
+                                    <li>On keyboard, press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold text-[10px]">MEMORY BULK DUMP</kbd> (display flashes <code class="text-amber-400 font-bold">b-8</code>).</li>
+                                    <li>Press <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold text-[10px]">MEMORY BULK DUMP</kbd> a <strong>second time</strong> to transmit all 8-track Song Memory, styles &amp; voices.</li>
+                                    <li>Auto-saves as a date-stamped <code class="text-cyan-300">.syx</code> file in your vault!</li>
+                                </ol>
+                            </div>
+
+                            <!-- PSS-680 SysEx Steps -->
+                            <div id="sysexGuideCallout680" class="space-y-1.5 hidden">
+                                <div class="text-[10px] text-slate-400 font-mono">
+                                    Cable: PSS-680 <strong class="text-amber-300">[MIDI OUT]</strong> &rarr; USB MIDI Interface <strong class="text-cyan-300">[MIDI IN]</strong>
+                                </div>
+                                <ol class="list-decimal list-inside text-slate-300 space-y-1 pl-1">
+                                    <li>Click <strong class="text-indigo-400">"Listen for Bulk Dump"</strong> below.</li>
+                                    <li>On PSS-680, hold <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-bold text-[10px]">MIDI</kbd> down and press the target memory button:
+                                        <div class="grid grid-cols-2 gap-1.5 my-1 text-[10px] font-mono pl-3">
+                                            <div>&bull; <strong class="text-cyan-300">Format 01H</strong>: <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MELODY 1/2/3</kbd> (10 KB)</div>
+                                            <div>&bull; <strong class="text-emerald-300">Format 02H</strong>: <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">CHORD</kbd> (410 B)</div>
+                                            <div>&bull; <strong class="text-amber-300">Format 03H</strong>: <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">CUSTOM DRUMMER</kbd> (722 B)</div>
+                                            <div>&bull; <strong class="text-rose-300">Format 00H</strong>: <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">RECORD</kbd> (FM Voices)</div>
+                                        </div>
+                                    </li>
+                                    <li>Display counts down while sending; app validates Yamaha checksum and auto-saves <code class="text-cyan-300">.syx</code>.</li>
+                                </ol>
+                            </div>
                         </div>
 
                         <!-- Capture Metrics -->
@@ -2783,6 +2963,261 @@
         </div>
     </div>
 
+    <!-- Hardware Capture & SysEx Guide Modal -->
+    <div id="hardwareGuideModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm hidden p-3">
+        <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-3xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div class="flex items-center space-x-3">
+                    <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-base border border-indigo-500/30">
+                        🎹
+                    </div>
+                    <div>
+                        <h3 class="text-sm sm:text-base font-bold text-white tracking-wide">Yamaha Hardware Capture &amp; SysEx Guide</h3>
+                        <p class="text-[11px] text-slate-400">Physical button sequences, cable routing, and song transfer instructions</p>
+                    </div>
+                </div>
+                <button id="btnCloseHardwareGuideModal" title="Close hardware guide modal" class="text-slate-400 hover:text-white transition p-1">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Navigation Bar: Model Switcher & Method Switcher -->
+            <div class="flex flex-wrap items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/90 border border-slate-800 shrink-0">
+                <!-- Keyboard Model Select -->
+                <div class="flex items-center space-x-1">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Model:</span>
+                    <button id="btnModalGuideModel790" class="px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-sm transition active:scale-95">PSS-790 (AWM)</button>
+                    <button id="btnModalGuideModel680" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95">PSS-680 (FM)</button>
+                </div>
+
+                <!-- Capture Method Select -->
+                <div class="flex items-center space-x-1">
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Method:</span>
+                    <button id="btnModalGuideMethodMidi" class="px-3 py-1 rounded-lg text-xs font-bold text-white bg-slate-800 border border-slate-700 shadow-sm transition active:scale-95 flex items-center space-x-1.5">
+                        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                        <span>MIDI Song Capture</span>
+                    </button>
+                    <button id="btnModalGuideMethodSysex" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        <span>SysEx Bulk Dump</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Scrollable Guide Content -->
+            <div id="modalGuideScrollContent" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 space-y-4 text-xs text-slate-300">
+                
+                <!-- CONTENT 1: PSS-790 MIDI Song Capture -->
+                <div id="guideSection790Midi" class="space-y-3">
+                    <div class="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-white flex items-center space-x-2">
+                                <span class="text-rose-400">⏺</span>
+                                <span>Capturing the PSS-790 8-Track Sequencer into Studio</span>
+                            </h4>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">Multi-Track MIDI</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            When the PSS-790 Song Memory plays, it transmits all 8 tracks simultaneously over its 5-pin MIDI OUT port. PSS-Studio records this stream into a Standard MIDI File (.mid) with authentic voice and drum assignments.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-cyan-300 text-[11px]">Step 1 &bull; Physical Cable Connection</div>
+                            <p class="text-[11px] text-slate-300">
+                                Connect a 5-pin MIDI cable from <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold">PSS-790 MIDI OUT</kbd> into your computer's <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-bold">USB Interface MIDI IN</kbd>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-cyan-300 text-[11px]">Step 2 &bull; Select Port in App</div>
+                            <p class="text-[11px] text-slate-300">
+                                In the <strong class="text-white">Studio</strong> tab, select your interface in the <strong class="text-white">MIDI In</strong> dropdown. Make sure <strong class="text-amber-400">MIDI Thru Forward</strong> is OFF to prevent double-triggering.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-rose-400 text-[11px]">Step 3 &bull; Arm Recording in Studio</div>
+                            <p class="text-[11px] text-slate-300">
+                                Click the red <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold">Start Recording</kbd> button. The digital timer will arm.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-amber-400 text-[11px]">Step 4 &bull; Press Play on Keyboard</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                On the PSS-790 front panel, navigate to <strong class="text-white">SONG MEMORY</strong>. Ensure your desired tracks (<kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">TRACK 1-8</kbd>) are selected/lit, then press the <kbd class="px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold">START / STOP</kbd> button.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-emerald-400 text-[11px]">Step 5 &bull; Finish &amp; Export</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                When playback finishes, click <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold">Stop Recording</kbd>. You can save as <strong class="text-emerald-400">Save Native PSS Take</strong> (with PSS-790 voice tags) or <strong class="text-indigo-400">Export to General MIDI</strong> (for DAWs and media players).
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTENT 2: PSS-790 SysEx Bulk Dump -->
+                <div id="guideSection790Sysex" class="space-y-3 hidden">
+                    <div class="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-white flex items-center space-x-2">
+                                <span class="text-indigo-400">💾</span>
+                                <span>PSS-790 Memory Bulk Dump Backup (.syx)</span>
+                            </h4>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700">Raw System Exclusive</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            Backs up all onboard memory from the PSS-790, including Song Memory tracks, custom accompaniment styles, and vector settings into an archival .syx file.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-cyan-300 text-[11px]">Step 1 &bull; Arm SysEx Listener</div>
+                            <p class="text-[11px] text-slate-300">
+                                In the <strong class="text-white">SysEx Vault</strong> tab, click the purple <kbd class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 font-bold">Listen for Bulk Dump</kbd> button. The capture status badge turns green.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-amber-400 text-[11px]">Step 2 &bull; Press MEMORY BULK DUMP on Keyboard</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                On the PSS-790 front panel, press the <kbd class="px-2 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold">MEMORY BULK DUMP</kbd> button. The keyboard's LED display will flash <code class="text-amber-400 font-bold">b-8</code>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-amber-400 text-[11px]">Step 3 &bull; Press a Second Time to Transmit</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                Press the <kbd class="px-2 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold">MEMORY BULK DUMP</kbd> button a <strong>second time</strong> to confirm. The keyboard will transmit its internal memory dump over MIDI.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-emerald-400 text-[11px]">Step 4 &bull; Auto-Save &amp; Restore</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                The app automatically verifies and saves the file with a timestamp in your SysEx Vault. At any time, clicking <strong class="text-amber-400">Transmit to Keyboard</strong> will send the dump back to restore your exact songs and patterns.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTENT 3: PSS-680 MIDI Song Capture -->
+                <div id="guideSection680Midi" class="space-y-3 hidden">
+                    <div class="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-white flex items-center space-x-2">
+                                <span class="text-rose-400">⏺</span>
+                                <span>Capturing PSS-680 Song Memory into Studio</span>
+                            </h4>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700">2-Op FM Stream</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            Streams Melody Tracks 1–3, Chord Memory, and Custom Drummer rhythm triggers from the PSS-680 FM synthesizer into a multi-track MIDI file.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-cyan-300 text-[11px]">Step 1 &bull; Cable &amp; Synthesizer Profile</div>
+                            <p class="text-[11px] text-slate-300">
+                                Connect <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700 font-bold">PSS-680 MIDI OUT</kbd> &rarr; <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 border border-slate-700 font-bold">USB Interface MIDI IN</kbd>. In the top-left dropdown of the app, switch to <strong class="text-amber-400">PSS-680 (FM Engine)</strong>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-rose-400 text-[11px]">Step 2 &bull; Arm Studio Recorder</div>
+                            <p class="text-[11px] text-slate-300">
+                                In the <strong class="text-white">Studio</strong> tab, select your input port and click the red <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold">Start Recording</kbd> button.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-amber-400 text-[11px]">Step 3 &bull; Engage Memory Tracks &amp; Press Play</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                On the PSS-680 front panel under <strong class="text-white">RECORD / MEMORY</strong>, engage your desired tracks: <kbd class="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700">MELODY 1</kbd>, <kbd class="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700">MELODY 2</kbd>, <kbd class="px-1 py-0.2 rounded bg-slate-800 text-cyan-300 border border-slate-700">MELODY 3</kbd>, <kbd class="px-1 py-0.2 rounded bg-slate-800 text-emerald-300 border border-slate-700">CHORD</kbd>, or <kbd class="px-1 py-0.2 rounded bg-slate-800 text-amber-300 border border-slate-700">CUSTOM DRUMMER</kbd>, then press <kbd class="px-2 py-0.5 rounded bg-slate-800 text-white border border-slate-700 font-bold">PLAY / START</kbd>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-emerald-400 text-[11px]">Step 4 &bull; Finish &amp; Save</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                Click <kbd class="px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800 font-bold">Stop Recording</kbd>. Save as <strong class="text-emerald-400">Save Native (PSS-680 Ready)</strong> to preserve FM patches 00–99 or <strong class="text-indigo-400">Export to General MIDI</strong>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTENT 4: PSS-680 SysEx Bulk Dump -->
+                <div id="guideSection680Sysex" class="space-y-3 hidden">
+                    <div class="p-3 rounded-xl bg-gradient-to-r from-slate-900 to-indigo-950/40 border border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <h4 class="font-bold text-sm text-white flex items-center space-x-2">
+                                <span class="text-indigo-400">💾</span>
+                                <span>PSS-680 Yamaha SysEx Dump Formats</span>
+                            </h4>
+                            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-amber-300 border border-slate-700">Format 00H - 03H</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 leading-relaxed">
+                            The PSS-680 uses modular Yamaha SysEx formats. You can dump individual memory banks or complete memory backups.
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-cyan-300 text-[11px]">Step 1 &bull; Arm SysEx Listener</div>
+                            <p class="text-[11px] text-slate-300">
+                                In the <strong class="text-white">SysEx Vault</strong> tab, click <kbd class="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-700 font-bold">Listen for Bulk Dump</kbd>.
+                            </p>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                            <div class="font-bold text-amber-400 text-[11px]">Step 2 &bull; Keyboard Key Combinations</div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 space-y-0.5">
+                                    <span class="text-cyan-300 font-bold block">Format 01H &bull; Melody Memory</span>
+                                    <p class="text-slate-400 text-[10px]">Hold <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MIDI</kbd> + press <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MELODY 1/2/3</kbd> (~10 KB, all 3 melody tracks).</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 space-y-0.5">
+                                    <span class="text-emerald-300 font-bold block">Format 02H &bull; Chord Memory</span>
+                                    <p class="text-slate-400 text-[10px]">Hold <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MIDI</kbd> + press <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">CHORD</kbd> (410 B, auto-bass chord sequence).</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 space-y-0.5">
+                                    <span class="text-amber-300 font-bold block">Format 03H &bull; Custom Drummer</span>
+                                    <p class="text-slate-400 text-[10px]">Hold <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MIDI</kbd> + press <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">CUSTOM DRUMMER</kbd> (722 B, rhythm pattern).</p>
+                                </div>
+                                <div class="p-2 rounded-lg bg-slate-950/80 border border-slate-800 space-y-0.5">
+                                    <span class="text-rose-300 font-bold block">Format 00H &bull; FM User Voices</span>
+                                    <p class="text-slate-400 text-[10px]">Hold <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">MIDI</kbd> + press <kbd class="px-1 py-0.2 rounded bg-slate-800 text-white border border-slate-700">RECORD</kbd> (72 B, 5 user FM voices).</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
+                            <div class="font-bold text-emerald-400 text-[11px]">Step 3 &bull; Transmission &amp; Verification</div>
+                            <p class="text-[11px] text-slate-300 leading-relaxed">
+                                The PSS-680 3-digit LED counts down during transmission. PSS-Studio verifies the Yamaha checksum, labels the dump type (Format 00H-03H), and auto-saves the .syx file.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end border-t border-slate-800 pt-3 shrink-0">
+                <button id="btnDismissHardwareGuideModal" title="Close hardware guide modal" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white shadow-md shadow-indigo-600/30 transition active:scale-95">Got It</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="notificationToast" class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl bg-slate-900 border border-cyan-500/40 text-xs text-white shadow-2xl flex items-center space-x-2 transform translate-y-20 opacity-0 transition-all duration-300">
         <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
@@ -2790,6 +3225,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.8.3"></script>
+    <script src="app.js?v=2.8.4"></script>
 </body>
 </html>

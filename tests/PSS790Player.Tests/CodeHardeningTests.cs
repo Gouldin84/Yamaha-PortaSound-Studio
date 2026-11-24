@@ -190,6 +190,43 @@ namespace PSS790Player.Tests
             }
         }
 
+        [Fact]
+        public void WebUI_Assets_ContainHardwareCaptureGuideSignatures()
+        {
+            var htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "index.html");
+            if (!File.Exists(htmlPath))
+            {
+                htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "index.html");
+            }
+
+            if (File.Exists(htmlPath))
+            {
+                var content = File.ReadAllText(htmlPath);
+                Assert.Contains("studioHardwareGuidePanel", content);
+                Assert.Contains("hardwareGuideModal", content);
+                Assert.Contains("btnToggleStudioGuide", content);
+                Assert.Contains("MEMORY BULK DUMP", content);
+                Assert.Contains("SONG MEMORY", content);
+                Assert.Contains("Format 01H", content);
+                Assert.Contains("Format 02H", content);
+                Assert.Contains("Format 03H", content);
+            }
+
+            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
+            if (!File.Exists(appJsPath))
+            {
+                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
+            }
+
+            if (File.Exists(appJsPath))
+            {
+                var content = File.ReadAllText(appJsPath);
+                Assert.Contains("initHardwareGuides", content);
+                Assert.Contains("syncHardwareGuidesToModel", content);
+                Assert.Contains("openHardwareGuideModal", content);
+            }
+        }
+
         #endregion
     }
 }
