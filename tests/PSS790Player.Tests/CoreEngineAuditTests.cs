@@ -1192,6 +1192,112 @@ namespace PSS790Player.Tests
                 e => e.Text.Contains("Vector", StringComparison.OrdinalIgnoreCase));
         }
 
+        [Fact]
+        public void PolyphonyOptimizer_Pss790_PreservesFastLegatoAndMidRegisterSoloMelody_Above28Voices()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            // Track 0: Ch 0 Bass (36), Ch 1 High String Ensemble Pad (28 simultaneous high notes above melody)
+            var bgTrack = new TrackChunk();
+            bgTrack.Events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)95) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            for (int i = 0; i < 28; i++)
+            {
+                // Dense high strings (notes 62..89) held across [0..960]
+                bgTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(62 + i), (SevenBitNumber)100) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            }
+            bgTrack.Events.Add(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 960 });
+            for (int i = 0; i < 28; i++)
+            {
+                bgTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(62 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            }
+
+            // Track 1: Ch 2 Solo Violin melody (GM 40) in mid-register (lower pitch & velocity than strings!)
+            // running fast legato 16th notes across [120..480]
+            var melodyTrack = new TrackChunk();
+            byte[] melodyPitches = { 60, 62, 64, 65 };
+            for (int i = 0; i < melodyPitches.Length; i++)
+            {
+                melodyTrack.Events.Add(new NoteOnEvent((SevenBitNumber)melodyPitches[i], (SevenBitNumber)65)
+                {
+                    Channel = (FourBitNumber)2,
+                    DeltaTime = i == 0 ? 120 : 0
+                });
+                melodyTrack.Events.Add(new NoteOffEvent((SevenBitNumber)melodyPitches[i], (SevenBitNumber)0)
+                {
+                    Channel = (FourBitNumber)2,
+                    DeltaTime = 60
+                });
+            }
+
+            midi.Chunks.Add(bgTrack);
+            midi.Chunks.Add(melodyTrack);
+
+            var programs = new Dictionary<int, byte>
+            {
+                [0] = 33, // Electric Bass
+                [1] = 48, // String Ensemble 1 (dense pad)
+                [2] = 40  // Solo Violin (mid-register melody)
+            };
+
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 26, model: "pss790");
+            var optimized = optimizer.Optimize(midi, programs);
+            var surviving = optimized.GetNotes().ToList();
+
+            var melodyNotes = surviving.Where(n => n.Channel == 2).Select(n => (byte)n.NoteNumber).ToList();
+            Assert.Equal(melodyPitches, melodyNotes);
+            Assert.Contains(surviving, n => n.Channel == 0 && n.NoteNumber == 36);
+        }
+
+        [Fact]
+        public void Remapper_EarlyNonZeroProgramChange_PulledToTick0BeforeSetupPreRoll()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(960) };
+            // Ch 3 has NoteOn at tick 0; Ch 0 & Ch 1 have initial ProgramChange at tick 2 (before/at their notes)
+            var trk0 = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)82) { Channel = (FourBitNumber)3, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)3, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)3, DeltaTime = 240 },
+                new ProgramChangeEvent((SevenBitNumber)35) { Channel = (FourBitNumber)1, DeltaTime = 2 },
+                new ProgramChangeEvent((SevenBitNumber)40) { Channel = (FourBitNumber)0, DeltaTime = 0 }
+            );
+            var trk1 = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)45, (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 4 },
+                new NoteOffEvent((SevenBitNumber)45, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 240 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
+            );
+            midi.Chunks.Add(trk0);
+            midi.Chunks.Add(trk1);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790", EnsureSetupPreRoll = true });
+            var pcs = remapped.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent).ToList();
+            var firstNoteTime = remapped.GetNotes().Min(n => n.Time);
+
+            Assert.True(firstNoteTime >= 48);
+            Assert.Equal(0, pcs.First(te => ((ProgramChangeEvent)te.Event).Channel == 0).Time);
+            Assert.Equal(0, pcs.First(te => ((ProgramChangeEvent)te.Event).Channel == 1).Time);
+            Assert.Equal(0, pcs.First(te => ((ProgramChangeEvent)te.Event).Channel == 3).Time);
+        }
+
+        [Fact]
+        public void MidiPlayer_PlayWithoutDevice_StillEmitsPlaybackStateNotification()
+        {
+            using var player = new MidiPlayer();
+            bool stateEmitted = false;
+            PlaybackStateEventArgs? lastArgs = null;
+            player.PlaybackStateChanged += (_, args) =>
+            {
+                stateEmitted = true;
+                lastArgs = args;
+            };
+
+            player.Play();
+
+            Assert.True(stateEmitted);
+            Assert.NotNull(lastArgs);
+            Assert.False(lastArgs!.IsPlaying);
+        }
+
         #endregion
     }
 }

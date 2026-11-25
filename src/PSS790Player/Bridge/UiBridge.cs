@@ -43,7 +43,8 @@ namespace PSS790Player.Bridge
         private int _hasPendingSeek;
         private int _seekWorkerRunning;
         private int _loadGeneration;
-        private volatile bool _isLoadingSong;
+        private volatile bool _isAutoPlayLoad;
+        private volatile string? _activeFilePathSnapshot;
         private volatile bool _isDisposed;
 
         private readonly bool[] _channelActiveStates = new bool[16];
@@ -107,12 +108,16 @@ namespace PSS790Player.Bridge
             _player.PlaybackStateChanged += (s, e) =>
             {
                 if (_isDisposed) return;
+                var filePathSnap = _activeFilePathSnapshot;
                 SendToJs("playback_state", new
                 {
                     isPlaying = e.IsPlaying,
                     isPaused = e.IsPaused,
                     currentSeconds = e.CurrentTime.TotalSeconds,
-                    totalSeconds = e.TotalTime.TotalSeconds
+                    totalSeconds = e.TotalTime.TotalSeconds,
+                    filePath = filePathSnap,
+                    fileName = string.IsNullOrEmpty(filePathSnap) ? null : Path.GetFileName(filePathSnap),
+                    loadGen = Volatile.Read(ref _loadGeneration)
                 });
             };
 
@@ -391,6 +396,7 @@ namespace PSS790Player.Bridge
                         : string.Equals(_currentFilePath, targetPath, StringComparison.OrdinalIgnoreCase)))
                 {
                     _currentFilePath = null;
+                    _activeFilePathSnapshot = null;
                     _loadedOriginalMidi = null;
                     _loadedRemappedMidi = null;
                     shouldStop = true;
@@ -520,7 +526,7 @@ namespace PSS790Player.Bridge
                         break;
                     case "load_midi_metadata":
                         var metaPath = root.TryGetProperty("filePath", out var mfp) ? mfp.GetString() : (root.TryGetProperty("path", out var mp) ? mp.GetString() : null);
-                        if (!string.IsNullOrEmpty(metaPath) && !_player.IsPlaying && !_isLoadingSong)
+                        if (!string.IsNullOrEmpty(metaPath) && !_player.IsPlaying && !_isAutoPlayLoad)
                         {
                             LoadFileAsync(metaPath, autoPlay: false);
                         }
@@ -2928,6 +2934,7 @@ namespace PSS790Player.Bridge
                     {
                         if (Volatile.Read(ref _loadGeneration) != gen) return;
                         _currentFilePath = virtualPath ?? title;
+                        _activeFilePathSnapshot = _currentFilePath;
                         _loadedOriginalMidi = midi;
                     }
 
@@ -2963,6 +2970,10 @@ namespace PSS790Player.Bridge
                     SendToJs("file_loaded", new
                     {
                         loadGen = gen,
+                        autoPlay = false,
+                        isPlaying = _player.IsPlaying,
+                        isPaused = _player.IsPaused,
+                        currentSeconds = _player.CurrentPosition.TotalSeconds,
                         fileName = title,
                         filePath = virtualPath ?? title,
                         relativeDir = "",
@@ -3001,6 +3012,7 @@ namespace PSS790Player.Bridge
 
         private void LoadFileAsync(string pathOrName, bool autoPlay = false)
         {
+            if (autoPlay) _isAutoPlayLoad = true;
             int gen = Interlocked.Increment(ref _loadGeneration);
             _ = Task.Run(() =>
             {
@@ -3011,13 +3023,14 @@ namespace PSS790Player.Bridge
 
         public void LoadFile(string pathOrName, bool autoPlay = false)
         {
+            if (autoPlay) _isAutoPlayLoad = true;
             int gen = Interlocked.Increment(ref _loadGeneration);
             LoadFileInternal(pathOrName, autoPlay, gen);
         }
 
         private void LoadFileInternal(string pathOrName, bool autoPlay, int gen)
         {
-            _isLoadingSong = true;
+            if (autoPlay) _isAutoPlayLoad = true;
             try
             {
                 lock (_loadFileLock)
@@ -3040,12 +3053,22 @@ namespace PSS790Player.Bridge
 
                         if (!File.Exists(resolvedPath))
                         {
-                            SendToJs("error", new { message = $"File not found: {pathOrName}" });
+                            SendToJs("error", new { message = $"File not found: {pathOrName}", loadGen = gen });
                             return;
                         }
 
                         if (string.Equals(_currentFilePath, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && _loadedOriginalMidi != null)
                         {
+                            SendToJs("playback_state", new
+                            {
+                                isPlaying = _player.IsPlaying,
+                                isPaused = _player.IsPaused,
+                                currentSeconds = _player.CurrentPosition.TotalSeconds,
+                                totalSeconds = _player.TotalDuration.TotalSeconds,
+                                filePath = _currentFilePath,
+                                fileName = Path.GetFileName(_currentFilePath),
+                                loadGen = gen
+                            });
                             return;
                         }
 
@@ -3056,9 +3079,11 @@ namespace PSS790Player.Bridge
                         if (Volatile.Read(ref _loadGeneration) != gen) return;
 
                     _currentFilePath = resolvedPath;
+                    _activeFilePathSnapshot = resolvedPath;
                     _loadedOriginalMidi = originalMidi;
 
                     var modelSnapshot = _activeModel;
+                    _preVectorVoiceOverrides = null;
                     _options.ChannelVoiceOverrides.Clear();
                     _options.ChannelOctaveShifts.Clear();
                     _options.TargetModel = modelSnapshot;
@@ -3095,9 +3120,22 @@ namespace PSS790Player.Bridge
                                       (isNativeCounterpart ? (modelSnapshot == "pss680" ? "PSS-790 Ready (Remapped for PSS-680)" : "PSS-680 Ready (Remapped for PSS-790)") :
                                       (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : $"General MIDI (Auto-Remapped for {modelTag})")));
 
+                    if (Volatile.Read(ref _loadGeneration) != gen) return;
+
+                    if (autoPlay)
+                    {
+                        _player.Play();
+                    }
+
+                    if (Volatile.Read(ref _loadGeneration) != gen) return;
+
                     SendToJs("file_loaded", new
                     {
                         loadGen = gen,
+                        autoPlay = autoPlay,
+                        isPlaying = _player.IsPlaying,
+                        isPaused = _player.IsPaused,
+                        currentSeconds = _player.CurrentPosition.TotalSeconds,
                         fileName = Path.GetFileName(resolvedPath),
                         filePath = resolvedPath,
                         relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
@@ -3113,11 +3151,6 @@ namespace PSS790Player.Bridge
                         hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath, modelSnapshot),
                         health = (object?)null
                     });
-
-                    if (autoPlay && Volatile.Read(ref _loadGeneration) == gen)
-                    {
-                        _player.Play();
-                    }
 
                     var origSnap = _loadedOriginalMidi;
                     var remapSnap = _loadedRemappedMidi;
@@ -3141,7 +3174,7 @@ namespace PSS790Player.Bridge
                 }
                 catch (Exception ex)
                 {
-                    SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}" });
+                    SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}", loadGen = gen });
                 }
             }
             }
@@ -3149,7 +3182,7 @@ namespace PSS790Player.Bridge
             {
                 if (Volatile.Read(ref _loadGeneration) == gen)
                 {
-                    _isLoadingSong = false;
+                    _isAutoPlayLoad = false;
                 }
             }
         }

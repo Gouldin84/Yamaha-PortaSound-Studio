@@ -880,28 +880,69 @@ namespace PSS790Player.Core
                 }
             }
 
-            // 8. Ensure all active melodic channels have an initial Program Change
-            var allActiveNoteChannels = remapped.GetTrackChunks()
-                .SelectMany(t => t.Events)
-                .OfType<NoteOnEvent>()
-                .Where(n => n.Velocity > 0)
-                .Select(n => (int)n.Channel)
-                .Distinct()
-                .ToHashSet();
+            // 8. Ensure all active melodic channels have an initial Program Change at Tick 0
+            // Also pull any early pre-note setup ProgramChange (at Time > 0 before/with the channel's first note)
+            // back to Tick 0 so Step 12 pre-roll never shifts initial voice selection onto/after Note 1.
+            var firstNoteTimeByChannel = new Dictionary<int, long>();
+            var hasZeroPcChannels = new HashSet<int>();
+            var earliestPcByChannel = new Dictionary<int, (long Time, byte ProgramNumber, TrackChunk Track)>();
+            var allActiveNoteChannels = new HashSet<int>();
 
-            var allPcChannels = remapped.GetTrackChunks()
-                .SelectMany(t => t.Events)
-                .OfType<ProgramChangeEvent>()
-                .Select(p => (int)p.Channel)
-                .Distinct()
-                .ToHashSet();
+            foreach (var track in remapped.GetTrackChunks())
+            {
+                foreach (var te in track.GetTimedEvents())
+                {
+                    if (te.Event is NoteOnEvent n && n.Velocity > 0)
+                    {
+                        int nCh = n.Channel;
+                        allActiveNoteChannels.Add(nCh);
+                        if (!firstNoteTimeByChannel.TryGetValue(nCh, out var minT) || te.Time < minT)
+                        {
+                            firstNoteTimeByChannel[nCh] = te.Time;
+                        }
+                    }
+                    else if (te.Event is ProgramChangeEvent pcEvt && pcEvt.Channel != 15)
+                    {
+                        int pCh = pcEvt.Channel;
+                        if (te.Time == 0)
+                        {
+                            hasZeroPcChannels.Add(pCh);
+                        }
+                        if (!earliestPcByChannel.TryGetValue(pCh, out var curBest) || te.Time < curBest.Time)
+                        {
+                            earliestPcByChannel[pCh] = (te.Time, (byte)pcEvt.ProgramNumber, track);
+                        }
+                    }
+                }
+            }
+
+            // Pull pre-note/immediate-start initial ProgramChanges back to Tick 0 cleanly
+            foreach (var (ch, info) in earliestPcByChannel)
+            {
+                if (ch == 15 || hasZeroPcChannels.Contains(ch)) continue;
+                long firstNote = firstNoteTimeByChannel.TryGetValue(ch, out var fn) ? fn : long.MaxValue;
+                if (info.Time > 0 && info.Time <= firstNote + 16)
+                {
+                    using var trMgr = info.Track.ManageTimedEvents();
+                    var match = trMgr.Objects.FirstOrDefault(o =>
+                        o.Time == info.Time &&
+                        o.Event is ProgramChangeEvent pcMatch &&
+                        (int)pcMatch.Channel == ch &&
+                        (byte)pcMatch.ProgramNumber == info.ProgramNumber);
+                    if (match != null)
+                    {
+                        match.Time = 0;
+                        hasZeroPcChannels.Add(ch);
+                    }
+                }
+            }
 
             var firstTrack = remapped.GetTrackChunks().FirstOrDefault();
             if (firstTrack != null)
             {
                 foreach (var ch in allActiveNoteChannels)
                 {
-                    if (ch != 15 && !allPcChannels.Contains(ch))
+                    if (ch != 15 && !hasZeroPcChannels.Contains(ch))
                     {
                         byte pssProg = is680 ? (byte)3 : (byte)0;
                         int origLookupCh = (relocatedMelodicChannel.HasValue && ch == relocatedMelodicChannel.Value) ? 15 : ch;
@@ -917,6 +958,10 @@ namespace PSS790Player.Core
                             {
                                 pssProg = ovInfo.MidiProgram;
                             }
+                        }
+                        else if (earliestPcByChannel.TryGetValue(ch, out var latePc))
+                        {
+                            pssProg = latePc.ProgramNumber;
                         }
                         else if (postRelocationGmPrograms.TryGetValue(ch, out var gmProg))
                         {

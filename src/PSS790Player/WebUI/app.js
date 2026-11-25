@@ -101,6 +101,10 @@ let state = {
     activePreviewRecordingPath: null,
     initialDataReceived: false,
     isLoadingSong: false,
+    confirmedFilePath: null,
+    pendingLoadPath: null,
+    lastAcceptedLoadGen: 0,
+    mixerLastVoicesSig: "",
     // Handheld Navigation State
     autoAdvance: localStorage.getItem("pss_auto_advance") !== "false",
     handheldMode: localStorage.getItem("pss_handheld_mode") === "true"
@@ -111,6 +115,7 @@ let isScrubbing = false;
 let scrubCooldownUntil = 0;
 let lastSeekSeconds = -1;
 let lastSeekTime = 0;
+let loadingWatchdogTimer = null;
 
 // --- Theme Management ---
 function applyTheme(theme) {
@@ -510,7 +515,18 @@ function handleHostMessage(msg) {
             break;
 
         case "file_loaded":
+            if (msg.data.loadGen !== undefined) {
+                if (msg.data.loadGen < state.lastAcceptedLoadGen) {
+                    break;
+                }
+                state.lastAcceptedLoadGen = msg.data.loadGen;
+            }
+            if (loadingWatchdogTimer) {
+                clearTimeout(loadingWatchdogTimer);
+                loadingWatchdogTimer = null;
+            }
             state.isLoadingSong = false;
+            state.pendingLoadPath = null;
             if (autoAdvanceTimer) {
                 clearTimeout(autoAdvanceTimer);
                 autoAdvanceTimer = null;
@@ -519,15 +535,24 @@ function handleHostMessage(msg) {
             lastSeekTime = 0;
             state.currentFile = msg.data.fileName;
             state.currentFilePath = msg.data.filePath;
-            state.selectedSongPath = msg.data.filePath;
+            state.confirmedFilePath = msg.data.filePath;
+            if (msg.data.autoPlay !== false || !state.selectedSongPath || state.selectedSongPath === msg.data.filePath) {
+                state.selectedSongPath = msg.data.filePath;
+            }
             state.durationSeconds = msg.data.durationSeconds || 0;
+            if (msg.data.isPlaying !== undefined) {
+                state.isPlaying = !!msg.data.isPlaying;
+            }
+            if (msg.data.isPaused !== undefined) {
+                state.isPaused = !!msg.data.isPaused;
+            }
             updateCurrentSongFavoriteButton();
             document.getElementById("currentSongTitle").textContent = msg.data.fileName;
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
             document.getElementById("timeScrubber").max = state.durationSeconds;
             if (!isScrubbing && Date.now() >= scrubCooldownUntil) {
-                state.currentSeconds = 0;
-                document.getElementById("timeScrubber").value = 0;
+                state.currentSeconds = msg.data.currentSeconds !== undefined ? msg.data.currentSeconds : 0;
+                document.getElementById("timeScrubber").value = state.currentSeconds;
             }
             updatePlaybackUi();
 
@@ -635,7 +660,34 @@ function handleHostMessage(msg) {
 
         case "playback_state":
             if (state.isLoadingSong) {
-                break;
+                if (msg.data.filePath && state.pendingLoadPath &&
+                    msg.data.filePath.toLowerCase() === state.pendingLoadPath.toLowerCase() &&
+                    msg.data.isPlaying) {
+                    if (loadingWatchdogTimer) {
+                        clearTimeout(loadingWatchdogTimer);
+                        loadingWatchdogTimer = null;
+                    }
+                    state.isLoadingSong = false;
+                    state.confirmedFilePath = msg.data.filePath;
+                    state.pendingLoadPath = null;
+                } else {
+                    break;
+                }
+            }
+            if (msg.data.loadGen !== undefined && msg.data.loadGen > state.lastAcceptedLoadGen) {
+                state.lastAcceptedLoadGen = msg.data.loadGen;
+            }
+            let trackReconciled = false;
+            if (msg.data.filePath && msg.data.filePath !== state.currentFilePath) {
+                state.currentFilePath = msg.data.filePath;
+                state.confirmedFilePath = msg.data.filePath;
+                state.currentFile = msg.data.fileName || getFileNameFromFullPath(msg.data.filePath);
+                const titleEl = document.getElementById("currentSongTitle");
+                if (titleEl) titleEl.textContent = state.currentFile;
+                updateCurrentSongFavoriteButton();
+                trackReconciled = true;
+            } else if (msg.data.filePath && !state.confirmedFilePath) {
+                state.confirmedFilePath = msg.data.filePath;
             }
             const playStateChanged = state.isPlaying !== msg.data.isPlaying || state.isPaused !== msg.data.isPaused;
             state.isPlaying = msg.data.isPlaying;
@@ -655,7 +707,7 @@ function handleHostMessage(msg) {
                 state.durationSeconds = msg.data.totalSeconds;
             }
             updatePlaybackUi();
-            if (playStateChanged) {
+            if (playStateChanged || trackReconciled) {
                 highlightActiveSongInTree();
                 if (!state.isPlaying) {
                     clearAllChannelLeds();
@@ -878,6 +930,18 @@ function handleHostMessage(msg) {
             break;
 
         case "error":
+            if (state.isLoadingSong) {
+                if (loadingWatchdogTimer) {
+                    clearTimeout(loadingWatchdogTimer);
+                    loadingWatchdogTimer = null;
+                }
+                state.isLoadingSong = false;
+                state.pendingLoadPath = null;
+                state.isPlaying = false;
+                state.isPaused = false;
+                updatePlaybackUi();
+                highlightActiveSongInTree();
+            }
             showToast(msg.data.message, true);
             break;
     }
@@ -2240,10 +2304,13 @@ function createSongItemElement(file) {
     if (playBtn) {
         playBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            if (file.fullPath === state.currentFilePath && state.isPlaying) {
+            const isConfirmedCurrent = !state.isLoadingSong && file.fullPath === (state.confirmedFilePath || state.currentFilePath);
+            if (isConfirmedCurrent && state.isPlaying) {
                 sendToHost("pause");
-            } else if (file.fullPath === state.currentFilePath && !state.isPlaying) {
+            } else if (isConfirmedCurrent && !state.isPlaying) {
                 sendToHost("play");
+            } else if (state.isLoadingSong && file.fullPath === state.pendingLoadPath) {
+                return;
             } else {
                 if (autoAdvanceTimer) {
                     clearTimeout(autoAdvanceTimer);
@@ -2466,13 +2533,30 @@ function getFileNameFromFullPath(p) {
 
 function stageOptimisticDeck(song, willPlay = true) {
     if (!song) return;
+    if (loadingWatchdogTimer) {
+        clearTimeout(loadingWatchdogTimer);
+        loadingWatchdogTimer = null;
+    }
     state.currentFile = song.fileName || getFileNameFromFullPath(song.fullPath);
     state.currentFilePath = song.fullPath;
     state.selectedSongPath = song.fullPath;
+    state.currentSeconds = 0;
+    state.durationSeconds = 0;
+    state.isPaused = false;
     if (willPlay) {
         state.isLoadingSong = true;
+        state.pendingLoadPath = song.fullPath;
         state.isPlaying = true;
-        state.isPaused = false;
+        loadingWatchdogTimer = setTimeout(() => {
+            loadingWatchdogTimer = null;
+            if (state.isLoadingSong) {
+                state.isLoadingSong = false;
+                state.pendingLoadPath = null;
+                updatePlaybackUi();
+            }
+        }, 5000);
+    } else {
+        state.pendingLoadPath = null;
     }
 
     const titleEl = document.getElementById("currentSongTitle");
@@ -3101,10 +3185,17 @@ function renderMixer() {
     }
 
     const currentDrumMask = state.channels.reduce((acc, c) => acc | ((c.isDrum !== undefined ? !!c.isDrum : c.channel === 15) ? (1 << c.channel) : 0), 0);
+    const voiceCatalog = state.voices || [];
+    const fmCatalog = state.fmVoices || [];
+    const currentVoicesSig = `${state.activeModel}|${voiceCatalog.length}:${voiceCatalog[0]?.number ?? ''}:${voiceCatalog[voiceCatalog.length - 1]?.number ?? ''}|${fmCatalog.length}:${fmCatalog.map(v => `${v.filePath || ''}:${v.bankNumber ?? ''}`).join(';')}`;
+    const firstMelodicSelect = grid.querySelector('select[id^="voice-override-"]:not(:disabled)');
+    const hasPopulatedSelectOptions = !!(firstMelodicSelect && (voiceCatalog.length === 0 || firstMelodicSelect.options.length > 1));
     const canUpdateInPlace = grid.children.length === 16 &&
         state.mixerModelBuilt === state.activeModel &&
         state.mixerLastQuadActive === state.vectorQuadActive &&
-        state.mixerLastDrumMask === currentDrumMask;
+        state.mixerLastDrumMask === currentDrumMask &&
+        state.mixerLastVoicesSig === currentVoicesSig &&
+        hasPopulatedSelectOptions;
     if (canUpdateInPlace) {
         const is680 = state.activeModel === "pss680";
         const quadPoleNames = ["A (North)", "B (East)", "C (South)", "D (West)"];
@@ -3161,7 +3252,7 @@ function renderMixer() {
                 } else if (ch.selectedFmPresetKey) {
                     sel.value = `fm:${ch.selectedFmPresetKey}`;
                 } else {
-                    sel.value = ch.selectedVoice !== null && ch.selectedVoice !== undefined ? ch.selectedVoice : "";
+                    sel.value = ch.selectedVoice !== null && ch.selectedVoice !== undefined ? String(ch.selectedVoice) : "";
                 }
             }
             const oct = document.getElementById(`ch-oct-${ch.channel}`);
@@ -3188,6 +3279,7 @@ function renderMixer() {
     state.mixerModelBuilt = state.activeModel;
     state.mixerLastQuadActive = state.vectorQuadActive;
     state.mixerLastDrumMask = currentDrumMask;
+    state.mixerLastVoicesSig = currentVoicesSig;
     grid.innerHTML = "";
 
     state.channels.forEach(ch => {
@@ -4318,6 +4410,9 @@ if (scrubberEl) {
     scrubberEl.addEventListener("pointerup", finishScrubbing);
     scrubberEl.addEventListener("pointercancel", finishScrubbing);
     scrubberEl.addEventListener("blur", finishScrubbing);
+    window.addEventListener("pointerup", () => {
+        if (isScrubbing) finishScrubbing();
+    });
 
     if (scrubTooltip) {
         const updateScrubTooltip = (e) => {

@@ -248,12 +248,12 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Step 2b: Model virtual release-tail window on melodic voices (200ms YM3420 FM on PSS-680, 100ms AWM on PSS-790)
-            var releaseTailMs = is680 ? 200 : 100;
-            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, releaseTailMs);
+            // Step 2b: Model 200ms virtual release-tail window on PSS-680 YM3420 FM voices only.
+            // PSS-790 AWM releases gracefully in hardware without eating fast melodic polyphony runs.
+            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, 200);
             foreach (var ctx in allContexts)
             {
-                if (ctx.Channel != 15)
+                if (is680 && ctx.Channel != 15)
                 {
                     long tailTicks = LengthConverter.ConvertFrom(releaseTailSpan, ctx.EffectiveEndTime, tempoMap);
                     ctx.SoundEndTime = ctx.EffectiveEndTime + Math.Max(0, tailTicks);
@@ -388,16 +388,30 @@ namespace PSS790Player.Core
                         var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
                         var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
 
+                        // Shield global high lead & low bass, plus prefer keeping fresh note triggers and
+                        // sparse melodic/solo channels (<= 2 concurrent notes) over dense accompaniment chords/pads.
+                        var channelCounts = new int[16];
+                        foreach (var m in activeMelodic)
+                        {
+                            if (m.Channel >= 0 && m.Channel < 16)
+                                channelCounts[m.Channel]++;
+                        }
+
                         var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
                         if (candidates.Count == 0)
                         {
                             break;
                         }
 
-                        var candidateToDrop = candidates
+                        // Only steal the freshly triggered note itself if no already-sounding candidate exists.
+                        var olderCandidates = candidates.Where(c => c != currentCtx).ToList();
+                        var selectionPool = olderCandidates.Count > 0 ? olderCandidates : candidates;
+
+                        var candidateToDrop = selectionPool
                             .OrderBy(c => c.Priority)
-                            .ThenBy(c => c.Velocity)
+                            .ThenBy(c => (c.Channel >= 0 && c.Channel < 16 && channelCounts[c.Channel] <= 2) ? 1 : 0)
                             .ThenBy(c => c.Time)
+                            .ThenBy(c => c.Velocity)
                             .First();
 
                         contextsToCull.Add(candidateToDrop);
@@ -453,21 +467,23 @@ namespace PSS790Player.Core
         {
             if (channel == 15) return 0; // Percussion budgeted separately
 
-            // Tier 3 (Highest): Solo Leads, Vocals/Choirs, Reeds/Winds, Dedicated Basses
-            if ((gmProgram >= 32 && gmProgram <= 39) || gmProgram == 43 || gmProgram == 58 ||
-                (gmProgram >= 52 && gmProgram <= 54) ||
-                (gmProgram >= 64 && gmProgram <= 87))
+            // Tier 3 (Highest): Dedicated Basses, Solo Strings, Solo Brass, Solo Vocals, Accordion/Harmonica, Reeds/Winds, Synth Leads
+            if ((gmProgram >= 32 && gmProgram <= 43) || // Basses + Violin, Viola, Cello, Contrabass
+                gmProgram == 21 || gmProgram == 22 ||   // Accordion, Harmonica
+                gmProgram == 54 || gmProgram == 58 ||   // Synth Voice, Tuba
+                (gmProgram >= 56 && gmProgram <= 60) || // Solo Brass (Trumpet, Trombone, Muted Trumpet, French Horn)
+                (gmProgram >= 64 && gmProgram <= 87))   // Reeds, Pipes, Synth Leads
             {
                 return 3;
             }
 
-            // Tier 2 (Medium): Pianos, Chromatic Percussion, Organs, Guitars
-            if (gmProgram <= 31)
+            // Tier 2 (Medium): Pianos, Chromatic Percussion, Organs, Guitars, Plucked/Timpani, Choir Pads
+            if (gmProgram <= 31 || (gmProgram >= 45 && gmProgram <= 47) || gmProgram == 52 || gmProgram == 53)
             {
                 return 2;
             }
 
-            // Tier 1 (Lowest / First to steal): Strings, Ensembles, Brass Sections, Synth Pads, FX
+            // Tier 1 (Lowest / First to steal): String Ensembles, Brass Sections, Synth Pads, FX
             return 1;
         }
     }

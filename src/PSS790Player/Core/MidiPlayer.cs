@@ -33,6 +33,7 @@ namespace PSS790Player.Core
         private Playback? _playback;
         private MidiFile? _currentFile;
         private TimeSpan _cachedTotalDuration = TimeSpan.Zero;
+        private TimeSpan _lastKnownPosition = TimeSpan.Zero;
         private double _speed = 1.0;
         private bool _loop;
         private bool _hasFinished;
@@ -343,6 +344,7 @@ namespace PSS790Player.Core
                 if (_isDisposed) return;
                 _currentFile = midiFile;
                 _cachedTotalDuration = duration;
+                _lastKnownPosition = TimeSpan.Zero;
                 _hasFinished = false;
             }
 
@@ -370,6 +372,7 @@ namespace PSS790Player.Core
             lock (_stateLock)
             {
                 try { _progressTimer.Stop(); } catch { }
+                _lastKnownPosition = TimeSpan.Zero;
                 _hasFinished = false;
 
                 if (disposePlayback)
@@ -779,14 +782,20 @@ namespace PSS790Player.Core
             }
 
             Playback? p;
+            MidiFile? fileSnapshot;
             bool restartFromBeginning;
             lock (_stateLock)
             {
                 p = _playback;
+                fileSnapshot = _currentFile;
                 restartFromBeginning = _hasFinished;
                 if (p != null)
                 {
                     _hasFinished = false;
+                    if (restartFromBeginning)
+                    {
+                        _lastKnownPosition = TimeSpan.Zero;
+                    }
                 }
             }
 
@@ -796,17 +805,180 @@ namespace PSS790Player.Core
                 {
                     if (!SafeIsRunning(p))
                     {
-                        if (restartFromBeginning)
+                        TimeSpan currentPos = TimeSpan.Zero;
+                        try
                         {
-                            p.MoveToStart();
+                            currentPos = p.GetCurrentTime<MetricTimeSpan>();
                         }
+                        catch { }
+
+                        if (restartFromBeginning || currentPos <= TimeSpan.FromMilliseconds(5))
+                        {
+                            if (restartFromBeginning)
+                            {
+                                p.MoveToStart();
+                            }
+
+                            if (fileSnapshot != null)
+                            {
+                                PrimeInitialVoicesForHardwareStart(fileSnapshot);
+                            }
+                        }
+
                         p.Start();
-                        try { _progressTimer.Start(); } catch { }
+                        lock (_stateLock)
+                        {
+                            if (!_isDisposed && ReferenceEquals(_playback, p))
+                            {
+                                try { _progressTimer.Start(); } catch { }
+                            }
+                        }
                         NotifyState();
                     }
                 }
-                catch { }
+                catch
+                {
+                    NotifyState();
+                }
             }
+            else
+            {
+                NotifyState();
+            }
+        }
+
+        private void PrimeInitialVoicesForHardwareStart(MidiFile file)
+        {
+            IOutputDevice? target;
+            string? devName;
+            bool is680;
+            lock (_deviceLock)
+            {
+                target = _outputDevice;
+                devName = _currentOutputDeviceName;
+                is680 = _isPss680;
+            }
+
+            // Only prime & pace on actual hardware/OS WinMM ports (skip mock unit-test devices)
+            if (target is not OutputDevice)
+            {
+                return;
+            }
+
+            bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(devName);
+
+            try
+            {
+                var minNoteTime = new Dictionary<int, long>();
+                var initialPcs = new Dictionary<int, (long Time, byte Program)>();
+                var initialCcs = new Dictionary<(int Channel, byte ControlNumber), byte>();
+
+                foreach (var track in file.GetTrackChunks())
+                {
+                    foreach (var te in track.GetTimedEvents())
+                    {
+                        if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                        {
+                            int ch = noteOn.Channel;
+                            if (!minNoteTime.TryGetValue(ch, out var curMin) || te.Time < curMin)
+                            {
+                                minNoteTime[ch] = te.Time;
+                            }
+                        }
+                    }
+                }
+
+                long setupWindowTicks = 96;
+                if (file.TimeDivision is TicksPerQuarterNoteTimeDivision tpqnDiv && tpqnDiv.TicksPerQuarterNote > 0)
+                {
+                    setupWindowTicks = Math.Max(48, tpqnDiv.TicksPerQuarterNote / 4);
+                }
+
+                foreach (var track in file.GetTrackChunks())
+                {
+                    foreach (var te in track.GetTimedEvents())
+                    {
+                        if (te.Event is ProgramChangeEvent pc && pc.Channel != 15)
+                        {
+                            int ch = pc.Channel;
+                            long limit = minNoteTime.TryGetValue(ch, out var fn) ? fn + setupWindowTicks : setupWindowTicks;
+                            if (te.Time <= limit)
+                            {
+                                if (!initialPcs.TryGetValue(ch, out var existing) || te.Time < existing.Time)
+                                {
+                                    initialPcs[ch] = (te.Time, (byte)pc.ProgramNumber);
+                                }
+                            }
+                        }
+                        else if (te.Event is ControlChangeEvent cc && te.Time == 0 && cc.Channel != 15 &&
+                                 (cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 91))
+                        {
+                            initialCcs.TryAdd((cc.Channel, (byte)cc.ControlNumber), (byte)cc.ControlValue);
+                        }
+                    }
+                }
+
+                if (initialPcs.Count == 0 && initialCcs.Count == 0)
+                {
+                    return;
+                }
+
+                int sentCount = 0;
+                lock (_deviceLock)
+                {
+                    if (!ReferenceEquals(_outputDevice, target)) return;
+
+                    foreach (var ch in initialPcs.Keys.OrderBy(k => k))
+                    {
+                        try
+                        {
+                            target.SendEvent(new ProgramChangeEvent((SevenBitNumber)initialPcs[ch].Program)
+                            {
+                                Channel = (FourBitNumber)ch
+                            });
+                            sentCount++;
+                            if (!isMsGs && (sentCount % 4) == 0)
+                            {
+                                Thread.Sleep(4);
+                            }
+                        }
+                        catch { }
+                    }
+
+                    foreach (var kvp in initialCcs)
+                    {
+                        int ch = kvp.Key.Channel;
+                        byte ccNum = kvp.Key.ControlNumber;
+                        byte ccVal = kvp.Value;
+
+                        if (ccNum == 7)
+                        {
+                            Volatile.Write(ref _lastFileChannelVolumes[ch], ccVal);
+                            if (is680) continue;
+                            byte userVol = Volatile.Read(ref _channelVolumes[ch]);
+                            ccVal = (byte)Math.Clamp((int)Math.Round((double)ccVal * userVol / 100.0), 0, 127);
+                        }
+
+                        try
+                        {
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)ccNum, (SevenBitNumber)ccVal)
+                            {
+                                Channel = (FourBitNumber)ch
+                            });
+                            sentCount++;
+                        }
+                        catch { }
+                    }
+                }
+
+                // Allow 31.25 kbps serial DIN MIDI UART & hardware wave ROM lookup to settle before Note 1
+                if (!isMsGs && sentCount > 0)
+                {
+                    int settleMs = Math.Clamp(sentCount * 2 + 25, 30, 80);
+                    Thread.Sleep(settleMs);
+                }
+            }
+            catch { }
         }
 
         public void Pause()
@@ -864,6 +1036,13 @@ namespace PSS790Player.Core
                 try
                 {
                     var clampedPos = position < TimeSpan.Zero ? TimeSpan.Zero : position;
+                    lock (_stateLock)
+                    {
+                        if (ReferenceEquals(_playback, p))
+                        {
+                            _lastKnownPosition = clampedPos;
+                        }
+                    }
                     p.MoveToTime(new MetricTimeSpan(clampedPos));
                 }
                 catch { }
@@ -1343,17 +1522,19 @@ namespace PSS790Player.Core
         {
             Playback? p;
             TimeSpan totalDuration;
+            TimeSpan lastKnownPos;
             bool hasFinished;
 
             lock (_stateLock)
             {
                 p = _playback;
                 totalDuration = _cachedTotalDuration;
+                lastKnownPos = _lastKnownPosition;
                 hasFinished = _hasFinished;
             }
 
             bool isPlaying = false;
-            TimeSpan currentPos = TimeSpan.Zero;
+            TimeSpan currentPos = p != null ? lastKnownPos : TimeSpan.Zero;
 
             if (p != null)
             {
@@ -1361,11 +1542,18 @@ namespace PSS790Player.Core
                 {
                     isPlaying = SafeIsRunning(p);
                     currentPos = p.GetCurrentTime<MetricTimeSpan>();
+                    lock (_stateLock)
+                    {
+                        if (ReferenceEquals(_playback, p))
+                        {
+                            _lastKnownPosition = currentPos;
+                        }
+                    }
                 }
                 catch (Exception)
                 {
                     isPlaying = false;
-                    currentPos = TimeSpan.Zero;
+                    currentPos = lastKnownPos;
                 }
             }
 

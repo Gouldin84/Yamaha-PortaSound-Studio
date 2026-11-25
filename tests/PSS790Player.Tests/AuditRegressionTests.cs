@@ -335,6 +335,10 @@ namespace PSS790Player.Tests
                 Assert.Contains("const newD1l = Math.round((1 - levelFrac) * 15);", js);
                 Assert.Contains("sendToHost(\"clear_all_solo\")", js);
                 Assert.Contains("if (state.isLoadingSong)", js);
+                Assert.Contains("mixerLastVoicesSig", js);
+                Assert.Contains("hasPopulatedSelectOptions", js);
+                Assert.Contains("state.lastAcceptedLoadGen", js);
+                Assert.Contains("confirmedFilePath", js);
                 Assert.DoesNotContain("text-${colAccents[ch]}", js);
             }
 
