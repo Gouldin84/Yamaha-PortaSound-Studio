@@ -1111,6 +1111,87 @@ namespace PSS790Player.Tests
             Assert.Contains(panicEvents, e => e is ControlChangeEvent cc && cc.Channel == 2 && cc.ControlNumber == 64 && cc.ControlValue == 0);
         }
 
+        [Fact]
+        public void Pss680SysExTranslators_Format01H_02H_03H_RoundTripAndDecodeAccurately()
+        {
+            // 1. Format 01H (Melody Memory)
+            byte[] mel = new byte[Pss680Constants.Format01DecodedByteCount];
+            mel[1] = 0xFE; mel[2] = 15; // Voice Change PC 15 (Trumpet)
+            mel[3] = (byte)(0x40 | 24); // Key On C3 (36 + 24 = 60)
+            mel[4] = (byte)(0x80 | 23); // Duration 24 step units = 1 beat (480 ticks)
+            mel[5] = 24;                // Key Off C3
+            mel[6] = 0xFF;              // End of Bank 1
+            for (int b = 1; b < 5; b++) mel[1 + (b * 1000)] = 0xFF;
+            mel[5011] = 9;              // MVOL = 9
+            mel[5016] = 2;              // MTC = Ch 3 (0-indexed 2)
+
+            var melSummary = Pss680SysExTranslators.AnalyzeMelodyMemory(mel);
+            Assert.Equal(1, melSummary[0].NoteCount);
+            var melMidi = Pss680SysExTranslators.DecodeMelodyMemoryToMidi(mel, 120);
+            var melNote = Assert.Single(melMidi.GetNotes());
+            Assert.Equal((SevenBitNumber)60, melNote.NoteNumber);
+            Assert.Equal(480, melNote.Length);
+            Assert.Equal((FourBitNumber)2, melNote.Channel);
+
+            // 2. Format 02H (Chord Memory)
+            byte[] chd = new byte[Pss680Constants.Format02DecodedByteCount];
+            chd[1] = 24;   // Pop Rock 1
+            chd[3] = 0x1F; // All parts enabled
+            chd[6] = 0x00; // Measure 0 Beat 0
+            chd[7] = 0x04; // C Maj7
+            chd[8] = 0xFF;
+            chd[201] = 118; // BPM
+
+            var chdSummary = Pss680SysExTranslators.AnalyzeChordMemory(chd);
+            Assert.Equal(118, chdSummary.Tempo);
+            Assert.Single(chdSummary.Chords);
+            Assert.Equal("CMaj7", chdSummary.Chords[0].ChordName);
+            var chdMidi = Pss680SysExTranslators.DecodeChordMemoryToMidi(chd);
+            Assert.True(chdMidi.GetNotes().Count >= 4);
+
+            // 3. Format 03H (Custom Drummer) bidirectional SysEx + MIDI loop
+            var pat = new Pss680CustomDrummerPattern { BeatsLength = 4 };
+            pat.Tracks[8].StepBytes[0] = 0x80; // Beat 1 Bass Drum
+            pat.Tracks[9].StepBytes[1] = 0x80; // Beat 2 Snare Hi
+            byte[] syx03 = pat.ToSysExMessage();
+            var parsed03 = Pss680SysExParser.Parse(syx03);
+            Assert.True(parsed03.IsChecksumValid);
+            var reloaded = Pss680CustomDrummerPattern.FromSysExBytes(parsed03.DecodedBytes);
+            Assert.Equal(0x80, reloaded.Tracks[8].StepBytes[0]);
+            var drumMidi = reloaded.ToMidiFile(120, loopCount: 2);
+            Assert.Equal(4, drumMidi.GetNotes().Count); // (Kick + Snare) x 2 loops
+            Assert.All(drumMidi.GetNotes(), n => Assert.Equal((FourBitNumber)15, n.Channel));
+        }
+
+        [Fact]
+        public void MidiRecorder_TrimLeadingSilence_Quantize_AndTrackLabels_WorkCleanly()
+        {
+            var midi = new MidiFile(new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)5) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 1928 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
+            ));
+
+            long trimmed = MidiRecorder.TrimLeadingSilence(midi);
+            Assert.Equal(1928, trimmed);
+            var trimmedNote = Assert.Single(midi.GetNotes());
+            Assert.Equal(0, trimmedNote.Time);
+            Assert.Equal(240, trimmedNote.Length);
+
+            // Move note slightly off-grid (128 ticks) and snap cleanly to 1/16 grid (120 ticks at 480 TPQN)
+            using (var mgr = midi.GetTrackChunks().First().ManageNotes())
+            {
+                mgr.Objects.First().Time = 128;
+            }
+            int snapped = MidiRecorder.QuantizeTake(midi, 16);
+            Assert.Equal(1, snapped);
+            Assert.Equal(120, Assert.Single(midi.GetNotes()).Time);
+
+            MidiRecorder.ApplyHardwareTrackLabels(midi, "pss790");
+            Assert.Contains(midi.GetTrackChunks().First().Events.OfType<SequenceTrackNameEvent>(),
+                e => e.Text.Contains("Vector", StringComparison.OrdinalIgnoreCase));
+        }
+
         #endregion
     }
 }

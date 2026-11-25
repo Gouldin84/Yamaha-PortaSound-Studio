@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.9.4">
+    <link rel="stylesheet" href="styles.css?v=2.10.0">
     <script>
         tailwind.config = {
             theme: {
@@ -635,6 +635,10 @@
                                 <input type="checkbox" id="chkMetronome" title="Click Track: Generates an audible metronome click track during recording" checked class="rounded bg-slate-800 border-slate-700 text-amber-500 focus:ring-0">
                                 <span>Click Track</span>
                             </label>
+                            <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer ml-3" title="Auto-Trim Start: Automatically strips dead silence before the first recorded note while keeping tick-0 voice setup">
+                                <input type="checkbox" id="chkAutoTrimStart" checked class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+                                <span>Auto-Trim</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -890,10 +894,12 @@
                         </div>
                     </div>
 
-                    <!-- File Name Input -->
-                    <div class="flex items-center space-x-2">
-                        <label for="takeFilenameInput" class="text-xs font-medium text-slate-400">Song Title:</label>
-                        <input type="text" id="takeFilenameInput" value="Take_Recording" title="Take Title: Enter the desired base filename for saving this take" class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-white focus:outline-none focus:border-cyan-500 w-56">
+                    <!-- File Name & Post-Take Polish Controls -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button id="btnTrimTakeSilence" title="Trim leading silence before the first note cleanly to tick 0" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-emerald-300 border border-slate-700 transition active:scale-95">✂ Trim Start</button>
+                        <button id="btnQuantizeTake16" title="Snap recorded note start times cleanly to a 1/16 beat grid" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-cyan-300 border border-slate-700 transition active:scale-95">⏱ Quantize 1/16</button>
+                        <label for="takeFilenameInput" class="text-xs font-medium text-slate-400 ml-1">Song Title:</label>
+                        <input type="text" id="takeFilenameInput" value="Take_Recording" title="Take Title: Enter the desired base filename for saving this take" class="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-white focus:outline-none focus:border-cyan-500 w-48 sm:w-56">
                     </div>
                 </div>
 
@@ -966,11 +972,15 @@
                     </div>
                 </div>
 
-                <!-- Mode View Switcher: Sound Designer vs Bulk Dumps -->
+                <!-- Mode View Switcher: Sound Designer, Drum Pads & Grid, vs Bulk Dumps -->
                 <div class="flex items-center space-x-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
                     <button id="btnSysexViewDesigner" class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5" title="Switch to live Sound Design & Voice Programmer workspace">
                         <span id="sysexDesignerPillIcon">🕹️</span>
                         <span id="sysexDesignerPillLabel">Vector Synthesizer</span>
+                    </button>
+                    <button id="btnSysexViewDrums" class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5" title="Interactive 8-Pad Hand Percussion Deck and PSS-680 Custom Drummer Step Grid">
+                        <span>🥁</span>
+                        <span>Drum Pads &amp; Grid</span>
                     </button>
                     <button id="btnSysexViewDumps" class="px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5" title="Switch to SysEx Bulk Memory Dumps & Backups">
                         <span>💾</span>
@@ -2078,6 +2088,70 @@
 
             </div>
 
+            <!-- ================= DRUM PADS & CUSTOM DRUMMER STEP GRID DECK ================= -->
+            <div id="deckDrumPadsAndGrid" class="hidden flex-1 min-h-0 flex flex-col lg:flex-row gap-3 overflow-hidden">
+                <!-- Left: 8-Pad Hand Percussion Controller (PSS-680 4x8=32 Pads / PSS-790 50 Sounds) -->
+                <div class="w-full lg:w-[370px] xl:w-[410px] shrink-0 glass-panel p-3.5 rounded-2xl border border-slate-800/80 shadow-xl flex flex-col space-y-3 overflow-hidden">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2 shrink-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm">🥁</span>
+                            <div>
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-white">Hand Percussion Pads</h3>
+                                <p id="drumPadModelSubtitle" class="text-[10px] text-slate-400">Ch 16 Hardware Pad Controller</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <select id="drumPadVelocitySelect" title="Pad Hit Velocity" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] font-bold text-amber-300 focus:outline-none">
+                                <option value="72">Soft</option>
+                                <option value="105" selected>Medium</option>
+                                <option value="127">Hard</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Pad Bank Selector -->
+                    <div id="drumPadBankBar" class="grid grid-cols-4 gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 shrink-0">
+                        <button class="drum-bank-btn active px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500 text-slate-950 transition" data-bank="0">Bank A</button>
+                        <button class="drum-bank-btn px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white transition" data-bank="1">Bank B</button>
+                        <button class="drum-bank-btn px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white transition" data-bank="2">Bank C</button>
+                        <button class="drum-bank-btn px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white transition" data-bank="3">Bank D</button>
+                    </div>
+
+                    <!-- 8 Touch-Ready Pads -->
+                    <div id="drumPadsContainer" class="flex-1 min-h-0 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 gap-2 overflow-y-auto custom-scrollbar pr-0.5">
+                    </div>
+                </div>
+
+                <!-- Right: PSS-680 Custom Drummer (Format 03H) Step Sequencer -->
+                <div class="flex-1 min-w-0 glass-panel p-3.5 rounded-2xl border border-slate-800/80 shadow-xl flex flex-col space-y-2.5 overflow-hidden">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 shrink-0">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm">🎛️</span>
+                            <div>
+                                <h3 class="text-xs font-bold uppercase tracking-wider text-white">PSS-680 Custom Drummer Builder <span class="text-[10px] font-mono text-amber-400">(Format 03H)</span></h3>
+                                <p class="text-[10px] text-slate-400">Create 8-beat drum patterns, audition Ch 16 MIDI loops, export .mid, or write Format 03H .syx</p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <input type="text" id="drummerPatternName" value="Custom_Beat" class="w-28 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white font-semibold focus:outline-none">
+                            <select id="drummerBeatsSelect" title="Beats Length (1-8)" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-cyan-300 font-mono">
+                                <option value="2">2 Beats</option>
+                                <option value="4" selected>4 Beats</option>
+                                <option value="8">8 Beats</option>
+                            </select>
+                            <button id="btnDrummerClear" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition">Clear</button>
+                            <button id="btnDrummerAudition" class="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition">▶ Audition</button>
+                            <button id="btnDrummerExportMidi" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition">Export .mid</button>
+                            <button id="btnDrummerSaveSysex" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition">Save 03H .syx</button>
+                            <button id="btnDrummerTransmit" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold transition">Send to PSS-680</button>
+                        </div>
+                    </div>
+
+                    <div id="drummerGridContainer" class="flex-1 min-h-0 overflow-auto custom-scrollbar space-y-1.5 pr-1">
+                    </div>
+                </div>
+            </div>
+
         </div>
 
     </main>
@@ -2857,6 +2931,15 @@
                 </div>
             </div>
 
+            <!-- Decoded SysEx Musical Summary (PSS-680 Format 01H / 02H / 03H) -->
+            <div id="sysexDecodedSummaryBox" class="hidden p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-700/50 text-xs text-emerald-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                <span id="sysexDecodedSummaryText" class="font-medium"></span>
+                <div class="flex items-center space-x-2">
+                    <button id="btnOpenDrummerFromInspect" class="hidden px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[11px] transition">Edit in Drummer Grid</button>
+                    <button id="btnExtractSysexToMidi" class="hidden px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] transition">Extract to .mid</button>
+                </div>
+            </div>
+
             <!-- Formatted Monospace Hex Viewer Box -->
             <div class="flex-1 min-h-0 bg-slate-950 rounded-xl border border-slate-800 p-3 font-mono text-xs overflow-y-auto custom-scrollbar select-text">
                 <pre id="sysexInspectHexContent" class="text-slate-300 leading-relaxed whitespace-pre font-mono text-[11px]">Loading hex dump...</pre>
@@ -3223,6 +3306,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.9.4"></script>
+    <script src="app.js?v=2.10.0"></script>
 </body>
 </html>

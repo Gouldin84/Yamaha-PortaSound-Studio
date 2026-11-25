@@ -885,9 +885,15 @@ namespace PSS790Player.Bridge
                     case "stop_recording":
                         {
                             var activeModelSnap = _activeModel;
+                            bool autoTrim = !root.TryGetProperty("autoTrim", out var atP) || atP.GetBoolean();
                             _ = Task.Run(() =>
                             {
                                 _recorder.StopRecording();
+                                int trimmedTicks = autoTrim ? _recorder.TrimCurrentTakeSilence() : 0;
+                                if (_recorder.LastRecordedFile != null)
+                                {
+                                    MidiRecorder.ApplyHardwareTrackLabels(_recorder.LastRecordedFile, activeModelSnap);
+                                }
                                 var stats = _recorder.GetLastTakeStats();
                                 var autoSavedPath = _recorder.AutoSaveTake(activeModelSnap);
                                 if (!string.IsNullOrEmpty(autoSavedPath))
@@ -900,9 +906,47 @@ namespace PSS790Player.Bridge
                                     eventCount = stats.eventCount,
                                     durationSeconds = stats.durationSeconds,
                                     durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss"),
+                                    trimmedTicks = trimmedTicks,
                                     autoSavedPath = autoSavedPath
                                 });
                             });
+                        }
+                        break;
+                    case "trim_current_take":
+                        {
+                            var statsBefore = _recorder.GetLastTakeStats();
+                            int trimmed = _recorder.TrimCurrentTakeSilence();
+                            var stats = _recorder.GetLastTakeStats();
+                            SendToJs("recorder_take_ready", new
+                            {
+                                noteCount = stats.noteCount,
+                                eventCount = stats.eventCount,
+                                durationSeconds = stats.durationSeconds,
+                                durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss"),
+                                trimmedTicks = trimmed
+                            });
+                            SendToJs("notification", new
+                            {
+                                message = trimmed > 0
+                                    ? $"Trimmed leading silence ({statsBefore.durationSeconds:F1}s -> {stats.durationSeconds:F1}s)."
+                                    : "Take already starts cleanly at Beat 1."
+                            });
+                        }
+                        break;
+                    case "quantize_current_take":
+                        {
+                            int grid = root.TryGetProperty("grid", out var gP) ? Math.Clamp(gP.GetInt32(), 4, 32) : 16;
+                            int snapped = _recorder.QuantizeCurrentTake(grid);
+                            var stats = _recorder.GetLastTakeStats();
+                            SendToJs("recorder_take_ready", new
+                            {
+                                noteCount = stats.noteCount,
+                                eventCount = stats.eventCount,
+                                durationSeconds = stats.durationSeconds,
+                                durationFormatted = TimeSpan.FromSeconds(stats.durationSeconds).ToString(@"mm\:ss"),
+                                quantizedGrid = grid
+                            });
+                            SendToJs("notification", new { message = $"Quantized {snapped} notes cleanly to 1/{grid} grid." });
                         }
                         break;
                     case "preview_take":
@@ -1199,12 +1243,71 @@ namespace PSS790Player.Bridge
                                 try
                                 {
                                     var info = SysExManager.ParseDumpInfo(inspPath);
-                                    SendToJs("sysex_dump_inspected", info);
+                                    var meta = InspectPss680SysExMetadata(inspPath);
+                                    SendToJs("sysex_dump_inspected", new
+                                    {
+                                        fileName = info.FileName,
+                                        filePath = info.FilePath,
+                                        fileSizeBytes = info.FileSizeBytes,
+                                        fileSizeFormatted = info.FileSizeFormatted,
+                                        createdAtFormatted = info.CreatedAtFormatted,
+                                        packetCount = info.PacketCount,
+                                        manufacturer = info.Manufacturer,
+                                        dumpType = info.DumpType,
+                                        hexPreview = info.HexPreview,
+                                        formatCode = meta.FormatCode,
+                                        canExtractMidi = meta.CanExtractMidi,
+                                        canOpenDrummerGrid = meta.CanOpenDrummerGrid,
+                                        decodedSummary = meta.SummaryText
+                                    });
                                 }
                                 catch (Exception ex)
                                 {
                                     SendToJs("error", new { message = $"Failed to inspect SysEx dump: {ex.Message}" });
                                 }
+                            });
+                        }
+                        break;
+                    case "extract_sysex_to_midi":
+                        {
+                            var extPath = root.TryGetProperty("filePath", out var epP) ? epP.GetString() : null;
+                            if (string.IsNullOrEmpty(extPath) || !File.Exists(extPath) || !AppPaths.IsPathInsideDirectory(extPath, AppPaths.SysExDir))
+                            {
+                                SendToJs("error", new { message = "SysEx file not found inside SysEx Vault." });
+                                break;
+                            }
+                            _ = Task.Run(() => HandleExtractSysExToMidi(extPath));
+                        }
+                        break;
+                    case "load_drummer_pattern_sysex":
+                        {
+                            var drPath = root.TryGetProperty("filePath", out var drP) ? drP.GetString() : null;
+                            if (string.IsNullOrEmpty(drPath) || !File.Exists(drPath) || !AppPaths.IsPathInsideDirectory(drPath, AppPaths.SysExDir))
+                            {
+                                SendToJs("error", new { message = "Custom Drummer SysEx file not found." });
+                                break;
+                            }
+                            _ = Task.Run(() => HandleLoadDrummerSysEx(drPath));
+                        }
+                        break;
+                    case "build_drummer_sysex":
+                        {
+                            HandleBuildDrummerSysEx(root);
+                        }
+                        break;
+                    case "trigger_drum_pad":
+                        {
+                            int padNote = root.TryGetProperty("note", out var pnP) ? Math.Clamp(pnP.GetInt32(), 24, 108) : 45;
+                            int padVel = root.TryGetProperty("velocity", out var pvP) ? Math.Clamp(pvP.GetInt32(), 1, 127) : 110;
+                            _ = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    _player.SendEvent(new NoteOnEvent((SevenBitNumber)padNote, (SevenBitNumber)padVel) { Channel = (FourBitNumber)15 });
+                                    await Task.Delay(140);
+                                    _player.SendEvent(new NoteOffEvent((SevenBitNumber)padNote, (SevenBitNumber)0) { Channel = (FourBitNumber)15 });
+                                }
+                                catch { }
                             });
                         }
                         break;
@@ -4077,6 +4180,237 @@ namespace PSS790Player.Bridge
             releaseRate = op.ReleaseRate,
             sustainReleaseRate = op.SustainReleaseRate
         };
+
+        private sealed class SysExInspectMetadata
+        {
+            public string? FormatCode { get; set; }
+            public bool CanExtractMidi { get; set; }
+            public bool CanOpenDrummerGrid { get; set; }
+            public string? SummaryText { get; set; }
+        }
+
+        private static SysExInspectMetadata InspectPss680SysExMetadata(string filePath)
+        {
+            var result = new SysExInspectMetadata();
+            try
+            {
+                var packets = SysExManager.ExtractPackets(File.ReadAllBytes(filePath));
+                foreach (var pkt in packets)
+                {
+                    if (pkt.Length < 6 || pkt[1] != Pss680Constants.ManufacturerYamaha || pkt[2] != Pss680Constants.InstrumentClassPss)
+                        continue;
+
+                    var parsed = Pss680SysExParser.Parse(pkt);
+                    result.FormatCode = $"0x{parsed.FormatByte:X2}";
+                    if (parsed.Format == Pss680SysExFormat.MelodyMemory)
+                    {
+                        var banks = Pss680SysExTranslators.AnalyzeMelodyMemory(parsed.DecodedBytes);
+                        int activeBanks = banks.Count(b => b.NoteCount > 0);
+                        int totalNotes = banks.Sum(b => b.NoteCount);
+                        result.CanExtractMidi = totalNotes > 0;
+                        result.SummaryText = $"PSS-680 Melody Memory: {activeBanks}/5 active banks, {totalNotes:N0} notes";
+                        break;
+                    }
+                    if (parsed.Format == Pss680SysExFormat.ChordMemory)
+                    {
+                        var summary = Pss680SysExTranslators.AnalyzeChordMemory(parsed.DecodedBytes);
+                        result.CanExtractMidi = summary.Chords.Count > 0;
+                        string chordSeq = summary.Chords.Count > 0
+                            ? string.Join(" - ", summary.Chords.Take(8).Select(c => c.ChordName))
+                            : "No chords";
+                        result.SummaryText = $"PSS-680 Chord Bank {summary.BankNumber} • Style: {summary.InitialStyleName} • {summary.Tempo} BPM • {chordSeq}";
+                        break;
+                    }
+                    if (parsed.Format == Pss680SysExFormat.RhythmPattern)
+                    {
+                        var pat = Pss680CustomDrummerPattern.FromSysExBytes(parsed.DecodedBytes);
+                        int activeTracks = pat.Tracks.Count(t => t.StepBytes.Any(b => b != 0));
+                        result.CanExtractMidi = activeTracks > 0;
+                        result.CanOpenDrummerGrid = true;
+                        result.SummaryText = $"PSS-680 Custom Drummer: {pat.BeatsLength} beats ({(pat.IsTripletQuantize ? "Triplet" : "1/8")} grid), {activeTracks} active drum track(s)";
+                        break;
+                    }
+                }
+            }
+            catch { }
+            return result;
+        }
+
+        private void HandleExtractSysExToMidi(string filePath)
+        {
+            try
+            {
+                var packets = SysExManager.ExtractPackets(File.ReadAllBytes(filePath));
+                var baseName = Path.GetFileNameWithoutExtension(filePath);
+                AppPaths.EnsureDirectoriesExist();
+
+                MidiFile? extracted = null;
+                string suffix = "_Extracted";
+
+                foreach (var pkt in packets)
+                {
+                    if (pkt.Length < 6 || pkt[1] != Pss680Constants.ManufacturerYamaha || pkt[2] != Pss680Constants.InstrumentClassPss)
+                        continue;
+
+                    var parsed = Pss680SysExParser.Parse(pkt);
+                    if (parsed.Format == Pss680SysExFormat.MelodyMemory)
+                    {
+                        extracted = Pss680SysExTranslators.DecodeMelodyMemoryToMidi(parsed.DecodedBytes);
+                        suffix = "_Melody";
+                        break;
+                    }
+                    if (parsed.Format == Pss680SysExFormat.ChordMemory)
+                    {
+                        extracted = Pss680SysExTranslators.DecodeChordMemoryToMidi(parsed.DecodedBytes);
+                        suffix = "_Chords";
+                        break;
+                    }
+                    if (parsed.Format == Pss680SysExFormat.RhythmPattern)
+                    {
+                        extracted = Pss680CustomDrummerPattern.FromSysExBytes(parsed.DecodedBytes).ToMidiFile();
+                        suffix = "_Drummer";
+                        break;
+                    }
+                }
+
+                if (extracted == null)
+                {
+                    SendToJs("notification", new { message = "Only PSS-680/780 Formats 01H (Melody), 02H (Chord), and 03H (Drummer) support MIDI extraction." });
+                    return;
+                }
+
+                string safeOut = SanitizeFileName(baseName + suffix);
+                string destPath = Path.Combine(AppPaths.Pss680MidiDir, $"{safeOut}.mid");
+                extracted.Write(destPath, overwriteFile: true);
+                SendLibraryUpdate();
+                SendToJs("notification", new { message = $"Extracted SysEx to PSS-680 MIDI library: {Path.GetFileName(destPath)}" });
+            }
+            catch (Exception ex)
+            {
+                SendToJs("error", new { message = $"SysEx MIDI extraction failed: {ex.Message}" });
+            }
+        }
+
+        private void HandleLoadDrummerSysEx(string filePath)
+        {
+            try
+            {
+                var packets = SysExManager.ExtractPackets(File.ReadAllBytes(filePath));
+                foreach (var pkt in packets)
+                {
+                    if (pkt.Length < 6 || pkt[1] != Pss680Constants.ManufacturerYamaha || pkt[2] != Pss680Constants.InstrumentClassPss)
+                        continue;
+
+                    var parsed = Pss680SysExParser.Parse(pkt);
+                    if (parsed.Format != Pss680SysExFormat.RhythmPattern) continue;
+
+                    var pat = Pss680CustomDrummerPattern.FromSysExBytes(parsed.DecodedBytes);
+                    SendToJs("drummer_pattern_loaded", new
+                    {
+                        fileName = Path.GetFileNameWithoutExtension(filePath),
+                        beatsLength = pat.BeatsLength,
+                        isTripletQuantize = pat.IsTripletQuantize,
+                        tracks = pat.Tracks.Select(t => new
+                        {
+                            trackIndex = t.TrackIndex,
+                            instrumentId = t.InstrumentId,
+                            midiNote = t.MidiNote,
+                            padLabel = t.PadLabel,
+                            instrumentName = t.InstrumentName,
+                            roll = t.Roll,
+                            accent1 = t.Accent1,
+                            accent2 = t.Accent2,
+                            stepBytes = t.StepBytes.Select(b => (int)b).ToArray()
+                        }).ToList()
+                    });
+                    return;
+                }
+
+                SendToJs("error", new { message = "Selected file does not contain a PSS-680 Format 03H Custom Drummer packet." });
+            }
+            catch (Exception ex)
+            {
+                SendToJs("error", new { message = $"Failed to load Custom Drummer pattern: {ex.Message}" });
+            }
+        }
+
+        private void HandleBuildDrummerSysEx(JsonElement root)
+        {
+            try
+            {
+                var action = root.TryGetProperty("action", out var actP) ? actP.GetString() : "export_midi";
+                var name = root.TryGetProperty("name", out var nP) ? nP.GetString() : "Custom_Drummer";
+                int beats = root.TryGetProperty("beatsLength", out var bP) ? Math.Clamp(bP.GetInt32(), 1, 8) : 4;
+                bool isTriplet = root.TryGetProperty("isTripletQuantize", out var tP) && tP.GetBoolean();
+                int bpm = root.TryGetProperty("bpm", out var bpmP) ? Math.Clamp(bpmP.GetInt32(), 40, 240) : 120;
+
+                var pattern = new Pss680CustomDrummerPattern
+                {
+                    BeatsLength = beats,
+                    IsTripletQuantize = isTriplet
+                };
+
+                if (root.TryGetProperty("tracks", out var trArr) && trArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in trArr.EnumerateArray())
+                    {
+                        int idx = item.TryGetProperty("trackIndex", out var idxP) ? idxP.GetInt32() : -1;
+                        if (idx < 0 || idx >= 32) continue;
+                        var row = pattern.Tracks[idx];
+                        row.Roll = item.TryGetProperty("roll", out var rP) && rP.GetBoolean();
+                        row.Accent1 = item.TryGetProperty("accent1", out var a1P) && a1P.GetBoolean();
+                        row.Accent2 = item.TryGetProperty("accent2", out var a2P) && a2P.GetBoolean();
+                        if (item.TryGetProperty("stepBytes", out var sbArr) && sbArr.ValueKind == JsonValueKind.Array)
+                        {
+                            int bi = 0;
+                            foreach (var sbVal in sbArr.EnumerateArray())
+                            {
+                                if (bi >= 8) break;
+                                row.StepBytes[bi++] = (byte)Math.Clamp(sbVal.GetInt32(), 0, 255);
+                            }
+                        }
+                    }
+                }
+
+                AppPaths.EnsureDirectoriesExist();
+                string safeBase = SanitizeFileName(name ?? "Custom_Drummer");
+
+                if (action == "transmit")
+                {
+                    byte[] sysex = pattern.ToSysExMessage();
+                    _player.SendSysEx(sysex);
+                    SendToJs("notification", new { message = $"Transmitted Format 03H Custom Drummer pattern '{safeBase}' ({sysex.Length} bytes) to PSS-680." });
+                }
+                else if (action == "save_sysex")
+                {
+                    byte[] sysex = pattern.ToSysExMessage();
+                    string outPath = Path.Combine(AppPaths.SysExDir, $"{safeBase}_Drummer.syx");
+                    File.WriteAllBytes(outPath, sysex);
+                    SendSysExLibraryUpdate();
+                    SendToJs("notification", new { message = $"Saved Format 03H SysEx: {Path.GetFileName(outPath)}" });
+                }
+                else
+                {
+                    var midi = pattern.ToMidiFile(bpm, loopCount: 4);
+                    if (action == "audition")
+                    {
+                        LoadMidiObject(midi, $"{safeBase} (Drummer Loop)");
+                        _player.Play();
+                    }
+                    else
+                    {
+                        string outPath = Path.Combine(AppPaths.Pss680MidiDir, $"{safeBase}_Drummer.mid");
+                        midi.Write(outPath, overwriteFile: true);
+                        SendLibraryUpdate();
+                        SendToJs("notification", new { message = $"Exported Custom Drummer MIDI: {Path.GetFileName(outPath)}" });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                SendToJs("error", new { message = $"Custom Drummer build error: {ex.Message}" });
+            }
+        }
 
         private static string SanitizeFileName(string name)
         {

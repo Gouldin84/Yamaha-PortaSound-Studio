@@ -656,6 +656,130 @@ namespace PSS790Player.Core
             firstTrack.Events.Insert(0, new TextEvent(targetMarker) { DeltaTime = 0 });
         }
 
+        /// <summary>
+        /// Shifts all notes and performance events backward so the first sounding note starts at tick 0,
+        /// while clamping preceding setup events (Program Changes, Control Changes, Tempo) cleanly to tick 0.
+        /// </summary>
+        public static long TrimLeadingSilence(MidiFile midi)
+        {
+            if (midi == null) return 0;
+
+            long firstNoteTick = midi.GetTimedEvents()
+                .Where(te => te.Event is NoteOnEvent on && on.Velocity > 0)
+                .Select(te => (long?)te.Time)
+                .Min() ?? 0;
+
+            if (firstNoteTick <= 0) return 0;
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                using var mgr = track.ManageTimedEvents();
+                foreach (var te in mgr.Objects)
+                {
+                    if (te.Event is EndOfTrackEvent) continue;
+                    te.Time = te.Time >= firstNoteTick
+                        ? te.Time - firstNoteTick
+                        : 0;
+                }
+            }
+
+            return firstNoteTick;
+        }
+
+        /// <summary>
+        /// Snaps note start times cleanly to a musical beat subdivision (e.g., 16 for 1/16, 8 for 1/8)
+        /// while preserving note durations to prevent accidental zero-length or inverted note pairs.
+        /// </summary>
+        public static int QuantizeTake(MidiFile midi, int gridSubdivision)
+        {
+            if (midi == null || gridSubdivision <= 0) return 0;
+
+            short tpqn = (midi.TimeDivision as TicksPerQuarterNoteTimeDivision)?.TicksPerQuarterNote ?? (short)480;
+            long stepTicks = Math.Max(1, (tpqn * 4L) / gridSubdivision);
+            int adjustedCount = 0;
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                using var notesMgr = track.ManageNotes();
+                foreach (var note in notesMgr.Objects)
+                {
+                    long snapped = ((note.Time + (stepTicks / 2)) / stepTicks) * stepTicks;
+                    if (snapped != note.Time)
+                    {
+                        note.Time = snapped;
+                        adjustedCount++;
+                    }
+                }
+            }
+
+            return adjustedCount;
+        }
+
+        /// <summary>
+        /// Tags tracks lacking explicit names with authentic PSS-790 8-track or PSS-680 channel roles.
+        /// </summary>
+        public static void ApplyHardwareTrackLabels(MidiFile midi, string model = "pss790")
+        {
+            if (midi == null) return;
+            bool is680 = string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase);
+
+            foreach (var track in midi.GetTrackChunks())
+            {
+                if (track.Events.OfType<SequenceTrackNameEvent>().Any()) continue;
+
+                var primaryNote = track.Events.OfType<NoteOnEvent>().FirstOrDefault(n => n.Velocity > 0);
+                if (primaryNote == null) continue;
+
+                int ch = primaryNote.Channel;
+                string label = is680
+                    ? ch switch
+                    {
+                        0 => "PSS-680 Melody / Lead (Ch 1)",
+                        10 => "PSS-680 Chord Backing (Ch 11)",
+                        11 or 12 or 13 => $"PSS-680 Orchestra (Ch {ch + 1})",
+                        14 => "PSS-680 Bass (Ch 15)",
+                        15 => "PSS-680 Rhythm / Custom Drummer (Ch 16)",
+                        _ => $"PSS-680 Track (Ch {ch + 1})"
+                    }
+                    : ch switch
+                    {
+                        >= 0 and <= 3 => $"PSS-790 Vector / Synth (Ch {ch + 1})",
+                        >= 4 and <= 8 => $"PSS-790 Melody {ch - 3} (Ch {ch + 1})",
+                        >= 9 and <= 13 => $"PSS-790 Accomp Chord/Arp (Ch {ch + 1})",
+                        14 => "PSS-790 Accomp Bass (Ch 15)",
+                        15 => "PSS-790 Rhythm / Drum Pads (Ch 16)",
+                        _ => $"PSS-790 Track (Ch {ch + 1})"
+                    };
+
+                track.Events.Insert(0, new SequenceTrackNameEvent(label) { DeltaTime = 0 });
+            }
+        }
+
+        public int TrimCurrentTakeSilence()
+        {
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
+            if (fileSnapshot == null) return 0;
+
+            long trimmed = TrimLeadingSilence(fileSnapshot);
+            return trimmed > 0 ? (int)Math.Min(int.MaxValue, trimmed) : 0;
+        }
+
+        public int QuantizeCurrentTake(int gridSubdivision)
+        {
+            MidiFile? fileSnapshot;
+            lock (_lock)
+            {
+                fileSnapshot = _lastRecordedFile;
+            }
+            if (fileSnapshot == null) return 0;
+
+            return QuantizeTake(fileSnapshot, gridSubdivision);
+        }
+
         public string SaveNativeTake(string fileName, string model = "pss790")
         {
             MidiFile? fileSnapshot;

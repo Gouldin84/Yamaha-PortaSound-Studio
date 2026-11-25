@@ -796,6 +796,12 @@ function handleHostMessage(msg) {
             showSysexInspectModal(msg.data);
             break;
 
+        case "drummer_pattern_loaded":
+            if (typeof loadDrummerPatternData === "function") {
+                loadDrummerPatternData(msg.data);
+            }
+            break;
+
         case "fm_voice_library_updated":
             state.fmVoices = msg.data.voices || [];
             renderFmVoiceLibrary();
@@ -4725,11 +4731,20 @@ bpmSlider.addEventListener("input", (e) => {
 // Record Button
 document.getElementById("btnRecord").addEventListener("click", () => {
     if (state.recorderState === "recording" || state.recorderState === "countin") {
-        sendToHost("stop_recording");
+        const autoTrim = document.getElementById("chkAutoTrimStart")?.checked ?? true;
+        sendToHost("stop_recording", { autoTrim });
     } else {
         const countIn = document.getElementById("chkCountIn").checked;
         sendToHost("start_recording", { bpm: state.recorderBpm, countIn: countIn });
     }
+});
+
+document.getElementById("btnTrimTakeSilence")?.addEventListener("click", () => {
+    sendToHost("trim_current_take");
+});
+
+document.getElementById("btnQuantizeTake16")?.addEventListener("click", () => {
+    sendToHost("quantize_current_take", { grid: 16 });
 });
 
 // Audition Preview
@@ -5470,12 +5485,18 @@ function showSysexInspectModal(data) {
 
     const hexContent = data.hexPreview || data.hexDump || "";
     state.lastInspectedHex = hexContent;
+    state.lastInspectedFilePath = data.filePath || null;
+
     const modal = document.getElementById("sysexInspectModal");
     const titleEl = document.getElementById("sysexInspectTitle");
     const bytesEl = document.getElementById("sysexInspectBytes");
     const pktsEl = document.getElementById("sysexInspectPackets");
     const mfrEl = document.getElementById("sysexInspectMfr");
     const contentEl = document.getElementById("sysexInspectHexContent");
+    const summaryBox = document.getElementById("sysexDecodedSummaryBox");
+    const summaryText = document.getElementById("sysexDecodedSummaryText");
+    const btnExtract = document.getElementById("btnExtractSysexToMidi");
+    const btnDrummer = document.getElementById("btnOpenDrummerFromInspect");
 
     if (titleEl) titleEl.textContent = data.fileName || "SysEx Dump";
     if (bytesEl) bytesEl.textContent = data.fileSizeFormatted || data.formattedSize || formatBytes(data.fileSizeBytes ?? data.byteSize ?? 0);
@@ -5483,8 +5504,32 @@ function showSysexInspectModal(data) {
     if (mfrEl) mfrEl.textContent = data.manufacturer || "Generic SysEx";
     if (contentEl) contentEl.textContent = hexContent || "No binary content";
 
+    if (summaryBox && summaryText) {
+        if (data.decodedSummary) {
+            summaryBox.classList.remove("hidden");
+            summaryText.textContent = data.decodedSummary;
+        } else {
+            summaryBox.classList.add("hidden");
+            summaryText.textContent = "";
+        }
+    }
+    if (btnExtract) btnExtract.classList.toggle("hidden", !data.canExtractMidi);
+    if (btnDrummer) btnDrummer.classList.toggle("hidden", !data.canOpenDrummerGrid);
+
     if (modal) modal.classList.remove("hidden");
 }
+
+document.getElementById("btnExtractSysexToMidi")?.addEventListener("click", () => {
+    if (!state.lastInspectedFilePath) return;
+    sendToHost("extract_sysex_to_midi", { filePath: state.lastInspectedFilePath });
+    document.getElementById("sysexInspectModal")?.classList.add("hidden");
+});
+
+document.getElementById("btnOpenDrummerFromInspect")?.addEventListener("click", () => {
+    if (!state.lastInspectedFilePath) return;
+    document.getElementById("sysexInspectModal")?.classList.add("hidden");
+    sendToHost("load_drummer_pattern_sysex", { filePath: state.lastInspectedFilePath });
+});
 
 // SysEx Vault Event Listeners
 document.getElementById("btnStartSysexCapture")?.addEventListener("click", startSysexCapture);
@@ -5811,6 +5856,9 @@ function applyActiveModel(modelKey, syncHost = true) {
 
     // Re-render mixer so voice override dropdowns update to active model's presets
     renderMixer();
+    if (typeof renderDrumPads === "function") {
+        renderDrumPads();
+    }
 
     if (syncHost) {
         sendToHost("set_active_model", { model: modelKey });
@@ -5828,50 +5876,59 @@ function updateSysexDeckVisibility() {
     const fmDeck = document.getElementById("deckFmSoundDesigner");
     const vecDeck = document.getElementById("deckVectorSynthesizer");
     const dumpsDeck = document.getElementById("deckBulkDumps");
+    const drumsDeck = document.getElementById("deckDrumPadsAndGrid");
 
     const btnDesigner = document.getElementById("btnSysexViewDesigner");
+    const btnDrums = document.getElementById("btnSysexViewDrums");
     const btnDumps = document.getElementById("btnSysexViewDumps");
 
+    const activeBtnClass = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5";
+    const inactiveBtnClass = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
+
+    if (fmDeck) fmDeck.classList.add("hidden");
+    if (vecDeck) vecDeck.classList.add("hidden");
+    if (dumpsDeck) dumpsDeck.classList.add("hidden");
+    if (drumsDeck) drumsDeck.classList.add("hidden");
+
+    if (btnDesigner) btnDesigner.className = inactiveBtnClass;
+    if (btnDrums) btnDrums.className = inactiveBtnClass;
+    if (btnDumps) btnDumps.className = inactiveBtnClass;
+
     if (mode === "designer") {
-        if (dumpsDeck) dumpsDeck.classList.add("hidden");
         if (is680) {
             if (fmDeck) fmDeck.classList.remove("hidden");
-            if (vecDeck) vecDeck.classList.add("hidden");
         } else {
             if (vecDeck) vecDeck.classList.remove("hidden");
-            if (fmDeck) fmDeck.classList.add("hidden");
             if (typeof drawVectorCanvas === "function") {
                 requestAnimationFrame(drawVectorCanvas);
             }
         }
-
-        if (btnDesigner) {
-            btnDesigner.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5";
-        }
-        if (btnDumps) {
-            btnDumps.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
-        }
+        if (btnDesigner) btnDesigner.className = activeBtnClass;
+    } else if (mode === "drums") {
+        if (drumsDeck) drumsDeck.classList.remove("hidden");
+        if (btnDrums) btnDrums.className = activeBtnClass;
+        if (typeof renderDrumPads === "function") renderDrumPads();
+        if (typeof renderDrummerGrid === "function") renderDrummerGrid();
     } else {
-        if (fmDeck) fmDeck.classList.add("hidden");
-        if (vecDeck) vecDeck.classList.add("hidden");
         if (dumpsDeck) dumpsDeck.classList.remove("hidden");
-
-        if (btnDesigner) {
-            btnDesigner.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition active:scale-95 flex items-center space-x-1.5";
-        }
-        if (btnDumps) {
-            btnDumps.className = "px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold text-white bg-indigo-600 shadow-md transition active:scale-95 flex items-center space-x-1.5";
-        }
+        if (btnDumps) btnDumps.className = activeBtnClass;
     }
 }
 
 function initSysexViewSwitcher() {
     const btnDesigner = document.getElementById("btnSysexViewDesigner");
+    const btnDrums = document.getElementById("btnSysexViewDrums");
     const btnDumps = document.getElementById("btnSysexViewDumps");
 
     if (btnDesigner) {
         btnDesigner.addEventListener("click", () => {
             state.sysexViewMode = "designer";
+            updateSysexDeckVisibility();
+        });
+    }
+    if (btnDrums) {
+        btnDrums.addEventListener("click", () => {
+            state.sysexViewMode = "drums";
             updateSysexDeckVisibility();
         });
     }
@@ -5881,6 +5938,233 @@ function initSysexViewSwitcher() {
             updateSysexDeckVisibility();
         });
     }
+}
+
+// -------------------------------------------------------------------------
+// HAND PERCUSSION PADS (PSS-680 32 Pads / PSS-790 50 Sounds) & FORMAT 03H GRID
+// -------------------------------------------------------------------------
+const PSS680_PAD_BANKS = [
+    [
+        { note: 51, pad: "A1", name: "Rim Shot" }, { note: 52, pad: "A2", name: "Snare Low" },
+        { note: 48, pad: "A3", name: "Low Tom" }, { note: 50, pad: "A4", name: "Mid Tom" },
+        { note: 53, pad: "A5", name: "Hi Tom" }, { note: 79, pad: "A6", name: "Brush" },
+        { note: 58, pad: "A7", name: "Brush Hit" }, { note: 63, pad: "A8", name: "Ride Cymbal" }
+    ],
+    [
+        { note: 45, pad: "B1", name: "Bass Drum" }, { note: 49, pad: "B2", name: "Snare Hi" },
+        { note: 41, pad: "B3", name: "Synth Tom Lo" }, { note: 42, pad: "B4", name: "Synth Tom Mid" },
+        { note: 43, pad: "B5", name: "Synth Tom Hi" }, { note: 57, pad: "B6", name: "Hi-Hat Closed" },
+        { note: 59, pad: "B7", name: "Hi-Hat Open" }, { note: 60, pad: "B8", name: "Crash Cymbal" }
+    ],
+    [
+        { note: 67, pad: "C1", name: "Bongo Low" }, { note: 68, pad: "C2", name: "Bongo Hi" },
+        { note: 74, pad: "C3", name: "Agogo Low" }, { note: 75, pad: "C4", name: "Agogo Hi" },
+        { note: 76, pad: "C5", name: "Cuica Low" }, { note: 77, pad: "C6", name: "Cuica Hi" },
+        { note: 71, pad: "C7", name: "Tambourine" }, { note: 61, pad: "C8", name: "Splash Cymbal" }
+    ],
+    [
+        { note: 64, pad: "D1", name: "Conga Low" }, { note: 65, pad: "D2", name: "Conga Hi" },
+        { note: 69, pad: "D3", name: "Timbale Low" }, { note: 70, pad: "D4", name: "Timbale Hi" },
+        { note: 55, pad: "D5", name: "Cowbell" }, { note: 56, pad: "D6", name: "Cabasa" },
+        { note: 54, pad: "D7", name: "Hand Clap" }, { note: 78, pad: "D8", name: "Whistle" }
+    ]
+];
+
+const PSS790_PAD_BANKS = [
+    [
+        { note: 44, pad: "N44", name: "Bass Drum Lo" }, { note: 45, pad: "N45", name: "Bass Drum Hi" },
+        { note: 49, pad: "N49", name: "Snare Hi" }, { note: 38, pad: "N38", name: "Synth Snare" },
+        { note: 81, pad: "N81", name: "Snare Gated" }, { note: 57, pad: "N57", name: "Hi-Hat Closed" },
+        { note: 59, pad: "N59", name: "Hi-Hat Open" }, { note: 60, pad: "N60", name: "Crash Cymbal" }
+    ],
+    [
+        { note: 47, pad: "N47", name: "Tom Bass" }, { note: 48, pad: "N48", name: "Tom Lo" },
+        { note: 50, pad: "N50", name: "Tom Mid" }, { note: 53, pad: "N53", name: "Tom Hi" },
+        { note: 40, pad: "N40", name: "Synth Tom Bass" }, { note: 41, pad: "N41", name: "Synth Tom Lo" },
+        { note: 42, pad: "N42", name: "Synth Tom Mid" }, { note: 43, pad: "N43", name: "Synth Tom Hi" }
+    ],
+    [
+        { note: 46, pad: "N46", name: "Rim Shot 1" }, { note: 54, pad: "N54", name: "Hand Claps" },
+        { note: 64, pad: "N64", name: "Conga Lo" }, { note: 65, pad: "N65", name: "Conga Hi" },
+        { note: 67, pad: "N67", name: "Bongo Lo" }, { note: 68, pad: "N68", name: "Bongo Hi" },
+        { note: 71, pad: "N71", name: "Tambourine" }, { note: 55, pad: "N55", name: "Cowbell" }
+    ],
+    [
+        { note: 36, pad: "N36", name: "BD Reverb" }, { note: 80, pad: "N80", name: "HH Foot" },
+        { note: 62, pad: "N62", name: "Ride Cup" }, { note: 63, pad: "N63", name: "Ride Edge" },
+        { note: 82, pad: "VOC1", name: "\"One\"" }, { note: 83, pad: "VOC2", name: "\"Two\"" },
+        { note: 84, pad: "VOC3", name: "\"Three\"" }, { note: 85, pad: "VOC4", name: "\"Four\"" }
+    ]
+];
+
+let selectedDrumPadBank = 0;
+const drummerState = {
+    beatsLength: 4,
+    isTripletQuantize: false,
+    rows: [
+        { trackIndex: 8,  name: "Bass Drum",     pad: "B1", steps: [0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00] },
+        { trackIndex: 9,  name: "Snare Hi",      pad: "B2", steps: [0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80] },
+        { trackIndex: 13, name: "Hi-Hat Closed", pad: "B6", steps: [0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88, 0x88] },
+        { trackIndex: 14, name: "Hi-Hat Open",   pad: "B7", steps: [0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08] },
+        { trackIndex: 15, name: "Crash Cymbal",  pad: "B8", steps: [0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] },
+        { trackIndex: 0,  name: "Rim Shot",      pad: "A1", steps: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] },
+        { trackIndex: 2,  name: "Low Tom",       pad: "A3", steps: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] },
+        { trackIndex: 4,  name: "Hi Tom",        pad: "A5", steps: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] },
+        { trackIndex: 30, name: "Hand Clap",     pad: "D7", steps: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] },
+        { trackIndex: 28, name: "Cowbell",       pad: "D5", steps: [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00] }
+    ]
+};
+
+function renderDrumPads() {
+    const grid = document.getElementById("drumPadsContainer");
+    const sub = document.getElementById("drumPadModelSubtitle");
+    if (!grid) return;
+
+    const is680 = state.activeModel === "pss680";
+    if (sub) {
+        sub.textContent = is680 ? "PSS-680 / 780 Hand Percussion (32 PCM Pads • Ch 16)" : "PSS-790 Chart 1 Percussion & Vocals (Ch 16)";
+    }
+
+    const banks = is680 ? PSS680_PAD_BANKS : PSS790_PAD_BANKS;
+    const labels680 = ["Bank A", "Bank B", "Bank C", "Bank D"];
+    const labels790 = ["Core Kit", "Toms", "Latin/Perc", "FX/Vocal"];
+
+    document.querySelectorAll(".drum-bank-btn").forEach((btn, idx) => {
+        btn.textContent = is680 ? labels680[idx] : labels790[idx];
+        const active = idx === selectedDrumPadBank;
+        btn.className = active
+            ? "drum-bank-btn active px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-500 text-slate-950 transition"
+            : "drum-bank-btn px-2 py-1 rounded-lg text-[10px] font-semibold text-slate-300 hover:text-white transition";
+    });
+
+    const pads = banks[selectedDrumPadBank] || banks[0];
+    grid.innerHTML = pads.map(p => `
+        <button type="button" class="drum-pad-btn min-h-[64px] p-2.5 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-amber-900/50 hover:to-slate-900 border border-slate-700 hover:border-amber-400 active:scale-95 transition flex flex-col items-start justify-between text-left shadow-md" data-note="${p.note}">
+            <div class="w-full flex items-center justify-between">
+                <span class="px-1.5 py-0.5 rounded bg-slate-950 text-amber-400 font-mono text-[10px] font-bold">${p.pad}</span>
+                <span class="text-[10px] font-mono text-slate-500">N${p.note}</span>
+            </div>
+            <span class="text-xs font-bold text-white leading-tight">${escapeHtml(p.name)}</span>
+        </button>
+    `).join("");
+
+    grid.querySelectorAll(".drum-pad-btn").forEach(btn => {
+        btn.addEventListener("pointerdown", () => {
+            const note = parseInt(btn.getAttribute("data-note"), 10);
+            const vel = parseInt(document.getElementById("drumPadVelocitySelect")?.value || "105", 10);
+            sendToHost("trigger_drum_pad", { note, velocity: vel });
+            btn.classList.add("ring-2", "ring-amber-400");
+            setTimeout(() => btn.classList.remove("ring-2", "ring-amber-400"), 140);
+        });
+    });
+}
+
+function renderDrummerGrid() {
+    const container = document.getElementById("drummerGridContainer");
+    if (!container) return;
+
+    const beats = Math.max(1, Math.min(8, drummerState.beatsLength || 4));
+    const beatSel = document.getElementById("drummerBeatsSelect");
+    if (beatSel) beatSel.value = String(beats);
+
+    container.innerHTML = drummerState.rows.map((row, rIdx) => {
+        let stepHtml = "";
+        for (let b = 0; b < beats; b++) {
+            const byteVal = row.steps[b] || 0;
+            // 4 quarter-beat steps per beat (bit 7, bit 5, bit 3, bit 1 for crisp 16th-note grid)
+            for (let s = 0; s < 4; s++) {
+                const bitMask = 1 << (7 - (s * 2));
+                const isOn = (byteVal & bitMask) !== 0;
+                const isBeatStart = s === 0 ? "ml-1.5" : "";
+                stepHtml += `<button type="button" class="drummer-step-btn ${isBeatStart} w-6 h-6 sm:w-7 sm:h-7 rounded border text-[9px] font-mono transition active:scale-90 ${isOn ? 'bg-amber-500 border-amber-300 text-slate-950 font-bold' : 'bg-slate-900 border-slate-700/80 text-slate-600 hover:border-slate-500'}" data-row="${rIdx}" data-beat="${b}" data-mask="${bitMask}">${isOn ? '●' : '·'}</button>`;
+            }
+        }
+        return `
+            <div class="flex items-center space-x-2 p-1.5 rounded-xl bg-slate-900/70 border border-slate-800/80 min-w-max">
+                <div class="w-32 shrink-0 flex items-center justify-between pr-1">
+                    <span class="text-[11px] font-semibold text-slate-200 truncate">${escapeHtml(row.name)}</span>
+                    <span class="text-[9px] font-mono text-amber-400/80">${escapeHtml(row.pad)}</span>
+                </div>
+                <div class="flex items-center space-x-1">${stepHtml}</div>
+            </div>
+        `;
+    }).join("");
+
+    container.querySelectorAll(".drummer-step-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const rIdx = parseInt(btn.getAttribute("data-row"), 10);
+            const bIdx = parseInt(btn.getAttribute("data-beat"), 10);
+            const mask = parseInt(btn.getAttribute("data-mask"), 10);
+            const row = drummerState.rows[rIdx];
+            if (!row) return;
+            row.steps[bIdx] = (row.steps[bIdx] || 0) ^ mask;
+            renderDrummerGrid();
+        });
+    });
+}
+
+function loadDrummerPatternData(data) {
+    if (!data) return;
+    drummerState.beatsLength = Math.max(1, Math.min(8, data.beatsLength || 4));
+    drummerState.isTripletQuantize = !!data.isTripletQuantize;
+    const nameInput = document.getElementById("drummerPatternName");
+    if (nameInput && data.fileName) nameInput.value = data.fileName;
+
+    if (Array.isArray(data.tracks)) {
+        const activeTracks = data.tracks.filter(t => (t.stepBytes || []).some(v => v !== 0));
+        if (activeTracks.length > 0) {
+            drummerState.rows = activeTracks.map(t => ({
+                trackIndex: t.trackIndex,
+                name: t.instrumentName,
+                pad: (t.padLabel || "").replace("Pad ", ""),
+                steps: t.stepBytes || [0, 0, 0, 0, 0, 0, 0, 0]
+            }));
+        }
+    }
+
+    state.sysexViewMode = "drums";
+    switchTab("sysex");
+    updateSysexDeckVisibility();
+    showToast(`Loaded Format 03H Custom Drummer pattern into step grid.`);
+}
+
+function initDrumPadsAndGrid() {
+    document.querySelectorAll(".drum-bank-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            selectedDrumPadBank = parseInt(btn.getAttribute("data-bank") || "0", 10);
+            renderDrumPads();
+        });
+    });
+
+    document.getElementById("drummerBeatsSelect")?.addEventListener("change", (e) => {
+        drummerState.beatsLength = parseInt(e.target.value, 10) || 4;
+        renderDrummerGrid();
+    });
+
+    document.getElementById("btnDrummerClear")?.addEventListener("click", () => {
+        drummerState.rows.forEach(r => { r.steps = [0, 0, 0, 0, 0, 0, 0, 0]; });
+        renderDrummerGrid();
+    });
+
+    const sendDrummerAction = (action) => {
+        const name = document.getElementById("drummerPatternName")?.value.trim() || "Custom_Beat";
+        sendToHost("build_drummer_sysex", {
+            action,
+            name,
+            beatsLength: drummerState.beatsLength,
+            isTripletQuantize: drummerState.isTripletQuantize,
+            bpm: state.recorderBpm || 120,
+            tracks: drummerState.rows.map(r => ({
+                trackIndex: r.trackIndex,
+                stepBytes: r.steps
+            }))
+        });
+    };
+
+    document.getElementById("btnDrummerAudition")?.addEventListener("click", () => sendDrummerAction("audition"));
+    document.getElementById("btnDrummerExportMidi")?.addEventListener("click", () => sendDrummerAction("export_midi"));
+    document.getElementById("btnDrummerSaveSysex")?.addEventListener("click", () => sendDrummerAction("save_sysex"));
+    document.getElementById("btnDrummerTransmit")?.addEventListener("click", () => sendDrummerAction("transmit"));
 }
 
 // -------------------------------------------------------------------------
@@ -9775,6 +10059,7 @@ function startApp() {
     initSysexViewSwitcher();
     initFmSynthEditor();
     initVectorSynthesizer();
+    initDrumPadsAndGrid();
     updateSysexDeckVisibility();
 
     // Immediately render initial mixer strips, device dropdowns, and song tree so the UI is never blank
