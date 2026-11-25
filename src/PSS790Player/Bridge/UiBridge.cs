@@ -1731,7 +1731,7 @@ namespace PSS790Player.Bridge
                         _recorder.SetInputDevice(inputDevices[0]);
                     }
 
-                    var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "2.8.4";
+                    var appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "2.9.4";
 
                     SendToJs("initial_data", new
                     {

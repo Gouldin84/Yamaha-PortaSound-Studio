@@ -431,7 +431,6 @@ function handleHostMessage(msg) {
             updateCurrentSongFavoriteButton();
             renderDeviceSelect(msg.data.defaultDevice);
             renderInputDeviceSelect(msg.data.defaultInputDevice);
-            renderLibrarySelect();
             renderLibraryTree();
             renderMixer();
             renderRecorderChannels();
@@ -446,7 +445,6 @@ function handleHostMessage(msg) {
             if (msg.data.favorites) state.favorites = new Set(msg.data.favorites);
             if (msg.data.toastMessage) showToast(msg.data.toastMessage);
             updateCurrentSongFavoriteButton();
-            renderLibrarySelect();
             renderLibraryTree();
             break;
 
@@ -471,7 +469,6 @@ function handleHostMessage(msg) {
                 state.favorites = new Set(msg.data.favorites);
             }
             updateCurrentSongFavoriteButton();
-            renderLibrarySelect();
             renderLibraryTree();
             break;
 
@@ -587,6 +584,29 @@ function handleHostMessage(msg) {
         case "channel_octave_changed":
             if (state.channels[msg.data.channel]) {
                 state.channels[msg.data.channel].octaveShift = msg.data.octaveShift;
+                renderMixer();
+            }
+            break;
+
+        case "channel_voice_overridden":
+            if (msg.data && state.channels[msg.data.channel]) {
+                state.channels[msg.data.channel].selectedVoice = msg.data.voice;
+                if (msg.data.voiceName) {
+                    state.channels[msg.data.channel].selectedFmPresetName = msg.data.voiceName;
+                }
+                renderMixer();
+            }
+            break;
+
+        case "pitch_bend_mode_changed":
+            if (msg.data && msg.data.mode) {
+                state.pitchBendMode = String(msg.data.mode).toLowerCase();
+            }
+            break;
+
+        case "vector_playback_mode_changed":
+            if (msg.data && msg.data.enabled !== undefined) {
+                state.vectorQuadActive = !!msg.data.enabled;
                 renderMixer();
             }
             break;
@@ -969,81 +989,6 @@ function renderInputDeviceSelect(preferredDevice) {
         sysexDevEl.className = state.selectedInputDevice
             ? "text-[11px] font-semibold text-emerald-400 truncate block mt-0.5"
             : "text-[11px] font-semibold text-amber-400 truncate block mt-0.5";
-    }
-}
-
-function renderLibrarySelect() {
-    const sel = document.getElementById("librarySelect");
-    if (!sel) return;
-    sel.innerHTML = "";
-
-    const lib = state.library;
-    const gmFiles = lib.gmFiles || [];
-    const pssFiles = lib.pssFiles || [];
-    const hasGm = gmFiles.length > 0;
-    const hasPss = pssFiles.length > 0;
-    const is680 = state.activeModel === "pss680";
-    const pssGroupLabel = is680 ? "⚡ PSS-680 Midi (Converted - Ready)" : "⚡ PSS-790 Midi (Converted - Ready)";
-
-    if (!hasGm && !hasPss) {
-        sel.innerHTML = `<option value="" selected disabled>Library Empty (Click 'Open Folder')</option>`;
-        return;
-    }
-
-    sel.innerHTML = `<option value="" ${!state.selectedSongPath ? 'selected' : ''} disabled>Select from Library...</option>`;
-
-    const formatLabel = (prefix, f) => {
-        const sub = f.subFolder ? `${f.subFolder} / ` : "";
-        return `${prefix} ${sub}${f.fileName}`;
-    };
-
-    const allVisible = [...pssFiles, ...gmFiles];
-    const favFiles = allVisible.filter(f => isSongFavorite(f.fullPath || f.relativePath || f.fileName));
-    if (favFiles.length > 0) {
-        const favGroup = document.createElement("optgroup");
-        favGroup.label = "★ Favourites";
-        favGroup.className = "bg-slate-900 text-amber-400 font-bold";
-        favFiles.forEach(f => {
-            const opt = document.createElement("option");
-            opt.value = f.fullPath;
-            const icon = (f.format === "gm") ? "🎵" : "⚡";
-            opt.textContent = formatLabel(`★ ${icon}`, f);
-            opt.className = "bg-slate-900 text-amber-200 font-normal";
-            favGroup.appendChild(opt);
-        });
-        sel.appendChild(favGroup);
-    }
-
-    if (hasGm) {
-        const gmGroup = document.createElement("optgroup");
-        gmGroup.label = "🎵 GM Midi (Needs Conversion)";
-        gmGroup.className = "bg-slate-900 text-indigo-400 font-bold";
-        gmFiles.forEach(f => {
-            const opt = document.createElement("option");
-            opt.value = f.fullPath;
-            opt.textContent = formatLabel("🎵", f);
-            opt.className = "bg-slate-900 text-slate-200 font-normal";
-            gmGroup.appendChild(opt);
-        });
-        sel.appendChild(gmGroup);
-    }
-
-    if (hasPss) {
-        const pssGroup = document.createElement("optgroup");
-        pssGroup.label = pssGroupLabel;
-        pssGroup.className = "bg-slate-900 text-emerald-400 font-bold";
-        pssFiles.forEach(f => {
-            const opt = document.createElement("option");
-            opt.value = f.fullPath;
-            opt.textContent = formatLabel("⚡", f);
-            opt.className = "bg-slate-900 text-slate-200 font-normal";
-            pssGroup.appendChild(opt);
-        });
-        sel.appendChild(pssGroup);
-    }
-
-    if (state.selectedSongPath) {
-        sel.value = state.selectedSongPath;
     }
 }
 
@@ -4226,13 +4171,6 @@ document.getElementById("btnRefreshDevices")?.addEventListener("click", () => {
     showToast("Rescanning MIDI ports...");
 });
 
-// Library Selector (Legacy fallback if present)
-document.getElementById("librarySelect")?.addEventListener("change", (e) => {
-    if (e.target.value) {
-        sendToHost("load_file", { filePath: e.target.value });
-    }
-});
-
 // Browse File
 document.getElementById("btnBrowse").addEventListener("click", () => {
     sendToHost("browse_file");
@@ -5869,7 +5807,6 @@ function applyActiveModel(modelKey, syncHost = true) {
     }
 
     // Re-render library so category title and tree immediately switch to PSS-680 Ready vs PSS-790 Ready
-    renderLibrarySelect();
     renderLibraryTree();
 
     // Re-render mixer so voice override dropdowns update to active model's presets
@@ -7929,14 +7866,6 @@ function initFmSynthEditor() {
         btnRand.addEventListener("click", randomizeFmVoice);
     }
 
-    // Audition Note
-    const btnAud = document.getElementById("btnFmAudition");
-    if (btnAud) {
-        btnAud.addEventListener("click", () => {
-            sendToHost("audition_fm_voice_note", { note: 60, bank: selectedFmBank, isChord: false });
-        });
-    }
-
     document.querySelectorAll(".btn-fm-audition-note").forEach(btn => {
         btn.addEventListener("click", () => {
             const note = parseInt(btn.dataset.note || "60", 10);
@@ -9852,7 +9781,6 @@ function startApp() {
     renderMixer();
     renderDeviceSelect(state.selectedDevice);
     renderInputDeviceSelect(state.selectedInputDevice);
-    renderLibrarySelect();
     renderLibraryTree();
 
     sendToHost("get_initial_data");

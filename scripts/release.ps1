@@ -34,6 +34,13 @@ $index = Get-Content $indexPath -Raw
 $index = $index -replace '\?v=\d+\.\d+\.\d+', "?v=$Version"
 Set-Content -Path $indexPath -Value $index -NoNewline
 
+$readmePath = "README.md"
+if (Test-Path $readmePath) {
+    $readme = Get-Content $readmePath -Raw
+    $readme = $readme -replace 'release-v\d+\.\d+\.\d+-blue\.svg', "release-v$Version-blue.svg"
+    Set-Content -Path $readmePath -Value $readme -NoNewline
+}
+
 Write-Host "=== 3. Publishing Self-Contained Win-x64 to dist/ ===" -ForegroundColor Cyan
 $publishDir = "publish_output"
 if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }

@@ -2,11 +2,11 @@
 
 A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for vintage **Yamaha PortaSound** keyboard synthesizers (**PSS-790**, **PSS-680**, **PSS-480**, and **PSS-780**).
 
-[![Release](https://img.shields.io/badge/release-v2.6.12-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
+[![Release](https://img.shields.io/badge/release-v2.9.4-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-203%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-258%20Passing-brightgreen.svg)]()
 
 > [!TIP]
 > ### 🎹 Community & Hardware Testers Wanted!
@@ -149,7 +149,7 @@ Pre-built standalone single-file executables are available on the **[GitHub Rele
 | Asset | Type | Size | Description |
 | :--- | :--- | :--- | :--- |
 | **`PSS-Studio.exe`** | Windows Executable | ~73 MB | **Recommended**: Standalone executable with zero external runtime dependencies. |
-| **`PSS-Studio-win-x64.zip`** | ZIP Archive | ~68 MB | Complete distribution package with `PSS-Studio.exe` and `Launch-Studio.bat`. |
+| **`PSS-Studio-win-x64.zip`** | ZIP Archive | ~66 MB | Complete distribution package with `PSS-Studio.exe`, `Launch-Studio.bat`, and `ASUS_ROG_ALLY_SETUP.txt`. |
 
 ---
 
@@ -162,7 +162,7 @@ Pre-built standalone single-file executables are available on the **[GitHub Rele
 git clone https://github.com/Gouldin84/Yamaha-PortaSound-Studio.git
 cd Yamaha-PortaSound-Studio
 
-# Run automated test suite (203 tests)
+# Run automated test suite (258 tests)
 dotnet test
 
 # Build single-file release executable
