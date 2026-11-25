@@ -222,7 +222,9 @@ namespace PSS790Player.Core
                 }
 
                 // Decay clamping relative to ctx.Time across mid-song tempo changes
-                int maxAllowedMs = isCymbal ? 750 : 250;
+                int maxAllowedMs = is680
+                    ? (isCymbal ? 280 : (isClosedHiHat ? 70 : 100))
+                    : (isCymbal ? 750 : 250);
                 var maxTimeSpan = new MetricTimeSpan(0, 0, 0, maxAllowedMs);
                 long maxTicks = LengthConverter.ConvertFrom(maxTimeSpan, ctx.Time, tempoMap);
                 if (maxTicks > 0)
@@ -249,13 +251,15 @@ namespace PSS790Player.Core
             }
 
             // Step 2b: Model hardware envelope release-tail window on melodic voices
-            // (200ms YM3420 FM on PSS-680, 100ms AWM on PSS-790) so hardware voice-stealing & long pad drones never saturate the synth.
-            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, is680 ? 200 : 100);
+            // (60ms fast/plucked vs 100ms pads on PSS-680 12-voice FM, 100ms AWM on PSS-790) so release overlap never saturates the synth.
+            var fmFastTailSpan = new MetricTimeSpan(0, 0, 0, 60);
+            var stdTailSpan = new MetricTimeSpan(0, 0, 0, 100);
             foreach (var ctx in allContexts)
             {
                 if (ctx.Channel != 15)
                 {
-                    long tailTicks = LengthConverter.ConvertFrom(releaseTailSpan, ctx.EffectiveEndTime, tempoMap);
+                    var tailSpan = (is680 && ctx.Priority >= 2) ? fmFastTailSpan : stdTailSpan;
+                    long tailTicks = LengthConverter.ConvertFrom(tailSpan, ctx.EffectiveEndTime, tempoMap);
                     ctx.SoundEndTime = ctx.EffectiveEndTime + Math.Max(0, tailTicks);
                 }
                 else
@@ -334,9 +338,19 @@ namespace PSS790Player.Core
                     int melodicWeight = activeMelodic.Sum(c => c.Weight);
                     while (melodicWeight > effectiveLimit)
                     {
-                        // Shield highest melodic lead and lowest melodic bass (Ch 15 drums excluded)
-                        var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
-                        var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
+                        // Only actively held notes (not already-released tails) compete for lead/bass protection.
+                        var heldMelodic = activeMelodic.Where(c => c.EffectiveEndTime > currentTime).ToList();
+                        var leadPool = heldMelodic.Count > 0 ? heldMelodic : activeMelodic;
+                        var leadNote = leadPool.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
+                                       ?? leadPool.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
+                        var bassNote = leadPool.OrderBy(c => c.NoteNumber).FirstOrDefault();
+
+                        var channelCounts = new int[16];
+                        foreach (var m in activeMelodic)
+                        {
+                            if (m.Channel >= 0 && m.Channel < 16)
+                                channelCounts[m.Channel]++;
+                        }
 
                         var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
                         if (candidates.Count == 0)
@@ -344,14 +358,42 @@ namespace PSS790Player.Core
                             break;
                         }
 
-                        // Steal lowest priority tier (pads/strings), then quietest, then oldest decaying note
-                        var candidateToDrop = candidates
-                            .OrderBy(c => c.Priority)
-                            .ThenBy(c => c.Velocity)
+                        // Keep fresh note attacks alive by evicting already-released tails first, then older decaying / dense chord notes.
+                        var olderCandidates = candidates.Where(c => c != currentCtx).ToList();
+                        var selectionPool = olderCandidates.Count > 0 ? olderCandidates : candidates;
+
+                        var candidateToDrop = selectionPool
+                            .OrderBy(c => c.EffectiveEndTime <= currentTime ? 0 : 1)
+                            .ThenBy(c => c.Priority)
+                            .ThenBy(c =>
+                            {
+                                int cnt = (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0;
+                                return cnt <= 1 ? 2 : (cnt <= 2 ? 1 : 0);
+                            })
+                            .ThenByDescending(c => (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0)
                             .ThenBy(c => c.Time)
+                            .ThenBy(c => c.Velocity)
                             .First();
 
-                        contextsToCull.Add(candidateToDrop);
+                        // Prefer truncating/yielding held or already-releasing tails rather than retroactively erasing notes that already sounded.
+                        if (candidateToDrop.EffectiveEndTime <= currentTime)
+                        {
+                            // Already received NoteOff; natural FM envelope tail yields to the incoming voice without deleting the note.
+                        }
+                        else
+                        {
+                            long heldTicks = currentTime - candidateToDrop.Time;
+                            long minAudibleTicks = LengthConverter.ConvertFrom(new MetricTimeSpan(0, 0, 0, 45), candidateToDrop.Time, tempoMap);
+                            if (heldTicks >= Math.Max(1, minAudibleTicks))
+                            {
+                                candidateToDrop.EffectiveLength = Math.Min(candidateToDrop.EffectiveLength, heldTicks);
+                            }
+                            else
+                            {
+                                contextsToCull.Add(candidateToDrop);
+                            }
+                        }
+
                         activeMelodic.Remove(candidateToDrop);
                         activeContexts.Remove(candidateToDrop);
                         activeWeightSum -= candidateToDrop.Weight;
@@ -470,23 +512,35 @@ namespace PSS790Player.Core
         {
             if (channel == 15) return 0; // Percussion budgeted separately
 
-            // Tier 3 (Highest): Dedicated Basses, Solo Strings, Solo Brass, Solo Vocals, Accordion/Harmonica, Reeds/Winds, Synth Leads
+            // Tier 3 (Highest): Dedicated Basses, Solo Strings, Solo Brass, Solo Vocals, Accordion/Harmonica, Reeds/Winds, Synth Leads, Ethnic Solo Leads
             if ((gmProgram >= 32 && gmProgram <= 43) || // Basses + Violin, Viola, Cello, Contrabass
                 gmProgram == 21 || gmProgram == 22 ||   // Accordion, Harmonica
                 gmProgram == 54 || gmProgram == 58 ||   // Synth Voice, Tuba
                 (gmProgram >= 56 && gmProgram <= 60) || // Solo Brass (Trumpet, Trombone, Muted Trumpet, French Horn)
-                (gmProgram >= 64 && gmProgram <= 87))   // Reeds, Pipes, Synth Leads
+                (gmProgram >= 64 && gmProgram <= 87) || // Reeds, Pipes, Synth Leads
+                (gmProgram >= 109 && gmProgram <= 111)) // Bagpipe, Fiddle, Shanai
             {
                 return 3;
             }
 
-            // Tier 2 (Medium): Pianos, Chromatic Percussion, Organs, Guitars, Plucked/Timpani, Choir Pads
-            if (gmProgram <= 31 || (gmProgram >= 45 && gmProgram <= 47) || gmProgram == 52 || gmProgram == 53)
+            // Tier 2 (Medium): Pianos, Chromatic Percussion, Organs, Guitars, Plucked/Timpani, Choir Pads, Ethnic Plucked, Melodic Synth Bell
+            if (gmProgram <= 31 ||
+                (gmProgram >= 45 && gmProgram <= 47) ||
+                gmProgram == 52 || gmProgram == 53 ||
+                gmProgram == 98 ||                       // FX 3 Crystal (melodic chime/bell)
+                (gmProgram >= 104 && gmProgram <= 108) || // Sitar, Banjo, Shamisen, Koto, Kalimba
+                (gmProgram >= 112 && gmProgram <= 118))   // Tinkle Bell .. Synth Drum
             {
                 return 2;
             }
 
-            // Tier 1 (Lowest / First to steal): String Ensembles, Brass Sections, Synth Pads, FX
+            // Tier 0: Non-pitched Sound FX & Reverse Cymbal (yield before pads & sustained harmony)
+            if (gmProgram >= 119)
+            {
+                return 0;
+            }
+
+            // Tier 1 (Lowest musical tier): String Ensembles, Brass Sections, Synth Pads, Synth FX (96-103)
             return 1;
         }
     }

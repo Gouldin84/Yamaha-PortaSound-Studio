@@ -267,7 +267,13 @@ namespace PSS790Player.Core
                                 pc.ProgramNumber = (SevenBitNumber)gmProg;
                             }
                         }
-                        // Note: PSS-680 Mode 99 MIDI IN pitch bend range is +/- 2 semitones (matching standard GM 1:1), so PitchBendEvent values are preserved directly.
+                        else if (evt is PitchBendEvent pb)
+                        {
+                            // PSS-680 Mode 99 MIDI IN is +/- 12 semitones (+/- 1 octave, Manual p.35) vs GM +/- 2 semitones (6x expansion back to GM)
+                            int centered = pb.PitchValue - 8192;
+                            int scaled = (int)Math.Round(centered * 6.0);
+                            pb.PitchValue = (ushort)Math.Clamp(8192 + scaled, 0, 16383);
+                        }
                     }
                 }
             }

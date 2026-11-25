@@ -61,6 +61,7 @@ namespace PSS790Player.Core
         private readonly bool[] _channelSolos = new bool[16];
         private readonly byte[] _channelVolumes = new byte[16];
         private readonly byte[] _lastFileChannelVolumes = new byte[16];
+        private readonly byte[] _lastPss680Modulation = new byte[16];
 
         // Lock-free atomic state for real-time audio path filtering
         private int _muteMask;
@@ -321,6 +322,7 @@ namespace PSS790Player.Core
             for (int i = 0; i < 16; i++)
             {
                 Volatile.Write(ref _lastFileChannelVolumes[i], (byte)100);
+                Volatile.Write(ref _lastPss680Modulation[i], (byte)0);
             }
 
             if (prevVolumeMask != 0 && !_isPss680)
@@ -978,7 +980,7 @@ namespace PSS790Player.Core
                             }
                         }
                         else if (te.Event is ControlChangeEvent cc && te.Time == 0 && cc.Channel != 15 &&
-                                 (cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 91))
+                                 (cc.ControlNumber == 1 || cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 91))
                         {
                             initialCcs.TryAdd((cc.Channel, (byte)cc.ControlNumber), (byte)cc.ControlValue);
                         }
@@ -1005,6 +1007,18 @@ namespace PSS790Player.Core
                                 Channel = (FourBitNumber)ch
                             });
                             sentCount++;
+
+                            // PSS-680 Manual p.35: every ProgramChange resets internal Sustain/Vibrato flags to factory preset defaults.
+                            // Explicitly clear Sustain (CC 64 = 0) and reset Vibrato (CC 1) after PC so short/plucked voices don't smear or wobble.
+                            if (is680)
+                            {
+                                byte initMod = initialCcs.TryGetValue((ch, 1), out var m0) ? m0 : (byte)0;
+                                Volatile.Write(ref _lastPss680Modulation[ch], initMod);
+                                ResetPss680DefaultEffectsForChannel(target, ch, initMod);
+                                target.SendEvent(new PitchBendEvent(8192) { Channel = (FourBitNumber)ch });
+                                sentCount += 3;
+                            }
+
                             if (!isMsGs && (sentCount % 4) == 0)
                             {
                                 Thread.Sleep(4);
@@ -1019,6 +1033,17 @@ namespace PSS790Player.Core
                         int ch = kvp.Key.Channel;
                         byte ccNum = kvp.Key.ControlNumber;
                         byte ccVal = kvp.Value;
+
+                        if (is680 && ccNum == 1 && initialPcs.ContainsKey(ch))
+                        {
+                            // Already transmitted cleanly right after ProgramChange above
+                            continue;
+                        }
+
+                        if (ccNum == 1 && is680)
+                        {
+                            Volatile.Write(ref _lastPss680Modulation[ch], ccVal);
+                        }
 
                         if (ccNum == 7)
                         {
@@ -1335,6 +1360,18 @@ namespace PSS790Player.Core
             };
 
             SendEvent(pc);
+
+            if (is680 && channel is >= 0 and < 15)
+            {
+                lock (_deviceLock)
+                {
+                    if (_outputDevice is OutputDevice hwTarget)
+                    {
+                        byte restoreMod = Volatile.Read(ref _lastPss680Modulation[channel]);
+                        ResetPss680DefaultEffectsForChannel(hwTarget, channel, restoreMod);
+                    }
+                }
+            }
         }
 
         public void SetChannelVolume(int channel, byte volume)
@@ -1477,6 +1514,14 @@ namespace PSS790Player.Core
 
         private void SendPanicNoteOffInternal(bool forceAllChannels)
         {
+            if (forceAllChannels)
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    Volatile.Write(ref _lastPss680Modulation[i], (byte)0);
+                }
+            }
+
             List<(int Channel, byte Note)> notesToKill;
             lock (_notesLock)
             {
@@ -1786,6 +1831,11 @@ namespace PSS790Player.Core
 
                         bool is680 = _player._isPss680;
 
+                        if (is680 && channelEvent is ControlChangeEvent modCc && modCc.ControlNumber == 1)
+                        {
+                            Volatile.Write(ref _player._lastPss680Modulation[ch], (byte)modCc.ControlValue);
+                        }
+
                         // PSS-680 Live Mixer Volume: scales Note-On velocity in real time (0% suppresses Note-On completely).
                         if (is680 && channelEvent is NoteOnEvent pss680NoteOn && pss680NoteOn.Velocity > 0)
                         {
@@ -1950,6 +2000,14 @@ namespace PSS790Player.Core
                     {
                         target.SendEvent(midiEvent);
                         sent = true;
+
+                        // Manual p.35: Clear factory Sustain/Vibrato flags immediately after mid-song ProgramChanges on PSS-680 hardware
+                        if (_player._isPss680 && target is OutputDevice && midiEvent is ProgramChangeEvent pcEvt && pcEvt.Channel != 15)
+                        {
+                            int pcCh = pcEvt.Channel;
+                            byte restoreMod = Volatile.Read(ref _player._lastPss680Modulation[pcCh]);
+                            ResetPss680DefaultEffectsForChannel(target, pcCh, restoreMod);
+                        }
                     }
                     catch
                     {
@@ -1979,6 +2037,14 @@ namespace PSS790Player.Core
                 }
                 catch { }
             }
+        }
+
+        private static void ResetPss680DefaultEffectsForChannel(IOutputDevice target, int ch, byte restoreModulation)
+        {
+            if (ch < 0 || ch >= 15) return;
+            var fourBitCh = (FourBitNumber)ch;
+            try { target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh }); } catch { }
+            try { target.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)restoreModulation) { Channel = fourBitCh }); } catch { }
         }
     }
 }

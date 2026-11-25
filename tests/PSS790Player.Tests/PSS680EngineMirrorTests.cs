@@ -573,8 +573,8 @@ namespace PSS790Player.Tests
             var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pss680Midi, "pss680");
             var pb = gmMidi.GetTimedEvents().Select(te => te.Event).OfType<PitchBendEvent>().Single();
 
-            // PSS-680 pitch bends are +/- 2 semitones, matching General MIDI 1:1
-            Assert.Equal(8359, pb.PitchValue);
+            // PSS-680 Mode 99 MIDI IN pitch bend is +/- 12 semitones (+/- 1 octave, Manual p.35) vs GM +/- 2 (6x expansion back to GM)
+            Assert.Equal(8192 + (8359 - 8192) * 6, pb.PitchValue);
         }
 
         [Fact]
@@ -677,9 +677,9 @@ namespace PSS790Player.Tests
             var remapped = Remapper.Remap(midi, opt);
 
             var note = remapped.GetNotes().Single();
-            // Raw 100 * (64 / 127) = 50.39. Sweet spot mapping: 24 + round(50.39 / 127 * 94) = 61
+            // Raw 100 * (64 / 127) = 50.39. Perceptual 2-op FM curve (power 0.70) mapped to [24..118] -> 73
             Assert.True(note.Velocity < 100);
-            Assert.Equal((SevenBitNumber)61, note.Velocity);
+            Assert.Equal((SevenBitNumber)73, note.Velocity);
         }
 
         [Fact]

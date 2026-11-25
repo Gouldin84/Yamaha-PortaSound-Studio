@@ -714,11 +714,11 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void ReverseRemapper_Pss680_Preserves1to1PitchBend_AndTimestamps()
+        public void ReverseRemapper_Pss680_RestoresSymmetricalPitchBend_AndTimestamps()
         {
             var pss680Midi = new MidiFile(new TrackChunk(
                 new TextEvent(Remapper.Pss680MarkerText) { DeltaTime = 0 },
-                new PitchBendEvent(10000) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new PitchBendEvent(9000) { Channel = (FourBitNumber)0, DeltaTime = 120 },
                 new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
                 new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
             ));
@@ -726,7 +726,7 @@ namespace PSS790Player.Tests
             var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pss680Midi, "pss680");
             var pb = Assert.Single(gmMidi.GetTimedEvents().Where(te => te.Event is PitchBendEvent));
             Assert.Equal(120, pb.Time);
-            Assert.Equal(10000, ((PitchBendEvent)pb.Event).PitchValue);
+            Assert.Equal(8192 + (9000 - 8192) * 6, ((PitchBendEvent)pb.Event).PitchValue);
         }
 
         #endregion
@@ -1531,6 +1531,139 @@ namespace PSS790Player.Tests
                 Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 64 && c.ControlValue == 0);
                 Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 121 && c.ControlValue == 0);
             }
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss680_PreservesBanjoAndLeadOverTier1HighStringsAndDenseStrums()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            // Ch 1: Tier-1 sustained high string drone [0..960] trying to steal high-note shield
+            var padTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)88, (SevenBitNumber)95) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)88, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 960 }
+            );
+
+            // Ch 2: 9-note dense Acoustic Guitar chord strum [0..480]
+            var guitarTrack = new TrackChunk();
+            for (int i = 0; i < 9; i++)
+            {
+                guitarTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(45 + i), (SevenBitNumber)90) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                guitarTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(45 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = i == 0 ? 480 : 0 });
+            }
+
+            // Ch 8 (0-indexed): Sparse Banjo (GM 105) [0..480]
+            var banjoTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)85) { Channel = (FourBitNumber)8, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)8, DeltaTime = 480 }
+            );
+
+            // Ch 4: Lower-pitch Tier-3 Square Lead melody (GM 80) [0..480], quiet velocity
+            var leadTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)60) { Channel = (FourBitNumber)4, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)4, DeltaTime = 480 }
+            );
+
+            // Ch 0: Electric Bass (GM 33) [0..480]
+            var bassTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)105) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 }
+            );
+
+            // Add 2 extra Tier-2 chord notes on Ch 3 so total = 14 > 12
+            var organTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)57, (SevenBitNumber)80) { Channel = (FourBitNumber)3, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)80) { Channel = (FourBitNumber)3, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)57, (SevenBitNumber)0) { Channel = (FourBitNumber)3, DeltaTime = 480 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)3, DeltaTime = 0 }
+            );
+
+            midi.Chunks.Add(padTrack);
+            midi.Chunks.Add(guitarTrack);
+            midi.Chunks.Add(banjoTrack);
+            midi.Chunks.Add(leadTrack);
+            midi.Chunks.Add(bassTrack);
+            midi.Chunks.Add(organTrack);
+
+            var programs = new Dictionary<int, byte>
+            {
+                [0] = 33,  // Bass (Tier 3)
+                [1] = 49,  // Strings 2 (Tier 1)
+                [2] = 25,  // Steel Guitar (Tier 2)
+                [3] = 16,  // Organ (Tier 2)
+                [4] = 80,  // Square Lead (Tier 3)
+                [8] = 105  // Banjo (Tier 2 ethnic plucked)
+            };
+
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 12, model: "pss680");
+            var optimized = optimizer.Optimize(midi, programs);
+            var surviving = optimized.GetNotes().ToList();
+
+            Assert.Equal(12, surviving.Count);
+            Assert.Contains(surviving, n => n.Channel == 0 && n.NoteNumber == 36); // Bass kept
+            Assert.Contains(surviving, n => n.Channel == 4 && n.NoteNumber == 72); // Lead kept despite lower pitch & velocity
+            Assert.Contains(surviving, n => n.Channel == 8 && n.NoteNumber == 60); // Banjo kept
+            Assert.DoesNotContain(surviving, n => n.Channel == 1 && n.NoteNumber == 88); // Tier-1 high drone culled first
+        }
+
+        [Fact]
+        public void Remapper_Pss680_ScalesPitchBendToMode99Octave_BakesGuitarSustain_AndBalancesLowVolumeLead()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            // Ch 0: Bass at full CC7=127
+            var bassTrack = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)33) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)127) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)127) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 }
+            );
+
+            // Ch 1: Steel Guitar (GM 25) with CC64 sustain pedal holding across staccato note
+            var guitarTrack = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)25) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)127) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 120 },
+                new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 360 }
+            );
+
+            // Ch 2: Square Lead (GM 80) with low GM mix (CC7=38) and RPN 0,0 = 2 semitones Pitch Bend
+            var leadTrack = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)80) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)101, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)100, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)6, (SevenBitNumber)2) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)38) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)127) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new PitchBendEvent(1280) { Channel = (FourBitNumber)2, DeltaTime = 120 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 360 }
+            );
+
+            midi.Chunks.Add(bassTrack);
+            midi.Chunks.Add(guitarTrack);
+            midi.Chunks.Add(leadTrack);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss680" });
+            var notes = remapped.GetNotes().ToList();
+            var ccs = remapped.GetTrackChunks().SelectMany(t => t.Events).OfType<ControlChangeEvent>().ToList();
+            var pbs = remapped.GetTrackChunks().SelectMany(t => t.Events).OfType<PitchBendEvent>().Where(p => p.PitchValue != 8192).ToList();
+
+            // Zero raw CC64 sustain leaks on PSS-680; guitar note extended cleanly by pedal up to tick 480
+            Assert.DoesNotContain(ccs, c => c.ControlNumber == 64);
+            var guitarNote = Assert.Single(notes, n => n.Channel == 1);
+            Assert.True(guitarNote.Length >= 400);
+
+            // Lead melody boosted cleanly above buried linear 52 so it cuts through
+            var leadNote = Assert.Single(notes, n => n.Channel == 2);
+            Assert.InRange((int)leadNote.Velocity, 75, 118);
+
+            // Pitch bend scaled 1/6 for +/- 12 semitone Mode 99 (8192 + (1280 - 8192)/6 = 7040)
+            var leadPb = Assert.Single(pbs, p => p.Channel == 2);
+            Assert.InRange(leadPb.PitchValue, 7035, 7045);
         }
 
         private sealed class DisposeOrderMockDevice : IOutputDevice

@@ -52,7 +52,7 @@ namespace PSS790Player.Core
     {
         public const string Pss790MarkerText = "PSS790_REMAPPED:v2";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
-        public const string Pss680MarkerText = "PSS680_REMAPPED:v2";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v3";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         private readonly record struct TimedValueEntry(long Time, int TrackIndex, int EventOrder, byte Value);
@@ -585,9 +585,9 @@ namespace PSS790Player.Core
             {
                 if (options.BakeFmVelocity)
                 {
-                    // PSS-680 ignores CC 7 in Mode 99: bake global Type-1 CC 7 + CC 11 timelines into [24..118],
+                    // PSS-680 ignores CC 7 in Mode 99: bake global Type-1 CC 7 + CC 11 timelines into perceptual [24..118],
                     // cull zero-volume notes cleanly (NoteOn + NoteOff), and strip CC 7 / CC 11 from output.
-                    ApplyPss680VelocityBaking(remapped);
+                    ApplyPss680VelocityBaking(remapped, channelGmPrograms);
                 }
                 else if (options.FilterUnsupportedControllers)
                 {
@@ -644,7 +644,8 @@ namespace PSS790Player.Core
             var autoChannelOctaveShifts = ComputeContourPreservingOctaveShifts(remapped, options, channelStateTimelines, drumChannels, is680);
 
             // 7. Filter Unsupported Events & Remap Channels, Voices, Notes, and Pitch Bends
-            double hardwareBendRangeSemitones = is680 ? 2.0 : 12.0;
+            // Both PSS-790 and PSS-680 Mode 99 MIDI IN operate at +/- 1 octave (+/- 12 semitones, PSS-680 Manual p.35).
+            double hardwareBendRangeSemitones = 12.0;
 
             foreach (var trackChunk in remapped.GetTrackChunks())
             {
@@ -658,7 +659,7 @@ namespace PSS790Player.Core
                         te.Event is NormalSysExEvent or EscapeSysExEvent ||
                         (te.Event is ControlChangeEvent cc && options.FilterUnsupportedControllers &&
                             (is680
-                                ? (cc.ControlNumber != 1 && cc.ControlNumber != 64)
+                                ? (cc.ControlNumber != 1)
                                 : !Constants.AllowedControlChanges.Contains((byte)cc.ControlNumber))) ||
                         (te.Event is ProgramChangeEvent pc &&
                             (drumChannels.Contains(pc.Channel) || (pc.Channel == 15 && !relocatedMelodicChannel.HasValue)))
@@ -831,7 +832,7 @@ namespace PSS790Player.Core
                                         }
                                         else
                                         {
-                                            scaleFactor = is680 ? 1.0 : Constants.PitchBendScaleFactor;
+                                            scaleFactor = Constants.PitchBendScaleFactor;
                                         }
                                     }
 
@@ -1333,7 +1334,7 @@ namespace PSS790Player.Core
             NormalizeZeroVelocityNotes(remapped);
 
             bool disableBend = options.PitchBendMode == PitchBendScaleMode.Disable || !options.ScalePitchBend;
-            bool divideBendBy6 = options.PitchBendMode == PitchBendScaleMode.DivideBy6 && !is680 && !HasAlgorithmV2Marker(remapped, options.TargetModel);
+            bool divideBendBy6 = options.PitchBendMode == PitchBendScaleMode.DivideBy6 && !HasAlgorithmV2Marker(remapped, options.TargetModel);
 
             var channelPrograms = new Dictionary<int, byte>();
             foreach (var track in remapped.GetTrackChunks())
@@ -1648,8 +1649,8 @@ namespace PSS790Player.Core
 
         public static bool IsSustainBakeableInstrument(byte gmProgram, bool is680)
         {
-            if (gmProgram <= 23) return true; // Pianos, Chromatic, Organs on both models
-            if (is680) return false; // PSS-680 supports CC 64 natively on remaining sustained tracks
+            if (is680) return true; // PSS-680 12-voice FM: bake all CC 64 pedals cleanly into bounded note durations so raw sustain never locks voices
+            if (gmProgram <= 23) return true; // Pianos, Chromatic, Organs
             // PSS-790 has no CC 64 hardware circuit: bake sustained/plucked instruments cleanly
             return (gmProgram >= 24 && gmProgram <= 27) || // Nylon / Steel / Jazz / Clean Guitar
                    (gmProgram >= 40 && gmProgram <= 54);   // Strings / Harp / Choir
@@ -1666,7 +1667,7 @@ namespace PSS790Player.Core
             var effectiveDrums = drumChannels ?? new HashSet<int> { 9 };
             var timeDivision = midi.TimeDivision as TicksPerQuarterNoteTimeDivision;
             short tpqn = timeDivision?.TicksPerQuarterNote ?? 480;
-            long maxPedalExtensionTicks = tpqn * 8; // Max 2 measures (8 beats)
+            long maxPedalExtensionTicks = is680 ? tpqn * 4 : tpqn * 8; // Cap tighter on 12-voice FM (1 bar) vs 28-voice AWM (2 bars)
             long runawayThresholdTicks = tpqn * 16; // > 4 measures considered runaway
 
             // Build global chronological CC 64 intervals per channel across all tracks (handles Type-1 split tracks)
@@ -2074,12 +2075,45 @@ namespace PSS790Player.Core
             }
         }
 
-        private static void ApplyPss680VelocityBaking(MidiFile midi)
+        private static void ApplyPss680VelocityBaking(MidiFile midi, IReadOnlyDictionary<int, byte>? channelGmPrograms = null)
         {
             var tracks = midi.GetTrackChunks().ToList();
             var (globalCc7, globalCc11) = CollectGlobalVolumeTimelines(tracks);
 
-            // Step 1: Bake global Type-1 CC 7 & CC 11 into paired Notes (removing both NoteOn & NoteOff when culled)
+            // Identify dedicated solo/lead channels that were attenuated on GM/XG mixers (e.g. CC7=38 on XG Square Lead)
+            // so their baked FM velocity stays audible above loud bass/rhythm channels without affecting muted fades.
+            var chMaxMix = new double[16];
+            foreach (var track in tracks)
+            {
+                foreach (var note in track.GetNotes())
+                {
+                    int ch = note.Channel;
+                    if (ch == 9 || note.Velocity == 0) continue;
+                    byte cc7 = LookupControllerAtTime(globalCc7[ch], note.Time, 100);
+                    byte cc11 = LookupControllerAtTime(globalCc11[ch], note.Time, 127);
+                    double mix = (cc7 / 127.0) * (cc11 / 127.0);
+                    if (mix > chMaxMix[ch]) chMaxMix[ch] = mix;
+                }
+            }
+
+            var activeMixes = chMaxMix.Where(m => m > 0.01).OrderBy(m => m).ToList();
+            double refMix = activeMixes.Count > 0 ? activeMixes[activeMixes.Count / 2] : 1.0;
+
+            var leadBoostByChannel = new double[16];
+            for (int ch = 0; ch < 16; ch++)
+            {
+                leadBoostByChannel[ch] = 1.0;
+                if (ch == 9 || chMaxMix[ch] <= 0.01) continue;
+                bool isSoloLeadProg = channelGmPrograms != null &&
+                                      channelGmPrograms.TryGetValue(ch, out byte gmProg) &&
+                                      ((gmProg >= 56 && gmProg <= 87) || gmProg is 40 or 41 or 42 or 109 or 110 or 111);
+                if (isSoloLeadProg && chMaxMix[ch] < refMix * 0.68)
+                {
+                    leadBoostByChannel[ch] = Math.Clamp((refMix * 0.85) / chMaxMix[ch], 1.0, 2.35);
+                }
+            }
+
+            // Step 1: Bake global Type-1 CC 7 & CC 11 into paired Notes using perceptual FM response (power 0.70)
             foreach (var track in tracks)
             {
                 using var notesMgr = track.ManageNotes();
@@ -2098,18 +2132,16 @@ namespace PSS790Player.Core
                         continue;
                     }
 
-                    // Calibrated sweet spot mapping for 2-op FM YM3420
                     double eff = rawV * (cc7 / 127.0) * (cc11 / 127.0);
-
                     if (eff < 0.5)
                     {
                         notesToCull.Add(note);
                         continue;
                     }
 
-                    // Exact calibrated 2-op FM velocity range: [24..118]
-                    double clampedEff = Math.Clamp(eff, 1.0, 127.0);
-                    int scaled = 24 + (int)Math.Round((clampedEff / 127.0) * (118 - 24));
+                    double boostedEff = Math.Clamp(eff * leadBoostByChannel[ch], 1.0, 127.0);
+                    double perceptualNorm = Math.Pow(boostedEff / 127.0, 0.70);
+                    int scaled = 24 + (int)Math.Round(perceptualNorm * (118 - 24));
                     note.Velocity = (SevenBitNumber)Math.Clamp(scaled, 24, 118);
                 }
 
