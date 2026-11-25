@@ -659,6 +659,9 @@ function handleHostMessage(msg) {
             break;
 
         case "playback_state":
+            if (msg.data.loadGen !== undefined && msg.data.loadGen < state.lastAcceptedLoadGen) {
+                break;
+            }
             if (state.isLoadingSong) {
                 if (msg.data.filePath && state.pendingLoadPath &&
                     msg.data.filePath.toLowerCase() === state.pendingLoadPath.toLowerCase() &&
@@ -2394,9 +2397,15 @@ function createSongItemElement(file) {
         highlightActiveSongInTree();
 
         // Mouse clicks (and ROG Ally RB shoulder clicks) ONLY highlight the row.
-        // If not currently playing, stage metadata onto the deck. Active playback is NEVER stopped!
+        // Debounce metadata staging so double-clicks never launch redundant pre-loads. Active playback is NEVER stopped!
         if (!state.isPlaying && !state.isLoadingSong) {
-            sendToHost("load_midi_metadata", { path: file.fullPath });
+            if (metadataDebounceTimer) clearTimeout(metadataDebounceTimer);
+            metadataDebounceTimer = setTimeout(() => {
+                metadataDebounceTimer = null;
+                if (!state.isPlaying && !state.isLoadingSong && state.selectedSongPath === file.fullPath) {
+                    sendToHost("load_midi_metadata", { path: file.fullPath });
+                }
+            }, 140);
         }
     });
 
@@ -2531,6 +2540,35 @@ function getFileNameFromFullPath(p) {
     return idx >= 0 ? p.substring(idx + 1) : p;
 }
 
+function requestStopPlayback() {
+    if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+    }
+    if (metadataDebounceTimer) {
+        clearTimeout(metadataDebounceTimer);
+        metadataDebounceTimer = null;
+    }
+    if (loadingWatchdogTimer) {
+        clearTimeout(loadingWatchdogTimer);
+        loadingWatchdogTimer = null;
+    }
+    state.isLoadingSong = false;
+    state.pendingLoadPath = null;
+    state.isPlaying = false;
+    state.isPaused = false;
+    state.currentSeconds = 0;
+    state.lastStatusBadgeKey = "";
+    lastSeekSeconds = -1;
+    lastSeekTime = 0;
+    scrubCooldownUntil = 0;
+    isScrubbing = false;
+    clearAllChannelLeds();
+    updatePlaybackUi();
+    highlightActiveSongInTree();
+    sendToHost("stop");
+}
+
 function stageOptimisticDeck(song, willPlay = true) {
     if (!song) return;
     if (loadingWatchdogTimer) {
@@ -2543,6 +2581,7 @@ function stageOptimisticDeck(song, willPlay = true) {
     state.currentSeconds = 0;
     state.durationSeconds = 0;
     state.isPaused = false;
+    state.lastStatusBadgeKey = willPlay ? "loading" : "";
     if (willPlay) {
         state.isLoadingSong = true;
         state.pendingLoadPath = song.fullPath;
@@ -2552,7 +2591,9 @@ function stageOptimisticDeck(song, willPlay = true) {
             if (state.isLoadingSong) {
                 state.isLoadingSong = false;
                 state.pendingLoadPath = null;
+                state.lastStatusBadgeKey = "";
                 updatePlaybackUi();
+                highlightActiveSongInTree();
             }
         }, 5000);
     } else {
@@ -2888,16 +2929,12 @@ function setupKeyboardShortcuts() {
         switch (e.key) {
             case " ": // Space: Play/Pause
                 e.preventDefault();
-                if (state.isPlaying) {
-                    sendToHost("pause");
-                } else {
-                    sendToHost("play");
-                }
+                document.getElementById("btnPlayPause")?.click();
                 break;
 
             case "Escape": // Esc: Panic / Stop
                 e.preventDefault();
-                sendToHost("stop");
+                requestStopPlayback();
                 break;
 
             case "ArrowDown":
@@ -4285,11 +4322,15 @@ document.getElementById("btnPlayPause").addEventListener("click", () => {
         clearTimeout(autoAdvanceTimer);
         autoAdvanceTimer = null;
     }
+    if (metadataDebounceTimer) {
+        clearTimeout(metadataDebounceTimer);
+        metadataDebounceTimer = null;
+    }
     if (state.isPlaying) {
         sendToHost("pause");
     } else if (state.isPaused) {
         sendToHost("play");
-    } else if (state.selectedSongPath && state.selectedSongPath !== state.currentFilePath) {
+    } else if (state.selectedSongPath && state.selectedSongPath !== state.confirmedFilePath) {
         const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath) ||
             { fileName: getFileNameFromFullPath(state.selectedSongPath), fullPath: state.selectedSongPath };
         stageOptimisticDeck(song, true);
@@ -4300,12 +4341,7 @@ document.getElementById("btnPlayPause").addEventListener("click", () => {
 });
 
 document.getElementById("btnStop").addEventListener("click", () => {
-    if (autoAdvanceTimer) {
-        clearTimeout(autoAdvanceTimer);
-        autoAdvanceTimer = null;
-    }
-    lastSeekSeconds = -1;
-    sendToHost("stop");
+    requestStopPlayback();
 });
 
 // Timeline Scrubber & Drag Tracking

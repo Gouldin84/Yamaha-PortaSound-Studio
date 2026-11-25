@@ -339,6 +339,9 @@ namespace PSS790Player.Tests
                 Assert.Contains("hasPopulatedSelectOptions", js);
                 Assert.Contains("state.lastAcceptedLoadGen", js);
                 Assert.Contains("confirmedFilePath", js);
+                Assert.Contains("function requestStopPlayback()", js);
+                Assert.Contains("state.selectedSongPath !== state.confirmedFilePath", js);
+                Assert.Contains("state.lastStatusBadgeKey = willPlay ? \"loading\" : \"\"", js);
                 Assert.DoesNotContain("text-${colAccents[ch]}", js);
             }
 

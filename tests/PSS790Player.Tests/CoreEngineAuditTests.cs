@@ -1298,6 +1298,111 @@ namespace PSS790Player.Tests
             Assert.False(lastArgs!.IsPlaying);
         }
 
+        [Fact]
+        public void MidiPlayer_Stop_AlwaysStopsAndSilencesAll16Channels_EvenAfterRepeatedStopOrPriorPanic()
+        {
+            using var player = new MidiPlayer();
+            var mockDev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(mockDev);
+
+            var track = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)127) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)95) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 9600 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 0 }
+            );
+            var midi = new MidiFile(track) { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            player.LoadMidi(midi);
+            player.Play();
+            Thread.Sleep(60);
+            Assert.True(player.IsPlaying);
+
+            // First Stop after playback has started
+            mockDev.Clear();
+            player.Stop();
+            Assert.False(player.IsPlaying);
+            Assert.False(player.IsPaused);
+            Assert.Equal(TimeSpan.Zero, player.CurrentPosition);
+
+            var eventsAfterFirstStop = mockDev.SnapshotEvents();
+            var ccs1 = eventsAfterFirstStop.OfType<ControlChangeEvent>().ToList();
+            for (int ch = 0; ch < 16; ch++)
+            {
+                var fb = (FourBitNumber)ch;
+                Assert.Contains(ccs1, c => c.Channel == fb && c.ControlNumber == 120 && c.ControlValue == 0);
+                Assert.Contains(ccs1, c => c.Channel == fb && c.ControlNumber == 123 && c.ControlValue == 0);
+                Assert.Contains(ccs1, c => c.Channel == fb && c.ControlNumber == 64 && c.ControlValue == 0);
+            }
+
+            // Clicking Stop a second time when already stopped must STILL transmit full 16-channel panic cleanup
+            mockDev.Clear();
+            player.Stop();
+            var eventsAfterSecondStop = mockDev.SnapshotEvents();
+            var ccs2 = eventsAfterSecondStop.OfType<ControlChangeEvent>().ToList();
+            for (int ch = 0; ch < 16; ch++)
+            {
+                var fb = (FourBitNumber)ch;
+                Assert.Contains(ccs2, c => c.Channel == fb && c.ControlNumber == 123 && c.ControlValue == 0);
+                Assert.Contains(ccs2, c => c.Channel == fb && c.ControlNumber == 64 && c.ControlValue == 0);
+            }
+
+            // Confirm no trailing Note-On events leak after Stop
+            mockDev.Clear();
+            Thread.Sleep(150);
+            Assert.DoesNotContain(mockDev.SnapshotEvents().OfType<NoteOnEvent>(), n => n.Velocity > 0);
+            Assert.False(player.IsPlaying);
+        }
+
+        [Fact]
+        public async Task MidiPlayer_RapidSongSwitchingAndConcurrentStop_LeavesPlaybackStoppedWithZeroLeaks()
+        {
+            using var player = new MidiPlayer();
+            var mockDev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(mockDev);
+
+            static MidiFile BuildDenseSong(byte baseNote)
+            {
+                var chunk = new TrackChunk();
+                for (int i = 0; i < 16; i++)
+                {
+                    if (i == 9) continue;
+                    chunk.Events.Add(new NoteOnEvent((SevenBitNumber)(baseNote + (i % 7)), (SevenBitNumber)100) { Channel = (FourBitNumber)i, DeltaTime = 0 });
+                    chunk.Events.Add(new NoteOffEvent((SevenBitNumber)(baseNote + (i % 7)), (SevenBitNumber)0) { Channel = (FourBitNumber)i, DeltaTime = 4800 });
+                }
+                return new MidiFile(chunk) { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            }
+
+            var songA = BuildDenseSong(60);
+            var songB = BuildDenseSong(67);
+
+            for (int iter = 0; iter < 6; iter++)
+            {
+                var target = (iter % 2 == 0) ? songA : songB;
+                var loadTask = Task.Run(() =>
+                {
+                    player.LoadMidi(target);
+                    player.Play();
+                });
+
+                await Task.Delay(5 + (iter % 4) * 8);
+                player.Stop();
+                await loadTask;
+                player.Stop();
+
+                Assert.False(player.IsPlaying);
+                Assert.False(player.IsPaused);
+                Assert.Equal(TimeSpan.Zero, player.CurrentPosition);
+            }
+
+            mockDev.Clear();
+            await Task.Delay(150);
+            Assert.DoesNotContain(mockDev.SnapshotEvents().OfType<NoteOnEvent>(), n => n.Velocity > 0);
+            Assert.False(player.IsPlaying);
+        }
+
         #endregion
     }
 }

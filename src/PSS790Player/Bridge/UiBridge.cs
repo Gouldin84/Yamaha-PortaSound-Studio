@@ -38,11 +38,14 @@ namespace PSS790Player.Bridge
         private CancellationTokenSource? _syncCts;
         private readonly object _ctsLock = new();
         private readonly object _loadFileLock = new();
+        private readonly object _playerSwapLock = new();
         private readonly object _seekLock = new();
         private double _pendingSeekSeconds;
         private int _hasPendingSeek;
         private int _seekWorkerRunning;
         private int _loadGeneration;
+        private int _playIntentGeneration;
+        private int _userStopGeneration;
         private volatile bool _isAutoPlayLoad;
         private volatile string? _activeFilePathSnapshot;
         private volatile bool _isDisposed;
@@ -572,12 +575,21 @@ namespace PSS790Player.Bridge
                         BrowseAndLoadFile();
                         break;
                     case "play":
+                        Interlocked.Increment(ref _playIntentGeneration);
                         _player.Play();
                         break;
                     case "pause":
+                        _isAutoPlayLoad = false;
+                        Interlocked.Increment(ref _playIntentGeneration);
+                        Interlocked.Increment(ref _userStopGeneration);
                         _player.Pause();
                         break;
                     case "stop":
+                        _isAutoPlayLoad = false;
+                        Volatile.Write(ref _hasPendingSeek, 0);
+                        Interlocked.Increment(ref _playIntentGeneration);
+                        Interlocked.Increment(ref _userStopGeneration);
+                        Interlocked.Increment(ref _loadGeneration);
                         _player.Stop();
                         ResetChannelActivity();
                         break;
@@ -3013,102 +3025,209 @@ namespace PSS790Player.Bridge
         private void LoadFileAsync(string pathOrName, bool autoPlay = false)
         {
             if (autoPlay) _isAutoPlayLoad = true;
+            Volatile.Write(ref _hasPendingSeek, 0);
             int gen = Interlocked.Increment(ref _loadGeneration);
+            int playGen = autoPlay
+                ? Interlocked.Increment(ref _playIntentGeneration)
+                : Volatile.Read(ref _playIntentGeneration);
+            int stopGenAtStart = Volatile.Read(ref _userStopGeneration);
             _ = Task.Run(() =>
             {
                 if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
-                LoadFileInternal(pathOrName, autoPlay, gen);
+                LoadFileInternal(pathOrName, autoPlay, gen, playGen, stopGenAtStart);
             });
         }
 
         public void LoadFile(string pathOrName, bool autoPlay = false)
         {
             if (autoPlay) _isAutoPlayLoad = true;
+            Volatile.Write(ref _hasPendingSeek, 0);
             int gen = Interlocked.Increment(ref _loadGeneration);
-            LoadFileInternal(pathOrName, autoPlay, gen);
+            int playGen = autoPlay
+                ? Interlocked.Increment(ref _playIntentGeneration)
+                : Volatile.Read(ref _playIntentGeneration);
+            int stopGenAtStart = Volatile.Read(ref _userStopGeneration);
+            LoadFileInternal(pathOrName, autoPlay, gen, playGen, stopGenAtStart);
         }
 
-        private void LoadFileInternal(string pathOrName, bool autoPlay, int gen)
+        private RemapperOptions SnapshotRemapperOptions(string modelSnapshot, Dictionary<int, int?> voiceOverridesSnapshot, bool clearOctaveShifts)
+        {
+            return new RemapperOptions
+            {
+                TargetModel = modelSnapshot,
+                EnablePolyphonyGuard = _options.EnablePolyphonyGuard,
+                ScalePitchBend = _options.ScalePitchBend,
+                PitchBendMode = _options.PitchBendMode,
+                NeutralizeAcousticPitchBends = _options.NeutralizeAcousticPitchBends,
+                AutoCenterDanglingPitchBends = _options.AutoCenterDanglingPitchBends,
+                EmulateSustainPedal = _options.EmulateSustainPedal,
+                FoldExpressionPedal = _options.FoldExpressionPedal,
+                NormalizeAwmVelocities = _options.NormalizeAwmVelocities,
+                BakeFmVelocity = _options.BakeFmVelocity,
+                TranslateDrums = _options.TranslateDrums,
+                VectorQuadLayering = !string.Equals(modelSnapshot, "pss680", StringComparison.OrdinalIgnoreCase) && _player.VectorQuadPlaybackEnabled,
+                EnsureSetupPreRoll = _options.EnsureSetupPreRoll,
+                DefaultReverbBoost = _options.DefaultReverbBoost,
+                FilterUnsupportedControllers = _options.FilterUnsupportedControllers,
+                ForceRemap = _options.ForceRemap,
+                TempoMultiplier = _options.TempoMultiplier,
+                AutoNormalizeSluggishTempo = _options.AutoNormalizeSluggishTempo,
+                MasterTranspose = _options.MasterTranspose,
+                ChannelOctaveShifts = clearOctaveShifts ? new Dictionary<int, int>() : new Dictionary<int, int>(_options.ChannelOctaveShifts),
+                ChannelVoiceOverrides = new Dictionary<int, int?>(voiceOverridesSnapshot)
+            };
+        }
+
+        private MidiFile SelectPlayableMidi(MidiFile originalMidi, MidiFile remappedMidi, RemapperOptions optionsSnap, MidiFormat format, bool isMsGs)
+        {
+            bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
+            return (isMsGs && !isNative)
+                ? Remapper.BuildPreviewTransformForMsGs(originalMidi, optionsSnap)
+                : remappedMidi;
+        }
+
+        private void LoadFileInternal(string pathOrName, bool autoPlay, int gen, int playGen, int stopGenAtStart)
         {
             if (autoPlay) _isAutoPlayLoad = true;
             try
             {
-                lock (_loadFileLock)
+                if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                try
                 {
-                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
-
-                    try
+                    string resolvedPath = pathOrName;
+                    if (!File.Exists(resolvedPath))
                     {
-                        string resolvedPath = pathOrName;
-                        if (!File.Exists(resolvedPath))
-                        {
-                            var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
-                            var pss790Candidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
-                            var pss680Candidate = Path.Combine(AppPaths.Pss680MidiDir, pathOrName);
+                        var gmCandidate = Path.Combine(AppPaths.GmMidiDir, pathOrName);
+                        var pss790Candidate = Path.Combine(AppPaths.Pss790MidiDir, pathOrName);
+                        var pss680Candidate = Path.Combine(AppPaths.Pss680MidiDir, pathOrName);
 
-                            if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
-                            else if (File.Exists(pss790Candidate)) resolvedPath = pss790Candidate;
-                            else if (File.Exists(pss680Candidate)) resolvedPath = pss680Candidate;
-                        }
-
-                        if (!File.Exists(resolvedPath))
-                        {
-                            SendToJs("error", new { message = $"File not found: {pathOrName}", loadGen = gen });
-                            return;
-                        }
-
-                        if (string.Equals(_currentFilePath, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && _loadedOriginalMidi != null)
-                        {
-                            SendToJs("playback_state", new
-                            {
-                                isPlaying = _player.IsPlaying,
-                                isPaused = _player.IsPaused,
-                                currentSeconds = _player.CurrentPosition.TotalSeconds,
-                                totalSeconds = _player.TotalDuration.TotalSeconds,
-                                filePath = _currentFilePath,
-                                fileName = Path.GetFileName(_currentFilePath),
-                                loadGen = gen
-                            });
-                            return;
-                        }
-
-                        _player.Stop();
-                        ResetChannelActivity();
-
-                        var originalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
-                        if (Volatile.Read(ref _loadGeneration) != gen) return;
-
-                    _currentFilePath = resolvedPath;
-                    _activeFilePathSnapshot = resolvedPath;
-                    _loadedOriginalMidi = originalMidi;
-
-                    var modelSnapshot = _activeModel;
-                    _preVectorVoiceOverrides = null;
-                    _options.ChannelVoiceOverrides.Clear();
-                    _options.ChannelOctaveShifts.Clear();
-                    _options.TargetModel = modelSnapshot;
-                    var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath, modelSnapshot);
-                    foreach (var (ch, voice) in savedOverrides)
-                    {
-                        _options.ChannelVoiceOverrides[ch] = voice;
+                        if (File.Exists(gmCandidate)) resolvedPath = gmCandidate;
+                        else if (File.Exists(pss790Candidate)) resolvedPath = pss790Candidate;
+                        else if (File.Exists(pss680Candidate)) resolvedPath = pss680Candidate;
                     }
 
-                    var format = Remapper.DetectMidiFormat(_loadedOriginalMidi);
-                    bool isRec = Remapper.IsRecording(_loadedOriginalMidi);
-                    ReapplyRemapping(preservePosition: false);
+                    if (!File.Exists(resolvedPath))
+                    {
+                        if (Volatile.Read(ref _loadGeneration) == gen)
+                        {
+                            SendToJs("error", new { message = $"File not found: {pathOrName}", loadGen = gen });
+                        }
+                        return;
+                    }
 
-                    if (Volatile.Read(ref _loadGeneration) != gen) return;
+                    string? curPathSnap;
+                    MidiFile? curOrigSnap;
+                    lock (_loadFileLock)
+                    {
+                        curPathSnap = _currentFilePath;
+                        curOrigSnap = _loadedOriginalMidi;
+                    }
+
+                    if (string.Equals(curPathSnap, resolvedPath, StringComparison.OrdinalIgnoreCase) && !autoPlay && !_player.IsPlaying && curOrigSnap != null)
+                    {
+                        SendToJs("playback_state", new
+                        {
+                            isPlaying = _player.IsPlaying,
+                            isPaused = _player.IsPaused,
+                            currentSeconds = _player.CurrentPosition.TotalSeconds,
+                            totalSeconds = _player.TotalDuration.TotalSeconds,
+                            filePath = curPathSnap,
+                            fileName = curPathSnap != null ? Path.GetFileName(curPathSnap) : null,
+                            loadGen = gen
+                        });
+                        return;
+                    }
+
+                    // Silence currently playing audio immediately before slow file I/O and remapping,
+                    // without holding any UI locks while reading/remapping.
+                    if (autoPlay || _player.IsPlaying)
+                    {
+                        _player.Stop();
+                        ResetChannelActivity();
+                    }
+
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                    var originalMidi = MidiFile.Read(resolvedPath, Constants.DefaultReadingSettings);
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                    var modelSnapshot = _activeModel;
+                    var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath, modelSnapshot);
+                    RemapperOptions optionsSnap;
+                    int masterTransposeSnap;
+                    string pitchBendModeSnap;
+                    lock (_loadFileLock)
+                    {
+                        optionsSnap = SnapshotRemapperOptions(modelSnapshot, savedOverrides, clearOctaveShifts: true);
+                        masterTransposeSnap = optionsSnap.MasterTranspose;
+                        pitchBendModeSnap = optionsSnap.PitchBendMode.ToString().ToLowerInvariant();
+                    }
+
+                    var format = Remapper.DetectMidiFormat(originalMidi);
+                    bool isRec = Remapper.IsRecording(originalMidi);
+                    var remappedMidi = Remapper.Remap(originalMidi, optionsSnap);
+
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
 
                     bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
                     bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
                     bool isGmPassthrough = isMsGs && !isNative;
+                    var playableMidi = SelectPlayableMidi(originalMidi, remappedMidi, optionsSnap, format, isMsGs);
+                    var channelInfo = AnalyzeChannels(originalMidi, remappedMidi, format);
 
-                    var channelInfo = AnalyzeChannels(_loadedOriginalMidi, _loadedRemappedMidi, format);
-                    var duration = _player.TotalDuration;
-                    if (duration <= TimeSpan.Zero)
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                    bool isPlayingNow;
+                    bool isPausedNow;
+                    double currentSecondsNow;
+                    TimeSpan duration;
+
+                    lock (_playerSwapLock)
                     {
-                        duration = (_loadedRemappedMidi ?? _loadedOriginalMidi).GetDuration<MetricTimeSpan>();
+                        if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
+
+                        lock (_loadFileLock)
+                        {
+                            _currentFilePath = resolvedPath;
+                            _activeFilePathSnapshot = resolvedPath;
+                            _loadedOriginalMidi = originalMidi;
+                            _loadedRemappedMidi = remappedMidi;
+                            _preVectorVoiceOverrides = null;
+                            _options.TargetModel = modelSnapshot;
+                            _options.ChannelOctaveShifts.Clear();
+                            _options.ChannelVoiceOverrides.Clear();
+                            foreach (var (ch, voice) in savedOverrides)
+                            {
+                                _options.ChannelVoiceOverrides[ch] = voice;
+                            }
+                        }
+
+                        _player.LoadMidi(playableMidi);
+
+                        duration = _player.TotalDuration;
+                        if (duration <= TimeSpan.Zero)
+                        {
+                            duration = (remappedMidi ?? originalMidi).GetDuration<MetricTimeSpan>();
+                        }
+
+                        bool shouldAutoPlay = autoPlay &&
+                            !_isDisposed &&
+                            Volatile.Read(ref _loadGeneration) == gen &&
+                            Volatile.Read(ref _playIntentGeneration) == playGen &&
+                            Volatile.Read(ref _userStopGeneration) == stopGenAtStart;
+
+                        if (shouldAutoPlay)
+                        {
+                            _player.Play();
+                        }
+
+                        isPlayingNow = _player.IsPlaying;
+                        isPausedNow = _player.IsPaused;
+                        currentSecondsNow = _player.CurrentPosition.TotalSeconds;
                     }
+
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
 
                     var modelTag = modelSnapshot == "pss680" ? "PSS-680" : "PSS-790";
                     bool isNativeThisModel = modelSnapshot == "pss680" ? (format == MidiFormat.Pss680Native) : (format == MidiFormat.Pss790Native);
@@ -3120,22 +3239,13 @@ namespace PSS790Player.Bridge
                                       (isNativeCounterpart ? (modelSnapshot == "pss680" ? "PSS-790 Ready (Remapped for PSS-680)" : "PSS-680 Ready (Remapped for PSS-790)") :
                                       (isGmPassthrough ? "Windows GS Synth (Original GM Passthrough)" : $"General MIDI (Auto-Remapped for {modelTag})")));
 
-                    if (Volatile.Read(ref _loadGeneration) != gen) return;
-
-                    if (autoPlay)
-                    {
-                        _player.Play();
-                    }
-
-                    if (Volatile.Read(ref _loadGeneration) != gen) return;
-
                     SendToJs("file_loaded", new
                     {
                         loadGen = gen,
-                        autoPlay = autoPlay,
-                        isPlaying = _player.IsPlaying,
-                        isPaused = _player.IsPaused,
-                        currentSeconds = _player.CurrentPosition.TotalSeconds,
+                        autoPlay = autoPlay && isPlayingNow,
+                        isPlaying = isPlayingNow,
+                        isPaused = isPausedNow,
+                        currentSeconds = currentSecondsNow,
                         fileName = Path.GetFileName(resolvedPath),
                         filePath = resolvedPath,
                         relativeDir = Path.GetDirectoryName(AppPaths.GetRelativeLibraryPath(resolvedPath)) ?? "",
@@ -3145,23 +3255,21 @@ namespace PSS790Player.Bridge
                         durationSeconds = duration.TotalSeconds,
                         durationFormatted = FormatDurationMmSs(duration),
                         channels = channelInfo,
-                        masterTranspose = _options.MasterTranspose,
-                        channelOctaveShifts = new Dictionary<int, int>(_options.ChannelOctaveShifts),
-                        pitchBendMode = _options.PitchBendMode.ToString().ToLowerInvariant(),
+                        masterTranspose = masterTransposeSnap,
+                        channelOctaveShifts = new Dictionary<int, int>(),
+                        pitchBendMode = pitchBendModeSnap,
                         hasCustomOverrides = VoiceOverrideStore.Instance.HasOverrides(resolvedPath, modelSnapshot),
                         health = (object?)null
                     });
 
-                    var origSnap = _loadedOriginalMidi;
-                    var remapSnap = _loadedRemappedMidi;
                     var fileNameSnap = Path.GetFileName(resolvedPath);
                     _ = Task.Run(() =>
                     {
-                        if (Volatile.Read(ref _loadGeneration) != gen) return;
+                        if (_isDisposed || Volatile.Read(ref _loadGeneration) != gen) return;
                         try
                         {
-                            var health = MidiHealthInspector.Analyze(origSnap, remapSnap, fileNameSnap, modelSnapshot);
-                            if (Volatile.Read(ref _loadGeneration) == gen)
+                            var health = MidiHealthInspector.Analyze(originalMidi, remappedMidi, fileNameSnap, modelSnapshot);
+                            if (!_isDisposed && Volatile.Read(ref _loadGeneration) == gen)
                             {
                                 SendToJs("health_updated", new
                                 {
@@ -3174,9 +3282,11 @@ namespace PSS790Player.Bridge
                 }
                 catch (Exception ex)
                 {
-                    SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}", loadGen = gen });
+                    if (!_isDisposed && Volatile.Read(ref _loadGeneration) == gen)
+                    {
+                        SendToJs("error", new { message = $"Error loading MIDI: {ex.Message}", loadGen = gen });
+                    }
                 }
-            }
             }
             finally
             {
@@ -3241,6 +3351,7 @@ namespace PSS790Player.Bridge
             try
             {
                 int startGen = Volatile.Read(ref _loadGeneration);
+                int userStopAtStart = Volatile.Read(ref _userStopGeneration);
                 MidiFile? originalSnap;
                 RemapperOptions optionsSnap;
 
@@ -3249,65 +3360,43 @@ namespace PSS790Player.Bridge
                     if (_loadedOriginalMidi == null || Volatile.Read(ref _loadGeneration) != startGen) return;
                     originalSnap = _loadedOriginalMidi;
                     _options.TargetModel = _activeModel;
-                    optionsSnap = new RemapperOptions
-                    {
-                        TargetModel = _options.TargetModel,
-                        EnablePolyphonyGuard = _options.EnablePolyphonyGuard,
-                        ScalePitchBend = _options.ScalePitchBend,
-                        PitchBendMode = _options.PitchBendMode,
-                        NeutralizeAcousticPitchBends = _options.NeutralizeAcousticPitchBends,
-                        AutoCenterDanglingPitchBends = _options.AutoCenterDanglingPitchBends,
-                        EmulateSustainPedal = _options.EmulateSustainPedal,
-                        FoldExpressionPedal = _options.FoldExpressionPedal,
-                        NormalizeAwmVelocities = _options.NormalizeAwmVelocities,
-                        BakeFmVelocity = _options.BakeFmVelocity,
-                        TranslateDrums = _options.TranslateDrums,
-                        VectorQuadLayering = !string.Equals(_options.TargetModel, "pss680", StringComparison.OrdinalIgnoreCase) && _player.VectorQuadPlaybackEnabled,
-                        EnsureSetupPreRoll = _options.EnsureSetupPreRoll,
-                        DefaultReverbBoost = _options.DefaultReverbBoost,
-                        FilterUnsupportedControllers = _options.FilterUnsupportedControllers,
-                        ForceRemap = _options.ForceRemap,
-                        TempoMultiplier = _options.TempoMultiplier,
-                        AutoNormalizeSluggishTempo = _options.AutoNormalizeSluggishTempo,
-                        MasterTranspose = _options.MasterTranspose,
-                        ChannelOctaveShifts = new Dictionary<int, int>(_options.ChannelOctaveShifts),
-                        ChannelVoiceOverrides = new Dictionary<int, int?>(_options.ChannelVoiceOverrides)
-                    };
+                    optionsSnap = SnapshotRemapperOptions(_activeModel, _options.ChannelVoiceOverrides, clearOctaveShifts: false);
                 }
 
                 var wasPlaying = _player.IsPlaying;
                 var pos = preservePosition ? _player.CurrentPosition : TimeSpan.Zero;
 
                 var remapped = Remapper.Remap(originalSnap, optionsSnap);
-                lock (_loadFileLock)
-                {
-                    if (Volatile.Read(ref _loadGeneration) != startGen || !ReferenceEquals(_loadedOriginalMidi, originalSnap))
-                    {
-                        return;
-                    }
-                    _loadedRemappedMidi = remapped;
-                }
-
-                if (Volatile.Read(ref _loadGeneration) != startGen) return;
+                if (_isDisposed || Volatile.Read(ref _loadGeneration) != startGen) return;
 
                 var format = Remapper.DetectMidiFormat(originalSnap);
                 bool isMsGs = Constants.IsMicrosoftGsWavetableSynth(_player.CurrentOutputDeviceName);
-                bool isNative = (format == MidiFormat.Pss790Native) || (format == MidiFormat.Pss680Native);
+                var playableMidi = SelectPlayableMidi(originalSnap, remapped, optionsSnap, format, isMsGs);
 
-                if (isMsGs && !isNative)
+                lock (_playerSwapLock)
                 {
-                    var previewMidi = Remapper.BuildPreviewTransformForMsGs(originalSnap, optionsSnap);
-                    _player.LoadMidi(previewMidi);
-                }
-                else
-                {
-                    _player.LoadMidi(remapped);
-                }
+                    if (_isDisposed || Volatile.Read(ref _loadGeneration) != startGen) return;
 
-                if (wasPlaying && preservePosition)
-                {
-                    _player.Seek(pos);
-                    _player.Play();
+                    lock (_loadFileLock)
+                    {
+                        if (!ReferenceEquals(_loadedOriginalMidi, originalSnap))
+                        {
+                            return;
+                        }
+                        _loadedRemappedMidi = remapped;
+                    }
+
+                    _player.LoadMidi(playableMidi);
+
+                    if (wasPlaying &&
+                        preservePosition &&
+                        !_isDisposed &&
+                        Volatile.Read(ref _loadGeneration) == startGen &&
+                        Volatile.Read(ref _userStopGeneration) == userStopAtStart)
+                    {
+                        _player.Seek(pos);
+                        _player.Play();
+                    }
                 }
             }
             catch (Exception ex)

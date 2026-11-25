@@ -49,6 +49,10 @@ namespace PSS790Player.Core
         private readonly object _deviceLock = new();
         private readonly object _notesLock = new();
         private readonly object _initLock = new();
+        private readonly object _transportLock = new();
+
+        private int _stopEpoch;
+        private int _playbackSessionEpoch;
 
         private readonly Dictionary<(int Channel, byte Note), int> _activeNotes = new();
         private readonly int[] _activeNoteCounts = new int[16];
@@ -84,6 +88,7 @@ namespace PSS790Player.Core
         public bool IsPaused => CaptureStateSnapshot().IsPaused;
         public TimeSpan TotalDuration => CaptureStateSnapshot().TotalTime;
         public TimeSpan CurrentPosition => CaptureStateSnapshot().CurrentTime;
+        public int StopGeneration => Volatile.Read(ref _stopEpoch);
 
         private static bool SafeIsRunning(Playback? p)
         {
@@ -151,8 +156,9 @@ namespace PSS790Player.Core
                 try
                 {
                     if (_isDisposed) return;
+                    int epochBefore = Volatile.Read(ref _playbackSessionEpoch);
                     var snapshot = CaptureStateSnapshot();
-                    if (snapshot.IsPlaying)
+                    if (snapshot.IsPlaying && Volatile.Read(ref _playbackSessionEpoch) == epochBefore)
                     {
                         PlaybackStateChanged?.Invoke(this, snapshot);
                     }
@@ -307,8 +313,10 @@ namespace PSS790Player.Core
 
         public void LoadMidi(MidiFile midiFile)
         {
+            Interlocked.Increment(ref _stopEpoch);
+            Interlocked.Increment(ref _playbackSessionEpoch);
             int prevVolumeMask = Interlocked.Exchange(ref _dirtyVolumeMask, 0);
-            StopAndDetachPlayback(disposePlayback: true);
+            StopAndDetachPlayback(disposePlayback: true, forceFullPanic: false);
 
             for (int i = 0; i < 16; i++)
             {
@@ -364,68 +372,74 @@ namespace PSS790Player.Core
             }
         }
 
-        private void StopAndDetachPlayback(bool disposePlayback)
+        private void StopAndDetachPlayback(bool disposePlayback, bool forceFullPanic = false)
         {
             Playback? oldPlayback = null;
             FilteringOutputDevice? oldFiltering = null;
 
-            lock (_stateLock)
+            lock (_transportLock)
             {
-                try { _progressTimer.Stop(); } catch { }
-                _lastKnownPosition = TimeSpan.Zero;
-                _hasFinished = false;
-
-                if (disposePlayback)
+                lock (_stateLock)
                 {
+                    try { _progressTimer.Stop(); } catch { }
+                    _lastKnownPosition = TimeSpan.Zero;
+                    _hasFinished = false;
+
                     oldPlayback = _playback;
                     oldFiltering = _filteringDevice;
-                    _playback = null;
-                    _filteringDevice = null;
-                }
-                else
-                {
-                    oldPlayback = _playback;
-                }
-            }
 
-            if (disposePlayback)
-            {
-                oldFiltering?.Dispose();
+                    if (disposePlayback)
+                    {
+                        _playback = null;
+                        _filteringDevice = null;
+                    }
+                }
+
+                // Gate all playback output BEFORE stopping the clock so in-flight tick callbacks cannot leak late Note-Ons
+                oldFiltering?.SuppressOutput();
+                if (disposePlayback)
+                {
+                    oldFiltering?.Dispose();
+                }
+
                 if (oldPlayback != null)
                 {
-                    oldPlayback.EventPlayed -= OnPlaybackEventPlayed;
-                    if (_playbackFinishedHandler != null)
+                    if (disposePlayback)
                     {
-                        oldPlayback.Finished -= _playbackFinishedHandler;
+                        oldPlayback.EventPlayed -= OnPlaybackEventPlayed;
+                        if (_playbackFinishedHandler != null)
+                        {
+                            oldPlayback.Finished -= _playbackFinishedHandler;
+                        }
+                        if (_repeatStartedHandler != null)
+                        {
+                            oldPlayback.RepeatStarted -= _repeatStartedHandler;
+                        }
+                        try { oldPlayback.Stop(); } catch { }
+                        for (int i = 0; i < 20 && SafeIsRunning(oldPlayback); i++)
+                        {
+                            Thread.Sleep(5);
+                        }
+                        Thread.Sleep(15);
+                        try { oldPlayback.Dispose(); } catch { }
                     }
-                    if (_repeatStartedHandler != null)
+                    else
                     {
-                        oldPlayback.RepeatStarted -= _repeatStartedHandler;
+                        try
+                        {
+                            oldPlayback.Stop();
+                            for (int i = 0; i < 20 && SafeIsRunning(oldPlayback); i++)
+                            {
+                                Thread.Sleep(5);
+                            }
+                            oldPlayback.MoveToStart();
+                        }
+                        catch { }
                     }
-                    try { oldPlayback.Stop(); } catch { }
-                    for (int i = 0; i < 20 && SafeIsRunning(oldPlayback); i++)
-                    {
-                        Thread.Sleep(5);
-                    }
-                    Thread.Sleep(15);
-                    try { oldPlayback.Dispose(); } catch { }
                 }
-            }
-            else if (oldPlayback != null)
-            {
-                try
-                {
-                    oldPlayback.Stop();
-                    for (int i = 0; i < 10 && SafeIsRunning(oldPlayback); i++)
-                    {
-                        Thread.Sleep(5);
-                    }
-                    oldPlayback.MoveToStart();
-                }
-                catch { }
             }
 
-            SendPanicNoteOffInternal(forceAllChannels: false);
+            SendPanicNoteOffInternal(forceAllChannels: forceFullPanic);
         }
 
         private void InitializePlayback()
@@ -472,6 +486,7 @@ namespace PSS790Player.Core
                         if (_isDisposed) return;
                         try
                         {
+                            Interlocked.Increment(ref _playbackSessionEpoch);
                             lock (_stateLock)
                             {
                                 _hasFinished = true;
@@ -769,6 +784,7 @@ namespace PSS790Player.Core
 
         public void Play()
         {
+            int stopEpoch = Volatile.Read(ref _stopEpoch);
             bool needsInit;
             lock (_stateLock)
             {
@@ -781,6 +797,12 @@ namespace PSS790Player.Core
                 InitializePlayback();
             }
 
+            if (_isDisposed || Volatile.Read(ref _stopEpoch) != stopEpoch)
+            {
+                NotifyState();
+                return;
+            }
+
             Playback? p;
             MidiFile? fileSnapshot;
             bool restartFromBeginning;
@@ -789,14 +811,6 @@ namespace PSS790Player.Core
                 p = _playback;
                 fileSnapshot = _currentFile;
                 restartFromBeginning = _hasFinished;
-                if (p != null)
-                {
-                    _hasFinished = false;
-                    if (restartFromBeginning)
-                    {
-                        _lastKnownPosition = TimeSpan.Zero;
-                    }
-                }
             }
 
             if (p != null)
@@ -816,24 +830,75 @@ namespace PSS790Player.Core
                         {
                             if (restartFromBeginning)
                             {
-                                p.MoveToStart();
+                                lock (_transportLock)
+                                {
+                                    if (_isDisposed || !ReferenceEquals(_playback, p) || Volatile.Read(ref _stopEpoch) != stopEpoch)
+                                    {
+                                        NotifyState();
+                                        return;
+                                    }
+                                    p.MoveToStart();
+                                }
                             }
 
                             if (fileSnapshot != null)
                             {
-                                PrimeInitialVoicesForHardwareStart(fileSnapshot);
+                                PrimeInitialVoicesForHardwareStart(fileSnapshot, stopEpoch, p);
                             }
                         }
 
-                        p.Start();
-                        lock (_stateLock)
+                        bool started = false;
+                        lock (_transportLock)
                         {
-                            if (!_isDisposed && ReferenceEquals(_playback, p))
+                            if (_isDisposed || Volatile.Read(ref _stopEpoch) != stopEpoch)
                             {
-                                try { _progressTimer.Start(); } catch { }
+                                NotifyState();
+                                return;
+                            }
+
+                            FilteringOutputDevice? filtering;
+                            lock (_stateLock)
+                            {
+                                if (_isDisposed || !ReferenceEquals(_playback, p))
+                                {
+                                    p = null;
+                                    filtering = null;
+                                }
+                                else
+                                {
+                                    filtering = _filteringDevice;
+                                    _hasFinished = false;
+                                    if (restartFromBeginning)
+                                    {
+                                        _lastKnownPosition = TimeSpan.Zero;
+                                    }
+                                }
+                            }
+
+                            if (p != null && !SafeIsRunning(p))
+                            {
+                                filtering?.AllowOutput();
+                                Interlocked.Increment(ref _playbackSessionEpoch);
+                                p.Start();
+                                started = true;
                             }
                         }
-                        NotifyState();
+
+                        if (started)
+                        {
+                            lock (_stateLock)
+                            {
+                                if (!_isDisposed && ReferenceEquals(_playback, p) && Volatile.Read(ref _stopEpoch) == stopEpoch)
+                                {
+                                    try { _progressTimer.Start(); } catch { }
+                                }
+                            }
+                            NotifyState();
+                        }
+                        else if (p == null)
+                        {
+                            NotifyState();
+                        }
                     }
                 }
                 catch
@@ -847,8 +912,10 @@ namespace PSS790Player.Core
             }
         }
 
-        private void PrimeInitialVoicesForHardwareStart(MidiFile file)
+        private void PrimeInitialVoicesForHardwareStart(MidiFile file, int expectedStopEpoch, Playback expectedPlayback)
         {
+            if (_isDisposed || Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
+
             IOutputDevice? target;
             string? devName;
             bool is680;
@@ -926,10 +993,11 @@ namespace PSS790Player.Core
                 int sentCount = 0;
                 lock (_deviceLock)
                 {
-                    if (!ReferenceEquals(_outputDevice, target)) return;
+                    if (!ReferenceEquals(_outputDevice, target) || Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
 
                     foreach (var ch in initialPcs.Keys.OrderBy(k => k))
                     {
+                        if (Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
                         try
                         {
                             target.SendEvent(new ProgramChangeEvent((SevenBitNumber)initialPcs[ch].Program)
@@ -947,6 +1015,7 @@ namespace PSS790Player.Core
 
                     foreach (var kvp in initialCcs)
                     {
+                        if (Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
                         int ch = kvp.Key.Channel;
                         byte ccNum = kvp.Key.ControlNumber;
                         byte ccVal = kvp.Value;
@@ -971,11 +1040,23 @@ namespace PSS790Player.Core
                     }
                 }
 
-                // Allow 31.25 kbps serial DIN MIDI UART & hardware wave ROM lookup to settle before Note 1
+                // Allow 31.25 kbps serial DIN MIDI UART & hardware wave ROM lookup to settle before Note 1,
+                // aborting immediately if Stop/LoadMidi is called during settle.
                 if (!isMsGs && sentCount > 0)
                 {
                     int settleMs = Math.Clamp(sentCount * 2 + 25, 30, 80);
-                    Thread.Sleep(settleMs);
+                    int elapsed = 0;
+                    while (elapsed < settleMs)
+                    {
+                        if (_isDisposed || Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
+                        lock (_stateLock)
+                        {
+                            if (!ReferenceEquals(_playback, expectedPlayback)) return;
+                        }
+                        int step = Math.Min(10, settleMs - elapsed);
+                        Thread.Sleep(step);
+                        elapsed += step;
+                    }
                 }
             }
             catch { }
@@ -983,25 +1064,38 @@ namespace PSS790Player.Core
 
         public void Pause()
         {
+            Interlocked.Increment(ref _stopEpoch);
+            Interlocked.Increment(ref _playbackSessionEpoch);
+
             Playback? p;
+            FilteringOutputDevice? filtering;
             lock (_stateLock)
             {
                 p = _playback;
+                filtering = _filteringDevice;
                 try { _progressTimer.Stop(); } catch { }
             }
 
             if (p != null)
             {
                 bool wasRunning = false;
-                try
+                lock (_transportLock)
                 {
-                    wasRunning = SafeIsRunning(p);
-                    if (wasRunning)
+                    filtering?.SuppressOutput();
+                    try
                     {
-                        p.Stop();
+                        wasRunning = SafeIsRunning(p);
+                        if (wasRunning)
+                        {
+                            p.Stop();
+                            for (int i = 0; i < 10 && SafeIsRunning(p); i++)
+                            {
+                                Thread.Sleep(5);
+                            }
+                        }
                     }
+                    catch { }
                 }
-                catch { }
 
                 if (wasRunning)
                 {
@@ -1014,12 +1108,15 @@ namespace PSS790Player.Core
 
         public void Stop()
         {
-            StopAndDetachPlayback(disposePlayback: false);
+            Interlocked.Increment(ref _stopEpoch);
+            Interlocked.Increment(ref _playbackSessionEpoch);
+            StopAndDetachPlayback(disposePlayback: false, forceFullPanic: true);
             NotifyState();
         }
 
         public void Seek(TimeSpan position)
         {
+            int stopEpoch = Volatile.Read(ref _stopEpoch);
             Playback? p;
             lock (_stateLock)
             {
@@ -1036,14 +1133,28 @@ namespace PSS790Player.Core
                 try
                 {
                     var clampedPos = position < TimeSpan.Zero ? TimeSpan.Zero : position;
-                    lock (_stateLock)
+                    lock (_transportLock)
                     {
-                        if (ReferenceEquals(_playback, p))
+                        if (_isDisposed || Volatile.Read(ref _stopEpoch) != stopEpoch)
                         {
-                            _lastKnownPosition = clampedPos;
+                            return;
                         }
+
+                        FilteringOutputDevice? filtering;
+                        lock (_stateLock)
+                        {
+                            if (!ReferenceEquals(_playback, p))
+                            {
+                                return;
+                            }
+                            _lastKnownPosition = clampedPos;
+                            filtering = _filteringDevice;
+                        }
+
+                        // Allow MoveToTime to emit tracked Program/Control/Pitch updates to restore mid-song state
+                        filtering?.AllowOutput();
+                        p.MoveToTime(new MetricTimeSpan(clampedPos));
                     }
-                    p.MoveToTime(new MetricTimeSpan(clampedPos));
                 }
                 catch { }
             }
@@ -1584,6 +1695,9 @@ namespace PSS790Player.Core
                 _isDisposed = true;
             }
 
+            Interlocked.Increment(ref _stopEpoch);
+            Interlocked.Increment(ref _playbackSessionEpoch);
+
             try
             {
                 _progressTimer.Stop();
@@ -1591,7 +1705,7 @@ namespace PSS790Player.Core
             }
             catch { }
 
-            StopAndDetachPlayback(disposePlayback: true);
+            StopAndDetachPlayback(disposePlayback: true, forceFullPanic: false);
 
             IOutputDevice? oldDevice;
             lock (_deviceLock)
@@ -1610,6 +1724,7 @@ namespace PSS790Player.Core
         {
             private readonly MidiPlayer _player;
             private volatile bool _isDisposed;
+            private volatile bool _outputSuppressed;
 
             public event EventHandler<MidiEventSentEventArgs>? EventSent;
 
@@ -1618,14 +1733,18 @@ namespace PSS790Player.Core
                 _player = player;
             }
 
+            public void SuppressOutput() => _outputSuppressed = true;
+            public void AllowOutput() => _outputSuppressed = false;
+
             public void Dispose()
             {
+                _outputSuppressed = true;
                 _isDisposed = true;
             }
 
             public void SendEvent(MidiEvent midiEvent)
             {
-                if (_isDisposed) return;
+                if (_isDisposed || _outputSuppressed) return;
 
                 try
                 {
