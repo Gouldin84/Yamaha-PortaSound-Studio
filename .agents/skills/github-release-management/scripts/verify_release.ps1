@@ -98,8 +98,10 @@ while (([DateTime]::UtcNow - $startTime).TotalSeconds -lt $TimeoutSeconds) {
 
         if ($Tag) {
             $targetRun = $runsData.workflow_runs | Where-Object { $_.head_branch -eq $Tag } | Select-Object -First 1
-        }
-        if (-not $targetRun) {
+            if (-not $targetRun) {
+                Write-Host "Waiting for GitHub Actions workflow run for tag '$Tag' to register..."
+            }
+        } else {
             $targetRun = $runsData.workflow_runs | Select-Object -First 1
         }
 
@@ -144,17 +146,28 @@ while (([DateTime]::UtcNow - $startTime).TotalSeconds -lt $TimeoutSeconds) {
 }
 
 # 5. Verify Release Assets
+if (-not $runSuccess) {
+    Write-Error "Timed out waiting for GitHub Actions workflow run for tag '$Tag' to succeed."
+    exit 1
+}
+
 Write-Host "`nVerifying GitHub Release Assets..." -ForegroundColor Cyan
 try {
-    $releasesUri = "https://api.github.com/repos/$owner/$repo/releases"
-    $releases = Invoke-RestMethod -Uri $releasesUri -Headers $headers
-
     $release = $null
-    if ($Tag) {
-        $release = $releases | Where-Object { $_.tag_name -eq $Tag } | Select-Object -First 1
-    }
-    if (-not $release) {
-        $release = $releases | Select-Object -First 1
+    for ($attempt = 1; $attempt -le 6; $attempt++) {
+        $releasesUri = "https://api.github.com/repos/$owner/$repo/releases"
+        $releases = Invoke-RestMethod -Uri $releasesUri -Headers $headers
+
+        if ($Tag) {
+            $release = $releases | Where-Object { $_.tag_name -eq $Tag } | Select-Object -First 1
+        } else {
+            $release = $releases | Select-Object -First 1
+        }
+
+        if ($release -and -not $release.draft -and $release.assets.Count -gt 0) {
+            break
+        }
+        Start-Sleep -Seconds 3
     }
 
     if ($release) {
@@ -164,10 +177,14 @@ try {
         foreach ($asset in $release.assets) {
             $mb = [math]::Round($asset.size / 1MB, 2)
             Write-Host "  * $($asset.name) ($mb MB) -> $($asset.browser_download_url)" -ForegroundColor White
+            if ($asset.size -le 0) {
+                Write-Error "Asset '$($asset.name)' has 0 bytes!"
+                exit 1
+            }
         }
 
-        if ($release.assets.Count -eq 0) {
-            Write-Warning "Release exists but has 0 assets uploaded!"
+        if ($release.draft -or $release.assets.Count -eq 0) {
+            Write-Error "Release '$($release.tag_name)' is draft or has 0 assets uploaded!"
             exit 1
         }
     } else {
