@@ -3204,8 +3204,14 @@ function renderMixer() {
             }
             const sel = document.getElementById(`voice-override-${ch.channel}`);
             if (sel) {
-                if (ch.selectedFmPresetKey) sel.value = `fm:${ch.selectedFmPresetKey}`;
-                else sel.value = ch.selectedVoice !== null && ch.selectedVoice !== undefined ? ch.selectedVoice : "";
+                if (ch.selectedFmPresetFile && Array.isArray(state.fmVoices)) {
+                    const fmIdx = state.fmVoices.findIndex(v => v.filePath === ch.selectedFmPresetFile);
+                    sel.value = fmIdx >= 0 ? `fm-file:${fmIdx}` : "";
+                } else if (ch.selectedFmPresetKey) {
+                    sel.value = `fm:${ch.selectedFmPresetKey}`;
+                } else {
+                    sel.value = ch.selectedVoice !== null && ch.selectedVoice !== undefined ? ch.selectedVoice : "";
+                }
             }
             const oct = document.getElementById(`ch-oct-${ch.channel}`);
             if (oct) {
@@ -3368,7 +3374,7 @@ function renderMixer() {
             `}
 
             <!-- Fader & Controls -->
-            <div class="flex items-center justify-between space-x-2 pt-1 min-w-0">
+            <div class="flex items-center justify-between gap-1 pt-1 min-w-0">
                 <div class="flex-1 min-w-0 space-y-1">
                     <input type="range" id="vol-${ch.channel}" min="0" max="127" value="${ch.volume}" class="w-full h-1 bg-slate-800" title="Channel ${ch.channelDisplay} Volume (CC 7): Adjust playback level (0-127)">
                     <div class="flex justify-between text-[8px] text-slate-400 font-mono select-none pt-0.5 px-0.5">
