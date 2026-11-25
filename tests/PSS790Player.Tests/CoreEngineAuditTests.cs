@@ -1666,6 +1666,69 @@ namespace PSS790Player.Tests
             Assert.InRange(leadPb.PitchValue, 7035, 7045);
         }
 
+        [Fact]
+        public void MidiPlayer_Pss680_StopPanic_ClearsSustainFirst_SendsExplicitNoteOffEvenAfterPause_AndSkipsIgnoredCc120And123()
+        {
+            using var player = new MidiPlayer { ActiveModel = "pss680" };
+            var dev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(dev);
+
+            // Play live notes on Ch 0 & Ch 3 plus active sustain pedal
+            player.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)127) { Channel = (FourBitNumber)0 });
+            player.SendEvent(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)95) { Channel = (FourBitNumber)0 });
+            player.SendEvent(new NoteOnEvent((SevenBitNumber)67, (SevenBitNumber)95) { Channel = (FourBitNumber)3 });
+
+            // Fast pause clears _activeNotes, leaving only _playedNoteMask history
+            player.SendActiveNotesOffFast();
+            int countBeforeStop = dev.SnapshotEvents().Count;
+
+            player.Stop();
+            var stopEvents = dev.SnapshotEvents().Skip(countBeforeStop).ToList();
+
+            // PSS-680 ignores CC 120 / 123 / 121 (Manual p.46): must NOT flood serial bus with them
+            Assert.DoesNotContain(stopEvents, e => e is ControlChangeEvent cc && (cc.ControlNumber == 120 || cc.ControlNumber == 123 || cc.ControlNumber == 121));
+
+            // CC 64=0 must precede explicit NoteOffs for every touched note (including Pause-cleared history)
+            int sustainOffIdx = stopEvents.FindIndex(e => e is ControlChangeEvent cc && cc.Channel == 0 && cc.ControlNumber == 64 && cc.ControlValue == 0);
+            int noteOff60Idx = stopEvents.FindIndex(e => e is NoteOffEvent no && no.Channel == 0 && no.NoteNumber == 60);
+            int noteOff67Idx = stopEvents.FindIndex(e => e is NoteOffEvent no && no.Channel == 3 && no.NoteNumber == 67);
+
+            Assert.True(sustainOffIdx >= 0);
+            Assert.True(noteOff60Idx > sustainOffIdx);
+            Assert.True(noteOff67Idx >= 0);
+        }
+
+        [Fact]
+        public void MidiPlayer_Pss680_LoadMidiSwitch_ExplicitlyNoteOffsAllPlayedNotes()
+        {
+            using var player = new MidiPlayer { ActiveModel = "pss680" };
+            var dev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(dev);
+
+            var songA = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)100) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 4800 }
+            ))
+            { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            var songB = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)100) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 480 }
+            ))
+            { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            player.LoadMidi(songA);
+            player.Play();
+            Thread.Sleep(50);
+
+            int beforeSwitch = dev.SnapshotEvents().Count;
+            player.LoadMidi(songB);
+            var switchEvents = dev.SnapshotEvents().Skip(beforeSwitch).ToList();
+
+            Assert.Contains(switchEvents, e => e is NoteOffEvent no && no.Channel == 1 && no.NoteNumber == 64);
+            Assert.DoesNotContain(switchEvents, e => e is ControlChangeEvent cc && (cc.ControlNumber == 120 || cc.ControlNumber == 123));
+        }
+
         private sealed class DisposeOrderMockDevice : IOutputDevice
         {
             private readonly Action<MidiEvent> _onSend;
