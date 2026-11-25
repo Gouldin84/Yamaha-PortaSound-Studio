@@ -942,6 +942,14 @@ namespace PSS790Player.Bridge
                         _player.Stop();
                         SendToJs("recording_preview_stopped", new { });
                         break;
+                    case "load_recording_in_player":
+                        var recToLoad = root.TryGetProperty("filePath", out var rlp) ? rlp.GetString() : null;
+                        if (!string.IsNullOrEmpty(recToLoad) && File.Exists(recToLoad) && IsPathInsideDirectory(recToLoad, AppPaths.RecordingsDir))
+                        {
+                            LoadFileAsync(recToLoad, autoPlay: false);
+                            SendToJs("switch_tab", new { tab = "player" });
+                        }
+                        break;
                     case "export_recording_to_gm":
                         var expGmPath = root.TryGetProperty("filePath", out var egProp) ? egProp.GetString() : null;
                         var customGmName = root.TryGetProperty("fileName", out var cgnProp) ? cgnProp.GetString() : null;
@@ -2949,6 +2957,7 @@ namespace PSS790Player.Bridge
 
                     var modelSnapshot = _activeModel;
                     _options.ChannelVoiceOverrides.Clear();
+                    _options.ChannelOctaveShifts.Clear();
                     _options.TargetModel = modelSnapshot;
                     var savedOverrides = VoiceOverrideStore.Instance.GetOverrides(resolvedPath, modelSnapshot);
                     foreach (var (ch, voice) in savedOverrides)
@@ -3235,6 +3244,10 @@ namespace PSS790Player.Bridge
                                         inferredPrograms[part] = (p, "XG SysEx");
                                     }
                                 }
+                                else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d.Length > 6 && d[6] > 0)
+                                {
+                                    drumChannels.Add(d[4]);
+                                }
                             }
                         }
                     }
@@ -3321,6 +3334,22 @@ namespace PSS790Player.Bridge
 
                 bool is680 = string.Equals(_activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
                 bool isDrum = useRemappedRouting ? (ch == 15) : (ch == 9);
+                bool isNativeForActiveModel = (format == MidiFormat.Pss680Native && is680) || (format == MidiFormat.Pss790Native && !is680);
+
+                // Resolve cross-model native programs through their reverse GM mapping when translating to opposing hardware
+                if (!isNativeForActiveModel && !isDrum && prog.HasValue && (format == MidiFormat.Pss790Native || format == MidiFormat.Pss680Native))
+                {
+                    if (format == MidiFormat.Pss790Native && Constants.Pss790MidiProgramToGmMap.TryGetValue(prog.Value, out byte revGm790))
+                    {
+                        prog = revGm790;
+                    }
+                    else if (format == MidiFormat.Pss680Native)
+                    {
+                        prog = prog.Value is >= 100 and <= 104
+                            ? (byte)80
+                            : (Pss680Constants.Pss680ToGmVoiceMap.TryGetValue((int)prog.Value, out var gm680) ? (byte)gm680 : (byte)0);
+                    }
+                }
 
                 string role = isDrum
                     ? (isGmPassthrough ? "GM Standard Drums (Ch 10)" : (is680 ? "Hand Percussion (Ch 16)" : "Fixed Rhythm (Ch 16)"))
@@ -3330,7 +3359,7 @@ namespace PSS790Player.Bridge
                 int defaultPssVoice;
                 string defaultPssVoiceName;
 
-                if (format == MidiFormat.Pss680Native)
+                if (format == MidiFormat.Pss680Native && is680)
                 {
                     if (isDrum)
                     {
@@ -3351,7 +3380,7 @@ namespace PSS790Player.Bridge
                         detectedInstrument = "Default Piano";
                     }
                 }
-                else if (format == MidiFormat.Pss790Native)
+                else if (format == MidiFormat.Pss790Native && !is680)
                 {
                     if (isDrum)
                     {

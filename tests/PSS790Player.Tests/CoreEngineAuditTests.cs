@@ -1013,6 +1013,65 @@ namespace PSS790Player.Tests
             Assert.Contains(ch14Notes, n => n.NoteNumber == 65);
         }
 
+        [Fact]
+        public void Remapper_CrossModelNativeConversion_TranslatesPss790AndPss680Accurately()
+        {
+            // Build a PSS-790 native song: Ch 0 PC 3 (PIANO = GM 0), Ch 15 Note 49 (SNARE HI), Ch 1 PB +1/6 scale
+            var pss790Midi = new MidiFile(new TrackChunk(
+                new TextEvent(Remapper.Pss790MarkerText),
+                new ProgramChangeEvent((SevenBitNumber)3) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new NoteOnEvent((SevenBitNumber)49, (SevenBitNumber)100) { Channel = (FourBitNumber)15, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)49, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 120 }
+            ));
+
+            // Remapping PSS-790 native for PSS-680 should reverse-remap PC 3 -> GM 0 -> PSS-680 Voice 3 (Piano 1)
+            // and Ch 15 SNARE HI (49) -> GM 38 -> PSS-680 Snare Low (52)
+            var to680 = Remapper.Remap(pss790Midi, new RemapperOptions { TargetModel = "pss680" });
+            Assert.True(Remapper.HasPss680Marker(to680));
+            var pc680 = to680.GetTrackChunks().SelectMany(t => t.Events).OfType<ProgramChangeEvent>().Single(p => p.Channel == 0);
+            Assert.Equal((SevenBitNumber)3, pc680.ProgramNumber);
+            var drum680 = Assert.Single(to680.GetNotes().Where(n => n.Channel == 15));
+            Assert.Equal((SevenBitNumber)52, drum680.NoteNumber);
+        }
+
+        [Fact]
+        public void MidiPlayer_PausePreservesPitchBendAndModulation_WhileLoadMidiResetsVolumeBaseline()
+        {
+            using var player = new MidiPlayer();
+            var dev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(dev);
+
+            // Fade out file on Ch 0 (CC 7 = 0) + active bend + modulation, then LoadMidi a fresh song
+            var songA = new MidiFile(new TrackChunk(
+                new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 4800 }
+            ));
+            player.LoadMidi(songA);
+            player.Play();
+            Thread.Sleep(60);
+            player.Pause();
+
+            // Pause must NOT emit PitchBend 8192 or CC 121 Reset All Controllers
+            var pauseSnapshot = dev.SnapshotEvents();
+            Assert.DoesNotContain(pauseSnapshot, e => e is ControlChangeEvent cc && cc.ControlNumber == 121);
+            Assert.DoesNotContain(pauseSnapshot, e => e is PitchBendEvent);
+
+            int eventsBeforeSongB = pauseSnapshot.Count;
+            var songB = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
+            ));
+            player.LoadMidi(songB);
+            player.SetChannelVolume(0, 80);
+
+            // After LoadMidi resets _lastFileChannelVolumes back to 100, SetChannelVolume(0, 80) must emit CC 7 = 80 (not 0)
+            var volCc = dev.SnapshotEvents().Skip(eventsBeforeSongB).OfType<ControlChangeEvent>().Last(c => c.Channel == 0 && c.ControlNumber == 7);
+            Assert.Equal((SevenBitNumber)80, volCc.ControlValue);
+        }
+
         #endregion
     }
 }

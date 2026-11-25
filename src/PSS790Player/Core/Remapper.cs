@@ -321,10 +321,20 @@ namespace PSS790Player.Core
             bool is680 = string.Equals(options.TargetModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
             bool isNativeTarget = (format == MidiFormat.Pss680Native && is680) || (format == MidiFormat.Pss790Native && !is680);
+            bool isOpposingNative = (format == MidiFormat.Pss790Native && is680) || (format == MidiFormat.Pss680Native && !is680);
             bool hasChannelOctaveShifts = options.ChannelOctaveShifts != null && options.ChannelOctaveShifts.Any(kvp => kvp.Value != 0);
             bool hasTempoChange = Math.Abs(options.TempoMultiplier - 1.0) > 0.001 || options.AutoNormalizeSluggishTempo;
             bool hasBendDisable = options.PitchBendMode == PitchBendScaleMode.Disable || !options.ScalePitchBend;
             bool hasTransforms = options.MasterTranspose != 0 || hasChannelOctaveShifts || hasTempoChange || hasBendDisable;
+
+            // Cross-model native conversion (PSS-790 -> PSS-680 or PSS-680 -> PSS-790):
+            // Normalize source hardware events back to GM first so voices, drums, and pitch bends translate accurately.
+            if (isOpposingNative)
+            {
+                string sourceModel = format == MidiFormat.Pss680Native ? "pss680" : "pss790";
+                remapped = ReverseRemapper.ReverseRemapToGeneralMidi(remapped, sourceModel);
+                format = MidiFormat.GeneralMidi;
+            }
 
             // If already converted for target model and not forced, preserve native programs/drums
             // while still honouring active transforms (transpose, octave shifts, tempo, bend disable) & overrides.

@@ -3947,6 +3947,11 @@ function renderRecordingsLibrary() {
                     <span>${isPreviewing ? '⏹ Stop' : '▶ Preview'}</span>
                 </button>
 
+                <!-- Load directly into Player (Tab 1) -->
+                <button onclick="loadRecordingInPlayer('${encodeURIComponent(rec.filePath)}')" title="Load into Player: Open take directly in Tab 1 Player &amp; Mixer" class="px-2.5 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-[11px] font-semibold text-cyan-300 hover:text-white border border-cyan-800/60 transition active:scale-95 flex items-center space-x-1">
+                    <span>🎧 To Player</span>
+                </button>
+
                 <!-- Export to GM Library (Reverse-remapped) -->
                 <button onclick="exportRecordingToGm('${encodeURIComponent(rec.filePath)}', '${escapeHtml(rec.fileName)}')" title="Export to General MIDI Library: Reverse-remaps to standard GM and publishes to GM Midi folder" class="px-2.5 py-1 rounded-lg bg-indigo-950/80 hover:bg-indigo-900 text-[11px] font-semibold text-indigo-300 hover:text-white border border-indigo-800/60 transition active:scale-95 flex items-center space-x-1">
                     <span>🎵 GM Export</span>
@@ -3985,6 +3990,11 @@ function togglePreviewRecording(encodedPath) {
     } else {
         sendToHost("preview_recording", { filePath: filePath });
     }
+}
+
+function loadRecordingInPlayer(encodedPath) {
+    const filePath = decodeURIComponent(encodedPath);
+    sendToHost("load_recording_in_player", { filePath: filePath });
 }
 
 function exportRecordingToGm(encodedPath, fileName) {

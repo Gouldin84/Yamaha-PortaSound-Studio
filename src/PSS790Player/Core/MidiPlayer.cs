@@ -60,6 +60,11 @@ namespace PSS790Player.Core
         // Lock-free atomic state for real-time audio path filtering
         private int _muteMask;
         private int _soloMask;
+        private int _usedChannelMask;
+        private int _dirtyBendMask;
+        private int _dirtyModMask;
+        private int _dirtySustainMask;
+        private int _dirtyVolumeMask;
         private volatile bool _isPss680;
         private string _activeModel = "pss790";
         private int _vectorQuadPlaybackEnabled;
@@ -301,7 +306,35 @@ namespace PSS790Player.Core
 
         public void LoadMidi(MidiFile midiFile)
         {
+            int prevVolumeMask = Interlocked.Exchange(ref _dirtyVolumeMask, 0);
             StopAndDetachPlayback(disposePlayback: true);
+
+            for (int i = 0; i < 16; i++)
+            {
+                Volatile.Write(ref _lastFileChannelVolumes[i], (byte)100);
+            }
+
+            if (prevVolumeMask != 0 && !_isPss680)
+            {
+                lock (_deviceLock)
+                {
+                    var target = _outputDevice;
+                    if (target != null)
+                    {
+                        for (int ch = 0; ch < 15; ch++)
+                        {
+                            if ((prevVolumeMask & (1 << ch)) == 0) continue;
+                            try
+                            {
+                                byte userVol = Volatile.Read(ref _channelVolumes[ch]);
+                                byte restored = (byte)Math.Clamp((int)Math.Round(100.0 * userVol / 100.0), 0, 127);
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)restored) { Channel = (FourBitNumber)ch });
+                            }
+                            catch { }
+                        }
+                    }
+                }
+            }
 
             TimeSpan duration = midiFile != null ? (TimeSpan)midiFile.GetDuration<MetricTimeSpan>() : TimeSpan.Zero;
 
@@ -389,7 +422,7 @@ namespace PSS790Player.Core
                 catch { }
             }
 
-            SendPanicNoteOff();
+            SendPanicNoteOffInternal(forceAllChannels: false);
         }
 
         private void InitializePlayback()
@@ -441,7 +474,7 @@ namespace PSS790Player.Core
                                 _hasFinished = true;
                                 try { _progressTimer.Stop(); } catch { }
                             }
-                            SendPanicNoteOff();
+                            SendPanicNoteOffInternal(forceAllChannels: false);
                             NotifyState();
                             PlaybackFinished?.Invoke(this, EventArgs.Empty);
                         }
@@ -457,7 +490,7 @@ namespace PSS790Player.Core
                             {
                                 _hasFinished = false;
                             }
-                            SendPanicNoteOff();
+                            SendPanicNoteOffInternal(forceAllChannels: false);
                             RePrimeInitialControllers();
                         }
                         catch { }
@@ -800,7 +833,8 @@ namespace PSS790Player.Core
 
                 if (wasRunning)
                 {
-                    SendPanicNoteOff();
+                    // Kill active sounding notes without resetting Pitch Bend / Modulation so Resume stays expressive
+                    SendActiveNotesOffFast();
                     NotifyState();
                 }
             }
@@ -1085,7 +1119,9 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SendPanicNoteOff()
+        public void SendPanicNoteOff() => SendPanicNoteOffInternal(forceAllChannels: true);
+
+        private void SendPanicNoteOffInternal(bool forceAllChannels)
         {
             List<(int Channel, byte Note)> notesToKill;
             lock (_notesLock)
@@ -1097,6 +1133,17 @@ namespace PSS790Player.Core
                 }
                 _activeNotes.Clear();
                 Array.Clear(_activeNoteCounts, 0, 16);
+            }
+
+            int usedMask = Interlocked.Exchange(ref _usedChannelMask, 0);
+            int bendMask = Interlocked.Exchange(ref _dirtyBendMask, 0);
+            int modMask = Interlocked.Exchange(ref _dirtyModMask, 0);
+            int sustainMask = Interlocked.Exchange(ref _dirtySustainMask, 0);
+            if (forceAllChannels) Interlocked.Exchange(ref _dirtyVolumeMask, 0);
+
+            foreach (var (ch, _) in notesToKill)
+            {
+                if (ch >= 0 && ch < 16) usedMask |= (1 << ch);
             }
 
             lock (_deviceLock)
@@ -1117,18 +1164,44 @@ namespace PSS790Player.Core
                         catch { }
                     }
 
-                    // 2. Hardware panic commands across all 16 channels
+                    // 2. Targeted hardware controller cleanup across active/dirty channels (or all 16 on manual Panic)
                     for (int ch = 0; ch < 16; ch++)
                     {
+                        int bit = 1 << ch;
+                        bool sendAllNotesOff = forceAllChannels || (usedMask & bit) != 0;
+                        bool sendMod = forceAllChannels || (ch < 15 && (modMask & bit) != 0);
+                        bool sendBend = forceAllChannels || (ch < 15 && (bendMask & bit) != 0);
+                        bool sendSustain = forceAllChannels || (ch < 15 && (sustainMask & bit) != 0);
+
+                        if (!sendAllNotesOff && !sendMod && !sendBend && !sendSustain)
+                        {
+                            continue;
+                        }
+
                         try
                         {
                             var fourBitCh = (FourBitNumber)ch;
-                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)120, (SevenBitNumber)0) { Channel = fourBitCh }); // All Sound Off
-                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh }); // All Notes Off
-                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });  // Sustain Off
-                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh }); // Reset All Controllers
-                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)0) { Channel = fourBitCh });   // Modulation Off
-                            target.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });                                       // Pitch Bend Center
+                            if (sendAllNotesOff)
+                            {
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)120, (SevenBitNumber)0) { Channel = fourBitCh }); // All Sound Off
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh }); // All Notes Off
+                            }
+                            if (sendSustain)
+                            {
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });  // Sustain Off
+                            }
+                            if (forceAllChannels)
+                            {
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh }); // Reset All Controllers
+                            }
+                            if (sendMod)
+                            {
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)0) { Channel = fourBitCh });   // Modulation Off
+                            }
+                            if (sendBend)
+                            {
+                                target.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });                                       // Pitch Bend Center
+                            }
                         }
                         catch { }
                     }
@@ -1307,6 +1380,7 @@ namespace PSS790Player.Core
                     if (midiEvent is ChannelEvent channelEvent)
                     {
                         int ch = channelEvent.Channel;
+                        TrackDirtyControllerState(_player, ch, channelEvent);
                         int soloMask = Volatile.Read(ref _player._soloMask);
                         int muteMask = Volatile.Read(ref _player._muteMask);
                         bool isMuted = IsChannelMuted(ch, muteMask, soloMask);
@@ -1391,10 +1465,12 @@ namespace PSS790Player.Core
                     }
                     if (baseEvent is PitchBendEvent pb)
                     {
+                        TrackDirtyControllerState(_player, qCh, baseEvent);
                         return new PitchBendEvent(pb.PitchValue) { Channel = (FourBitNumber)qCh };
                     }
                     if (baseEvent is ControlChangeEvent cc)
                     {
+                        TrackDirtyControllerState(_player, qCh, baseEvent);
                         if (cc.ControlNumber == 7)
                         {
                             Volatile.Write(ref _player._lastFileChannelVolumes[qCh], (byte)cc.ControlValue);
@@ -1456,6 +1532,36 @@ namespace PSS790Player.Core
                 {
                     _player.HandleDeviceDisconnectedInternal(failedDevice, deferStop: true);
                 }
+            }
+
+            private static void TrackDirtyControllerState(MidiPlayer player, int ch, ChannelEvent evt)
+            {
+                if (ch < 0 || ch >= 16) return;
+                int bit = 1 << ch;
+                SetMaskBit(ref player._usedChannelMask, bit);
+
+                if (evt is PitchBendEvent)
+                {
+                    SetMaskBit(ref player._dirtyBendMask, bit);
+                }
+                else if (evt is ControlChangeEvent cc)
+                {
+                    if (cc.ControlNumber == 1) SetMaskBit(ref player._dirtyModMask, bit);
+                    else if (cc.ControlNumber == 64) SetMaskBit(ref player._dirtySustainMask, bit);
+                    else if (cc.ControlNumber == 7) SetMaskBit(ref player._dirtyVolumeMask, bit);
+                }
+            }
+
+            private static void SetMaskBit(ref int field, int bit)
+            {
+                int initial, computed;
+                do
+                {
+                    initial = Volatile.Read(ref field);
+                    if ((initial & bit) == bit) return;
+                    computed = initial | bit;
+                }
+                while (Interlocked.CompareExchange(ref field, computed, initial) != initial);
             }
 
             private bool TryApplyPss680Scale(ChannelEvent evt, int ch, bool is680, out ChannelEvent result)
