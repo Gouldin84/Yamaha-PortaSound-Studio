@@ -2131,6 +2131,9 @@ namespace PSS790Player.Core
         {
             const double MinIntervalMs = 18.0;
             var tempoMap = midi.GetTempoMap();
+            var seenPcAtTick = new HashSet<(long Time, int Channel, byte Program)>();
+            var seenCcAtTick = new HashSet<(long Time, int Channel, byte Control, byte Value)>();
+            var seenPbAtTick = new HashSet<(long Time, int Channel, ushort PitchValue)>();
 
             foreach (var track in midi.GetTrackChunks())
             {
@@ -2143,20 +2146,44 @@ namespace PSS790Player.Core
 
                 foreach (var te in allEvents)
                 {
-                    if (te.Event is ControlChangeEvent cc && (cc.ControlNumber == 1 || cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 11))
+                    if (te.Event is ProgramChangeEvent pc)
                     {
-                        var streamKey = ((int)cc.Channel, (int)cc.ControlNumber);
-                        if (!streams.TryGetValue(streamKey, out var list))
+                        if (!seenPcAtTick.Add((te.Time, pc.Channel, (byte)pc.ProgramNumber)))
                         {
-                            list = new List<(TimedEvent, double, int, bool)>();
-                            streams[streamKey] = list;
+                            eventsToRemove.Add(te);
                         }
-                        int val = (byte)cc.ControlValue;
-                        double ms = TimeConverter.ConvertTo<MetricTimeSpan>(te.Time, tempoMap).TotalMilliseconds;
-                        list.Add((te, ms, val, val == 0 || val == 127));
+                        continue;
+                    }
+
+                    if (te.Event is ControlChangeEvent cc)
+                    {
+                        if (!seenCcAtTick.Add((te.Time, cc.Channel, (byte)cc.ControlNumber, (byte)cc.ControlValue)))
+                        {
+                            eventsToRemove.Add(te);
+                            continue;
+                        }
+
+                        if (cc.ControlNumber == 1 || cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 11)
+                        {
+                            var streamKey = ((int)cc.Channel, (int)cc.ControlNumber);
+                            if (!streams.TryGetValue(streamKey, out var list))
+                            {
+                                list = new List<(TimedEvent, double, int, bool)>();
+                                streams[streamKey] = list;
+                            }
+                            int val = (byte)cc.ControlValue;
+                            double ms = TimeConverter.ConvertTo<MetricTimeSpan>(te.Time, tempoMap).TotalMilliseconds;
+                            list.Add((te, ms, val, val == 0 || val == 127));
+                        }
                     }
                     else if (te.Event is PitchBendEvent pb)
                     {
+                        if (!seenPbAtTick.Add((te.Time, pb.Channel, pb.PitchValue)))
+                        {
+                            eventsToRemove.Add(te);
+                            continue;
+                        }
+
                         var streamKey = ((int)pb.Channel, -1);
                         if (!streams.TryGetValue(streamKey, out var list))
                         {

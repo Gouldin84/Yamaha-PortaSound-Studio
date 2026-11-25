@@ -28,6 +28,7 @@ namespace PSS790Player
             }
             catch { }
             Loaded += MainWindow_Loaded;
+            Closing += MainWindow_Closing;
             Closed += MainWindow_Closed;
         }
 
@@ -166,6 +167,11 @@ namespace PSS790Player
                 _uiBridge?.HandleDeviceChangeNotification();
             }
             return IntPtr.Zero;
+        }
+
+        private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+        {
+            _uiBridge?.PrepareForShutdown();
         }
 
         private void MainWindow_Closed(object? sender, EventArgs e)

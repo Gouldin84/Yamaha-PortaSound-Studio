@@ -1705,14 +1705,23 @@ namespace PSS790Player.Core
             }
             catch { }
 
-            StopAndDetachPlayback(disposePlayback: true, forceFullPanic: false);
+            StopAndDetachPlayback(disposePlayback: true, forceFullPanic: true);
 
             IOutputDevice? oldDevice;
+            bool wasHardwarePort;
             lock (_deviceLock)
             {
                 oldDevice = _outputDevice;
+                wasHardwarePort = oldDevice is OutputDevice;
                 _outputDevice = null;
                 _currentOutputDeviceName = null;
+            }
+
+            if (wasHardwarePort)
+            {
+                // Allow Windows WinMM / USB-MIDI TX queue to clock out final Note-Off & Panic controllers
+                // before closing the MIDI port handle (preventing midiOutReset from truncating in-flight cleanup).
+                Thread.Sleep(75);
             }
 
             try { oldDevice?.Dispose(); } catch { }

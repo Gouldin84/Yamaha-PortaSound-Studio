@@ -4556,9 +4556,34 @@ namespace PSS790Player.Bridge
             });
         }
 
+        public void PrepareForShutdown()
+        {
+            _isAutoPlayLoad = false;
+            Volatile.Write(ref _hasPendingSeek, 0);
+            Interlocked.Increment(ref _loadGeneration);
+            Interlocked.Increment(ref _playIntentGeneration);
+            Interlocked.Increment(ref _userStopGeneration);
+
+            lock (_ctsLock)
+            {
+                try { _batchCts?.Cancel(); } catch { }
+                try { _syncCts?.Cancel(); } catch { }
+            }
+
+            try
+            {
+                _recorder.MidiThruEnabled = false;
+                _recorder.StopRecording();
+            }
+            catch { }
+
+            try { _player.Stop(); } catch { }
+        }
+
         public void Dispose()
         {
             if (_isDisposed) return;
+            PrepareForShutdown();
             _isDisposed = true;
 
             try { _channelBatchTimer?.Dispose(); } catch { }

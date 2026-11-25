@@ -248,12 +248,12 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Step 2b: Model 200ms virtual release-tail window on PSS-680 YM3420 FM voices only.
-            // PSS-790 AWM releases gracefully in hardware without eating fast melodic polyphony runs.
-            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, 200);
+            // Step 2b: Model hardware envelope release-tail window on melodic voices
+            // (200ms YM3420 FM on PSS-680, 100ms AWM on PSS-790) so hardware voice-stealing & long pad drones never saturate the synth.
+            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, is680 ? 200 : 100);
             foreach (var ctx in allContexts)
             {
-                if (is680 && ctx.Channel != 15)
+                if (ctx.Channel != 15)
                 {
                     long tailTicks = LengthConverter.ConvertFrom(releaseTailSpan, ctx.EffectiveEndTime, tempoMap);
                     ctx.SoundEndTime = ctx.EffectiveEndTime + Math.Max(0, tailTicks);
@@ -385,7 +385,10 @@ namespace PSS790Player.Core
                         }
 
                         var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
-                        var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
+                        // Prefer foreground melodic/harmonic voices (Tier 2+) for the high lead shield so long Tier-1 background pads/strings
+                        // (e.g. sustained high string drones) cannot starve real melodies or linger above 28 hardware voices.
+                        var leadNote = activeMelodic.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
+                                       ?? activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
                         var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
 
                         // Shield global high lead & low bass, plus prefer keeping fresh note triggers and

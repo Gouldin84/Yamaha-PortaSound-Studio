@@ -1403,6 +1403,157 @@ namespace PSS790Player.Tests
             Assert.False(player.IsPlaying);
         }
 
+        [Fact]
+        public void PolyphonyOptimizer_Pss790_EnforcesAwmReleaseTailAndYieldsLongTier1HighDroneToMelody()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            // Ch 1: 27 Tier-2 chord notes ending right at tick 240 (250ms at 120 BPM);
+            // their 100ms AWM hardware release tail extends overlap past tick 260.
+            var padTrack = new TrackChunk();
+            for (int i = 0; i < 27; i++)
+            {
+                padTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(40 + i), (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            }
+            for (int i = 0; i < 27; i++)
+            {
+                padTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(40 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = i == 0 ? 240 : 0 });
+            }
+
+            // Ch 2: Tier-1 sustained high string drone (Note 82, Bb5) spanning [0..4800]
+            var droneTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)82, (SevenBitNumber)90) { Channel = (FourBitNumber)2, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)82, (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 4800 }
+            );
+
+            // Ch 0: Tier-3 foreground Alto Sax melody (GM 65) at lower pitch [260..720]
+            var leadTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)67, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 260 },
+                new NoteOffEvent((SevenBitNumber)67, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 460 }
+            );
+
+            midi.Chunks.Add(padTrack);
+            midi.Chunks.Add(droneTrack);
+            midi.Chunks.Add(leadTrack);
+
+            var programs = new Dictionary<int, byte>
+            {
+                [0] = 65, // Alto Sax (Tier 3)
+                [1] = 24, // Acoustic Guitar (nylon) (Tier 2)
+                [2] = 49  // String Ensemble 2 (Tier 1 sustained high drone)
+            };
+
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 26, model: "pss790");
+            var optimized = optimizer.Optimize(midi, programs);
+            var surviving = optimized.GetNotes().ToList();
+
+            Assert.Contains(surviving, n => n.Channel == 0 && n.NoteNumber == 67);
+            Assert.DoesNotContain(surviving, n => n.Channel == 2 && n.NoteNumber == 82);
+            Assert.True(surviving.Count <= Constants.PolyphonyMax);
+        }
+
+        [Fact]
+        public void Remapper_DeduplicatesIdenticalSameTickSetupBurstsAcrossTracks()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(96) };
+
+            for (int t = 0; t < 4; t++)
+            {
+                var track = new TrackChunk(
+                    new ProgramChangeEvent((SevenBitNumber)48) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                    new ControlChangeEvent((SevenBitNumber)91, (SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                    new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                    new PitchBendEvent(8192) { Channel = (FourBitNumber)0, DeltaTime = 0 }
+                );
+                if (t == 0)
+                {
+                    track.Events.Add(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 96 });
+                    track.Events.Add(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 96 });
+                }
+                midi.Chunks.Add(track);
+            }
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
+            var pcsAt0 = remapped.GetTimedEvents().Count(te => te.Time == 0 && te.Event is ProgramChangeEvent pc && pc.Channel == 0);
+            var cc91At0 = remapped.GetTimedEvents().Count(te => te.Time == 0 && te.Event is ControlChangeEvent cc && cc.Channel == 0 && cc.ControlNumber == 91);
+            var cc7At0 = remapped.GetTimedEvents().Count(te => te.Time == 0 && te.Event is ControlChangeEvent cc && cc.Channel == 0 && cc.ControlNumber == 7);
+            var pbAt0 = remapped.GetTimedEvents().Count(te => te.Time == 0 && te.Event is PitchBendEvent pb && pb.Channel == 0);
+
+            Assert.Equal(1, pcsAt0);
+            Assert.Equal(1, cc91At0);
+            Assert.Equal(1, cc7At0);
+            Assert.Equal(1, pbAt0);
+        }
+
+        [Fact]
+        public void MidiPlayer_Dispose_SendsFull16ChannelPanicBeforeClosingDevice()
+        {
+            var eventsBeforeDispose = new List<MidiEvent>();
+            bool disposed = false;
+            int eventCountAtDeviceDispose = -1;
+
+            var trackDev = new DisposeOrderMockDevice(
+                onSend: ev =>
+                {
+                    Assert.False(disposed, "MIDI cleanup events must be transmitted BEFORE OutputDevice.Dispose().");
+                    eventsBeforeDispose.Add(ev);
+                },
+                onDispose: () =>
+                {
+                    eventCountAtDeviceDispose = eventsBeforeDispose.Count;
+                    disposed = true;
+                });
+
+            var player = new MidiPlayer();
+            player.SetOutputDevice(trackDev);
+
+            var midi = new MidiFile(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)100) { Channel = (FourBitNumber)3, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)3, DeltaTime = 4800 }
+            ))
+            { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+
+            player.LoadMidi(midi);
+            player.Play();
+            Thread.Sleep(40);
+            eventsBeforeDispose.Clear();
+
+            player.Dispose();
+
+            Assert.True(disposed);
+            Assert.True(eventCountAtDeviceDispose > 0);
+            var ccs = eventsBeforeDispose.OfType<ControlChangeEvent>().ToList();
+            for (int ch = 0; ch < 16; ch++)
+            {
+                var fb = (FourBitNumber)ch;
+                Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 120 && c.ControlValue == 0);
+                Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 123 && c.ControlValue == 0);
+                Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 64 && c.ControlValue == 0);
+                Assert.Contains(ccs, c => c.Channel == fb && c.ControlNumber == 121 && c.ControlValue == 0);
+            }
+        }
+
+        private sealed class DisposeOrderMockDevice : IOutputDevice
+        {
+            private readonly Action<MidiEvent> _onSend;
+            private readonly Action _onDispose;
+            public event EventHandler<MidiEventSentEventArgs>? EventSent;
+
+            public DisposeOrderMockDevice(Action<MidiEvent> onSend, Action onDispose)
+            {
+                _onSend = onSend;
+                _onDispose = onDispose;
+            }
+
+            public void PrepareForEventsSending() { }
+            public void SendEvent(MidiEvent midiEvent)
+            {
+                _onSend(midiEvent);
+                EventSent?.Invoke(this, new MidiEventSentEventArgs(midiEvent));
+            }
+            public void Dispose() => _onDispose();
+        }
+
         #endregion
     }
 }
