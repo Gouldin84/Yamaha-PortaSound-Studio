@@ -416,10 +416,10 @@ namespace PSS790Player.Tests
         [Fact]
         public void TranslateDrumNote_ExtendedNotes_ReturnsMusicalFallbacks()
         {
-            Assert.Equal((byte)64, Remapper.TranslateDrumNote(28)); // Slap -> Rimshot
-            Assert.Equal((byte)75, Remapper.TranslateDrumNote(31)); // Sticks -> Woodblock
-            Assert.Equal((byte)58, Remapper.TranslateDrumNote(82)); // Shaker -> Maracas
-            Assert.Equal((byte)39, Remapper.TranslateDrumNote(84)); // Bell Tree -> Triangle Open
+            Assert.Equal((byte)46, Remapper.TranslateDrumNote(28)); // Slap -> RIM SHOT 1
+            Assert.Equal((byte)72, Remapper.TranslateDrumNote(31)); // Sticks -> CLAVES LO
+            Assert.Equal((byte)56, Remapper.TranslateDrumNote(82)); // Shaker -> CABASA
+            Assert.Equal((byte)39, Remapper.TranslateDrumNote(84)); // Bell Tree -> TRIANGLE OPEN
         }
 
         [Fact]
@@ -448,7 +448,7 @@ namespace PSS790Player.Tests
             // Channel 9 (Ch 10) and Channel 15 notes must both end up on Channel 15 as PSS-790 Chart 1 drums
             var ch15Notes = events.OfType<NoteOnEvent>().Where(n => n.Channel == (FourBitNumber)15).Select(n => (byte)n.NoteNumber).ToList();
             Assert.Contains((byte)45, ch15Notes); // GM 36 -> PSS 45 (BASS DRUM HI)
-            Assert.Contains((byte)49, ch15Notes); // GM 40 -> PSS 49 (SNARE HI)
+            Assert.Contains((byte)38, ch15Notes); // GM 40 -> PSS 38 (SYNTH SNARE)
             Assert.Contains((byte)44, ch15Notes); // GM 35 -> PSS 44 (BASS DRUM LO)
 
             // Channel 9 should have zero notes
@@ -694,8 +694,8 @@ namespace PSS790Player.Tests
             // Drum notes on Channel 16:
             var ch15Notes = remappedNotes.Where(n => n.Channel == 15).ToList();
             Assert.Equal(3, ch15Notes.Count);
-            // GM 40 -> PSS-790 Note 49 (SNARE HI)
-            Assert.Equal((byte)49, (byte)ch15Notes[0].NoteNumber);
+            // GM 40 -> PSS-790 Note 38 (SYNTH SNARE)
+            Assert.Equal((byte)38, (byte)ch15Notes[0].NoteNumber);
             // GM 51 -> PSS-790 Note 63 (RIDE CYMBAL EDGE)
             Assert.Equal((byte)63, (byte)ch15Notes[1].NoteNumber);
             // GM 53 -> PSS-790 Note 62 (RIDE CYMBAL CUP)

@@ -39,6 +39,7 @@ namespace PSS790Player.Core
         public int Percent { get; set; }
         public string StatusMessage { get; set; } = string.Empty;
         public bool IsCompleted { get; set; }
+        public bool IsCancelled { get; set; }
     }
 
     public class SysExManager : IDisposable
@@ -458,7 +459,7 @@ namespace PSS790Player.Core
             }
             catch (OperationCanceledException)
             {
-                ReportTransmitCancelled(progress, 0, 0, 0);
+                ReportTransmitCancelled(progress, 0, 0, 0, 0, 0);
                 return false;
             }
             catch (ObjectDisposedException)
@@ -469,6 +470,8 @@ namespace PSS790Player.Core
             CancellationTokenSource? localCts = null;
             int currentPacket = 0;
             int totalPackets = 0;
+            int bytesSent = 0;
+            int totalBytes = 0;
             int pct = 0;
 
             try
@@ -489,14 +492,13 @@ namespace PSS790Player.Core
                     throw new InvalidOperationException("No valid SysEx messages found in file.");
 
                 totalPackets = packets.Count;
-                int totalBytes = allBytes.Length;
-                int bytesSent = 0;
+                totalBytes = allBytes.Length;
 
                 for (int i = 0; i < totalPackets; i++)
                 {
                     if (token.IsCancellationRequested)
                     {
-                        ReportTransmitCancelled(progress, currentPacket, totalPackets, pct);
+                        ReportTransmitCancelled(progress, currentPacket, totalPackets, bytesSent, totalBytes, pct);
                         return false;
                     }
 
@@ -545,7 +547,7 @@ namespace PSS790Player.Core
             }
             catch (OperationCanceledException)
             {
-                ReportTransmitCancelled(progress, currentPacket, totalPackets, pct);
+                ReportTransmitCancelled(progress, currentPacket, totalPackets, bytesSent, totalBytes, pct);
                 return false;
             }
             finally
@@ -569,15 +571,18 @@ namespace PSS790Player.Core
             }
         }
 
-        private void ReportTransmitCancelled(IProgress<SysExTransmitEventArgs>? progress, int currentPacket, int totalPackets, int percent)
+        private void ReportTransmitCancelled(IProgress<SysExTransmitEventArgs>? progress, int currentPacket, int totalPackets, int currentBytes, int totalBytes, int percent)
         {
             var cancelArgs = new SysExTransmitEventArgs
             {
                 CurrentPacket = currentPacket,
                 TotalPackets = totalPackets,
+                CurrentBytes = currentBytes,
+                TotalBytes = totalBytes,
                 Percent = percent,
                 StatusMessage = "Transmission cancelled.",
-                IsCompleted = true
+                IsCompleted = true,
+                IsCancelled = true
             };
             progress?.Report(cancelArgs);
             TransmitProgress?.Invoke(this, cancelArgs);
@@ -618,7 +623,6 @@ namespace PSS790Player.Core
                 "gm_on" => new byte[] { 0x7E, 0x7F, 0x09, 0x01, 0xF7 },
                 "xg_on" => new byte[] { 0x43, 0x10, 0x4C, 0x00, 0x00, 0x7E, 0x00, 0xF7 },
                 "master_vol_100" or "master_volume_max" => new byte[] { 0x7F, 0x7F, 0x04, 0x01, 0x00, 0x7F, 0xF7 },
-                "all_reset" => new byte[] { 0x7E, 0x7F, 0x09, 0x01, 0xF7 },
                 _ => null
             };
 
@@ -635,7 +639,7 @@ namespace PSS790Player.Core
 
         public bool DeleteDump(string filePath, string? baseDir = null)
         {
-            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.SysExDir) ? AppPaths.SysExDir : Path.GetDirectoryName(filePath));
+            var targetDir = string.IsNullOrWhiteSpace(baseDir) ? AppPaths.SysExDir : baseDir;
             if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
             {
                 return false;
@@ -651,7 +655,7 @@ namespace PSS790Player.Core
 
         public string RenameDump(string filePath, string newName, string? baseDir = null)
         {
-            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.SysExDir) ? AppPaths.SysExDir : Path.GetDirectoryName(filePath));
+            var targetDir = string.IsNullOrWhiteSpace(baseDir) ? AppPaths.SysExDir : baseDir;
             if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
             {
                 throw new UnauthorizedAccessException("Cannot rename files outside target directory.");

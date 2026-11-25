@@ -821,7 +821,9 @@ namespace PSS790Player.Core
                 _hasFinished = false;
             }
 
-            SendPanicNoteOff();
+            // Use fast targeted active-note silencing during scrubbing/seeking so serial MIDI
+            // buses (31.25 kbps) and the UI bridge don't stall on 96-event full controller resets.
+            SendActiveNotesOffFast();
 
             if (p != null)
             {
@@ -1010,6 +1012,76 @@ namespace PSS790Player.Core
             foreach (var ch in channelsToSilence)
             {
                 SendChannelNoteOff(ch);
+            }
+        }
+
+        public void ClearAllSolo()
+        {
+            lock (_stateLock)
+            {
+                Array.Clear(_channelSolos, 0, 16);
+                Volatile.Write(ref _soloMask, 0);
+            }
+        }
+
+        public void SendActiveNotesOffFast()
+        {
+            List<(int Channel, byte Note)> notesToKill;
+            bool[] activeChannels = new bool[16];
+            lock (_notesLock)
+            {
+                notesToKill = new List<(int Channel, byte Note)>(_activeNotes.Count);
+                foreach (var key in _activeNotes.Keys)
+                {
+                    notesToKill.Add(key);
+                    if (key.Channel >= 0 && key.Channel < 16)
+                        activeChannels[key.Channel] = true;
+                }
+                _activeNotes.Clear();
+                Array.Clear(_activeNoteCounts, 0, 16);
+            }
+
+            lock (_deviceLock)
+            {
+                var target = _outputDevice;
+                if (target != null)
+                {
+                    foreach (var (ch, note) in notesToKill)
+                    {
+                        try
+                        {
+                            target.SendEvent(new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0)
+                            {
+                                Channel = (FourBitNumber)ch
+                            });
+                        }
+                        catch { }
+                    }
+
+                    for (int ch = 0; ch < 16; ch++)
+                    {
+                        if (!activeChannels[ch]) continue;
+                        try
+                        {
+                            target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0)
+                            {
+                                Channel = (FourBitNumber)ch
+                            });
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            for (int ch = 0; ch < 16; ch++)
+            {
+                if (!activeChannels[ch]) continue;
+                ChannelActivity?.Invoke(this, new ChannelActivityEventArgs
+                {
+                    Channel = ch,
+                    IsActive = false,
+                    Velocity = 0
+                });
             }
         }
 
@@ -1241,10 +1313,11 @@ namespace PSS790Player.Core
                         bool isNoteOnAudible = channelEvent is NoteOnEvent noteOnCheck && noteOnCheck.Velocity > 0;
                         bool isQuad = Volatile.Read(ref _player._vectorQuadPlaybackEnabled) != 0 &&
                                       ch == 0 &&
-                                      (channelEvent is NoteOnEvent or NoteOffEvent);
+                                      (channelEvent is NoteOnEvent or NoteOffEvent or PitchBendEvent ||
+                                       (channelEvent is ControlChangeEvent qCc && (qCc.ControlNumber == 1 || qCc.ControlNumber == 7 || qCc.ControlNumber == 91)));
 
-                        // Vector Quad Note Replication (PSS-790):
-                        // Handled BEFORE single-channel mute check so soloing Voices B/C/D (Ch 1-3) still receives notes when Ch 0 is muted.
+                        // Vector Quad Layering & Replication (PSS-790):
+                        // Handled BEFORE single-channel mute check so soloing Voices B/C/D (Ch 1-3) still receives notes/expression when Ch 0 is muted.
                         if (isQuad)
                         {
                             SendVectorQuadEvent(channelEvent, isMuted, isNoteOnAudible, muteMask, soloMask);
@@ -1305,12 +1378,40 @@ namespace PSS790Player.Core
                 bool is680 = _player._isPss680;
                 List<MidiEvent> eventsToSend = new(4);
 
+                ChannelEvent? BuildQuadVariant(byte qCh)
+                {
+                    if (baseEvent is NoteOnEvent nOn)
+                    {
+                        var ev = new NoteOnEvent(nOn.NoteNumber, nOn.Velocity) { Channel = (FourBitNumber)qCh };
+                        return TryApplyPss680Scale(ev, qCh, is680, out var scaled) ? scaled : null;
+                    }
+                    if (baseEvent is NoteOffEvent nOff)
+                    {
+                        return new NoteOffEvent(nOff.NoteNumber, nOff.Velocity) { Channel = (FourBitNumber)qCh };
+                    }
+                    if (baseEvent is PitchBendEvent pb)
+                    {
+                        return new PitchBendEvent(pb.PitchValue) { Channel = (FourBitNumber)qCh };
+                    }
+                    if (baseEvent is ControlChangeEvent cc)
+                    {
+                        if (cc.ControlNumber == 7)
+                        {
+                            Volatile.Write(ref _player._lastFileChannelVolumes[qCh], (byte)cc.ControlValue);
+                            if (is680) return null;
+                            byte userVol = Volatile.Read(ref _player._channelVolumes[qCh]);
+                            int scaled = Math.Clamp((int)Math.Round((double)cc.ControlValue * userVol / 100.0), 0, 127);
+                            return new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled) { Channel = (FourBitNumber)qCh };
+                        }
+                        return new ControlChangeEvent(cc.ControlNumber, cc.ControlValue) { Channel = (FourBitNumber)qCh };
+                    }
+                    return null;
+                }
+
                 if (!ch0Muted || !isNoteOnAudible)
                 {
-                    if (TryApplyPss680Scale(baseEvent, 0, is680, out var scaledCh0))
-                    {
-                        eventsToSend.Add(scaledCh0);
-                    }
+                    var ev0 = BuildQuadVariant(0);
+                    if (ev0 != null) eventsToSend.Add(ev0);
                 }
 
                 for (byte qCh = 1; qCh <= 3; qCh++)
@@ -1318,14 +1419,8 @@ namespace PSS790Player.Core
                     bool qMuted = IsChannelMuted(qCh, muteMask, soloMask);
                     if (qMuted && isNoteOnAudible) continue;
 
-                    ChannelEvent qEvt = baseEvent is NoteOnEvent nOn
-                        ? new NoteOnEvent(nOn.NoteNumber, nOn.Velocity) { Channel = (FourBitNumber)qCh }
-                        : new NoteOffEvent(((NoteOffEvent)baseEvent).NoteNumber, ((NoteOffEvent)baseEvent).Velocity) { Channel = (FourBitNumber)qCh };
-
-                    if (TryApplyPss680Scale(qEvt, qCh, is680, out var scaledQ))
-                    {
-                        eventsToSend.Add(scaledQ);
-                    }
+                    var evQ = BuildQuadVariant(qCh);
+                    if (evQ != null) eventsToSend.Add(evQ);
                 }
 
                 if (eventsToSend.Count == 0) return;

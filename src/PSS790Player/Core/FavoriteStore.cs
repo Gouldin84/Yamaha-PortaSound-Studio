@@ -11,7 +11,7 @@ namespace PSS790Player.Core
         private static readonly Lazy<FavoriteStore> _lazyInstance = new(() => new FavoriteStore());
         public static FavoriteStore Instance => _lazyInstance.Value;
 
-        private readonly string _storagePath;
+        private string _storagePath;
         private readonly object _lock = new();
         private HashSet<string> _favorites = new(StringComparer.OrdinalIgnoreCase);
         private volatile bool _isLoaded;
@@ -19,6 +19,20 @@ namespace PSS790Player.Core
         public FavoriteStore(string? customPath = null)
         {
             _storagePath = customPath ?? AppPaths.FavoritesFilePath;
+        }
+
+        public void Reload(string? customPath = null)
+        {
+            lock (_lock)
+            {
+                if (!string.IsNullOrWhiteSpace(customPath))
+                {
+                    _storagePath = customPath;
+                }
+                _favorites.Clear();
+                _isLoaded = false;
+            }
+            EnsureLoaded();
         }
 
         private void EnsureLoaded()
@@ -152,6 +166,85 @@ namespace PSS790Player.Core
                     return true;
                 }
                 return false;
+            }
+        }
+
+        public void RenameFile(string oldFilePath, string newFilePath)
+        {
+            EnsureLoaded();
+            var oldKey = NormalizeKey(oldFilePath);
+            var newKey = NormalizeKey(newFilePath);
+            if (string.IsNullOrEmpty(oldKey) || string.IsNullOrEmpty(newKey) ||
+                string.Equals(oldKey, newKey, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            lock (_lock)
+            {
+                if (_favorites.Remove(oldKey))
+                {
+                    _favorites.Add(newKey);
+                    SaveInternal();
+                }
+            }
+        }
+
+        public void RenameFolder(string oldFolderPath, string newFolderPath)
+        {
+            EnsureLoaded();
+            var oldNorm = NormalizeKey(oldFolderPath).Replace('\\', '/').TrimEnd('/');
+            var newNorm = NormalizeKey(newFolderPath).Replace('\\', '/').TrimEnd('/');
+            if (string.IsNullOrEmpty(oldNorm) || string.IsNullOrEmpty(newNorm) ||
+                string.Equals(oldNorm, newNorm, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            var oldPrefix = oldNorm + "/";
+            var newPrefix = newNorm + "/";
+
+            lock (_lock)
+            {
+                var migrations = _favorites
+                    .Where(k => k.StartsWith(oldPrefix, StringComparison.OrdinalIgnoreCase))
+                    .Select(k => (OldKey: k, NewKey: newPrefix + k.Substring(oldPrefix.Length)))
+                    .ToList();
+
+                if (migrations.Count > 0)
+                {
+                    foreach (var (oldKey, newKey) in migrations)
+                    {
+                        _favorites.Remove(oldKey);
+                        _favorites.Add(newKey);
+                    }
+                    SaveInternal();
+                }
+            }
+        }
+
+        public int RemoveFolder(string folderPath)
+        {
+            EnsureLoaded();
+            var norm = NormalizeKey(folderPath).Replace('\\', '/').TrimEnd('/');
+            if (string.IsNullOrEmpty(norm)) return 0;
+
+            var prefix = norm + "/";
+            lock (_lock)
+            {
+                var toRemove = _favorites
+                    .Where(k => k.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                foreach (var k in toRemove)
+                {
+                    _favorites.Remove(k);
+                }
+
+                if (toRemove.Count > 0)
+                {
+                    SaveInternal();
+                }
+                return toRemove.Count;
             }
         }
 

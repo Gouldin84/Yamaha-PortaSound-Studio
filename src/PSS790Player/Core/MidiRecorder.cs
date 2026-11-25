@@ -59,7 +59,8 @@ namespace PSS790Player.Core
             "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
         };
 
-        private InputDevice? _inputDevice;
+        private IInputDevice? _inputDevice;
+        private string? _inputDeviceName;
         private Recording? _recording;
         private MidiFile? _lastRecordedFile;
         private readonly object _lock = new();
@@ -95,7 +96,7 @@ namespace PSS790Player.Core
             {
                 lock (_lock)
                 {
-                    try { return _inputDevice?.Name; }
+                    try { return _inputDeviceName ?? (_inputDevice as InputDevice)?.Name; }
                     catch { return null; }
                 }
             }
@@ -130,16 +131,41 @@ namespace PSS790Player.Core
 
         public void SetInputDevice(string? deviceName)
         {
+            if (string.IsNullOrWhiteSpace(deviceName) || _isDisposed)
+            {
+                SetInputDeviceInstance(null, null);
+                return;
+            }
+
+            InputDevice? newDevice = null;
+            try
+            {
+                newDevice = InputDevice.GetByName(deviceName);
+                SetInputDeviceInstance(newDevice, newDevice.Name ?? deviceName);
+            }
+            catch
+            {
+                SetInputDeviceInstance(null, null);
+                if (newDevice != null)
+                {
+                    try { newDevice.Dispose(); } catch { }
+                }
+            }
+        }
+
+        public void SetInputDeviceInstance(IInputDevice? newDevice, string? deviceName = null)
+        {
             if (_state is RecorderState.Recording or RecorderState.CountIn)
             {
                 StopRecording();
             }
 
-            InputDevice? oldDevice;
+            IInputDevice? oldDevice;
             lock (_lock)
             {
                 oldDevice = _inputDevice;
                 _inputDevice = null;
+                _inputDeviceName = null;
             }
 
             lock (_sysExLock)
@@ -161,15 +187,13 @@ namespace PSS790Player.Core
                 try { oldDevice.Dispose(); } catch { }
             }
 
-            if (string.IsNullOrWhiteSpace(deviceName) || _isDisposed)
+            if (newDevice == null || _isDisposed)
             {
                 return;
             }
 
-            InputDevice? newDevice = null;
             try
             {
-                newDevice = InputDevice.GetByName(deviceName);
                 newDevice.EventReceived += OnInputEventReceived;
                 newDevice.StartEventsListening();
 
@@ -183,15 +207,13 @@ namespace PSS790Player.Core
                         return;
                     }
                     _inputDevice = newDevice;
+                    _inputDeviceName = deviceName ?? (newDevice as InputDevice)?.Name;
                 }
             }
             catch
             {
-                if (newDevice != null)
-                {
-                    try { newDevice.EventReceived -= OnInputEventReceived; } catch { }
-                    try { newDevice.Dispose(); } catch { }
-                }
+                try { newDevice.EventReceived -= OnInputEventReceived; } catch { }
+                try { newDevice.Dispose(); } catch { }
             }
         }
 
@@ -371,8 +393,20 @@ namespace PSS790Player.Core
                     {
                         if (token.IsCancellationRequested)
                         {
-                            _state = RecorderState.Idle;
-                            NotifyState();
+                            bool shouldNotify = false;
+                            lock (_lock)
+                            {
+                                if (ReferenceEquals(_countInCts, localCts))
+                                {
+                                    _countInCts = null;
+                                    if (_state == RecorderState.CountIn)
+                                    {
+                                        _state = RecorderState.Idle;
+                                    }
+                                    shouldNotify = true;
+                                }
+                            }
+                            if (shouldNotify) NotifyState();
                             return;
                         }
 
@@ -388,8 +422,20 @@ namespace PSS790Player.Core
                 }
                 catch (OperationCanceledException)
                 {
-                    _state = RecorderState.Idle;
-                    NotifyState();
+                    bool shouldNotify = false;
+                    lock (_lock)
+                    {
+                        if (ReferenceEquals(_countInCts, localCts))
+                        {
+                            _countInCts = null;
+                            if (_state == RecorderState.CountIn)
+                            {
+                                _state = RecorderState.Idle;
+                            }
+                            shouldNotify = true;
+                        }
+                    }
+                    if (shouldNotify) NotifyState();
                     return;
                 }
                 finally
@@ -414,13 +460,12 @@ namespace PSS790Player.Core
                 {
                     _state = RecorderState.Idle;
                 }
-                else if (!countIn || _state == RecorderState.CountIn)
+                else if ((!countIn || _state == RecorderState.CountIn) && !token.IsCancellationRequested)
                 {
                     var tempoMap = TempoMap.Create(Tempo.FromBeatsPerMinute(_bpm));
                     _recording?.Dispose();
                     newRecording = new Recording(tempoMap, _inputDevice);
                     _recording = newRecording;
-                    _state = RecorderState.Recording;
                     _elapsedStopwatch.Restart();
                     started = true;
                 }
@@ -428,8 +473,45 @@ namespace PSS790Player.Core
 
             if (started && newRecording != null)
             {
-                newRecording.Start();
-                try { _tickTimer.Start(); } catch (ObjectDisposedException) { }
+                bool orphaned = false;
+                try
+                {
+                    newRecording.Start();
+                    lock (_lock)
+                    {
+                        if (ReferenceEquals(_recording, newRecording) && !_isDisposed)
+                        {
+                            _state = RecorderState.Recording;
+                        }
+                        else
+                        {
+                            orphaned = true;
+                        }
+                    }
+
+                    if (!orphaned)
+                    {
+                        try { _tickTimer.Start(); } catch (ObjectDisposedException) { }
+                    }
+                    else
+                    {
+                        try { if (newRecording.IsRunning) newRecording.Stop(); } catch { }
+                        try { newRecording.Dispose(); } catch { }
+                    }
+                }
+                catch
+                {
+                    lock (_lock)
+                    {
+                        if (ReferenceEquals(_recording, newRecording))
+                        {
+                            _recording = null;
+                            _state = RecorderState.Idle;
+                        }
+                    }
+                    try { newRecording.Dispose(); } catch { }
+                    throw;
+                }
             }
 
             NotifyState();
@@ -452,7 +534,6 @@ namespace PSS790Player.Core
             if (ctsToCancel != null)
             {
                 try { ctsToCancel.Cancel(); } catch { }
-                try { ctsToCancel.Dispose(); } catch { }
             }
 
             try { _tickTimer.Stop(); } catch (ObjectDisposedException) { }
@@ -713,7 +794,7 @@ namespace PSS790Player.Core
 
                     try
                     {
-                        var mf = MidiFile.Read(fi.FullName);
+                        var mf = MidiFile.Read(fi.FullName, Constants.DefaultReadingSettings);
                         durSeconds = mf.GetDuration<MetricTimeSpan>().TotalSeconds;
                         noteCount = mf.GetNotes().Count;
                         trackCount = mf.GetTrackChunks().Count();
@@ -756,7 +837,7 @@ namespace PSS790Player.Core
             var outFileName = SanitizeFileName(rawName);
 
             var destPath = Path.Combine(AppPaths.GmMidiDir, outFileName);
-            var sourceMidi = MidiFile.Read(sourcePath);
+            var sourceMidi = MidiFile.Read(sourcePath, Constants.DefaultReadingSettings);
             var gmFile = ReverseRemapper.ReverseRemapToGeneralMidi(sourceMidi);
             gmFile.Write(destPath, overwriteFile: true);
             return destPath;
@@ -772,7 +853,7 @@ namespace PSS790Player.Core
             var outFileName = SanitizeFileName(rawName);
 
             var destPath = Path.Combine(AppPaths.GetModelMidiDir(model), outFileName);
-            var sourceMidi = MidiFile.Read(sourcePath);
+            var sourceMidi = MidiFile.Read(sourcePath, Constants.DefaultReadingSettings);
             var pssFile = sourceMidi.Clone();
             EmbedRecordingMarker(pssFile, model);
             pssFile.Write(destPath, overwriteFile: true);
@@ -784,7 +865,7 @@ namespace PSS790Player.Core
 
         public bool DeleteRecording(string filePath, string? baseDir = null)
         {
-            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.RecordingsDir) ? AppPaths.RecordingsDir : Path.GetDirectoryName(filePath));
+            var targetDir = string.IsNullOrWhiteSpace(baseDir) ? AppPaths.RecordingsDir : baseDir;
             if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
             {
                 return false;
@@ -804,7 +885,7 @@ namespace PSS790Player.Core
 
         public string RenameRecording(string filePath, string newFileName, string? baseDir = null)
         {
-            var targetDir = baseDir ?? (AppPaths.IsPathInsideDirectory(filePath, AppPaths.RecordingsDir) ? AppPaths.RecordingsDir : Path.GetDirectoryName(filePath));
+            var targetDir = string.IsNullOrWhiteSpace(baseDir) ? AppPaths.RecordingsDir : baseDir;
             if (string.IsNullOrEmpty(targetDir) || !AppPaths.IsPathInsideDirectory(filePath, targetDir))
             {
                 throw new UnauthorizedAccessException("Cannot rename files outside recordings directory.");
@@ -888,7 +969,7 @@ namespace PSS790Player.Core
 
             CancellationTokenSource? cts;
             Recording? rec;
-            InputDevice? dev;
+            IInputDevice? dev;
 
             lock (_lock)
             {
@@ -898,6 +979,7 @@ namespace PSS790Player.Core
                 _recording = null;
                 dev = _inputDevice;
                 _inputDevice = null;
+                _inputDeviceName = null;
             }
 
             if (cts != null)

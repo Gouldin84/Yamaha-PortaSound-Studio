@@ -575,11 +575,11 @@ namespace PSS790Player.Tests
             var validFile = Path.Combine(_testDir, "preset.syx");
             File.WriteAllBytes(validFile, new byte[] { 0xF0, 0x43, 0x76, 0x00, 0xF7 });
 
-            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "../escape.syx"));
-            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "..\\escape.syx"));
-            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, ".."));
-            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "CON"));
-            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "sub/dir/preset.syx"));
+            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "../escape.syx", _testDir));
+            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "..\\escape.syx", _testDir));
+            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "..", _testDir));
+            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "CON", _testDir));
+            Assert.Throws<ArgumentException>(() => sysex.RenameDump(validFile, "sub/dir/preset.syx", _testDir));
         }
 
         #endregion
@@ -855,6 +855,162 @@ namespace PSS790Player.Tests
 
             Assert.False(finishedFired, "Displacing an active playback must not fire PlaybackFinished");
             player.Stop();
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss790_StealsMelodicPadsAbove28Voices_ShieldingLeadAndBass()
+        {
+            var events = new List<MidiEvent>();
+            events.Add(new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 0 }); // Bass
+            events.Add(new NoteOnEvent((SevenBitNumber)88, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 }); // Lead
+            for (int i = 0; i < 30; i++)
+            {
+                events.Add(new NoteOnEvent((SevenBitNumber)(45 + i), (SevenBitNumber)(50 + i)) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            }
+            events.Add(new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 480 });
+            events.Add(new NoteOffEvent((SevenBitNumber)88, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            for (int i = 0; i < 30; i++)
+            {
+                events.Add(new NoteOffEvent((SevenBitNumber)(45 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)2, DeltaTime = 0 });
+            }
+
+            var midi = new MidiFile(new TrackChunk(events));
+            var programs = new Dictionary<int, byte> { [0] = 80, [1] = 33, [2] = 48 }; // Lead, Bass, Strings (Tier 1)
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 26, model: "pss790");
+            var optimized = optimizer.Optimize(midi, programs);
+
+            var surviving = optimized.GetNotes().ToList();
+            Assert.Equal(28, surviving.Count);
+            Assert.Contains(surviving, n => (int)n.NoteNumber == 36);
+            Assert.Contains(surviving, n => (int)n.NoteNumber == 88);
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss790_VectorQuadWeighting_BudgetsCh0At4xCost()
+        {
+            var events = new List<MidiEvent>();
+            for (int i = 0; i < 9; i++)
+            {
+                events.Add(new NoteOnEvent((SevenBitNumber)(48 + i), (SevenBitNumber)(70 + i)) { Channel = (FourBitNumber)0, DeltaTime = 0 });
+            }
+            for (int i = 0; i < 9; i++)
+            {
+                events.Add(new NoteOffEvent((SevenBitNumber)(48 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 });
+            }
+
+            var midi = new MidiFile(new TrackChunk(events));
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: 26, model: "pss790");
+            var weights = new Dictionary<int, int> { [0] = 4 };
+            var optimized = optimizer.Optimize(midi, new Dictionary<int, byte> { [0] = 48 }, weights);
+
+            // 7 * 4 = 28 oscillators max on PSS-790
+            Assert.Equal(7, optimized.GetNotes().Count());
+        }
+
+        [Fact]
+        public void Remapper_ChronologicalProgramTimeline_EvaluatesMidSongInstrumentSwitchForBends()
+        {
+            var midi = new MidiFile();
+            var trk = new TrackChunk(
+                // Bar 1: Piano (GM 0) -> acoustic bend must be neutralized to 8192
+                new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new PitchBendEvent(12000) { Channel = (FourBitNumber)0, DeltaTime = 60 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 60 },
+                // Bar 2: Mid-song switch to Overdriven Guitar (GM 29) -> guitar bend must be scaled & preserved
+                new ProgramChangeEvent((SevenBitNumber)29) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new PitchBendEvent(16383) { Channel = (FourBitNumber)0, DeltaTime = 60 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 60 }
+            );
+            midi.Chunks.Add(trk);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790", NeutralizeAcousticPitchBends = true, ScalePitchBend = true });
+            var pbs = remapped.GetTimedEvents().Where(te => te.Event is PitchBendEvent).ToList();
+
+            Assert.Contains(pbs, te => ((PitchBendEvent)te.Event).PitchValue == 8192);
+            Assert.Contains(pbs, te => ((PitchBendEvent)te.Event).PitchValue is >= 9550 and <= 9565);
+        }
+
+        [Fact]
+        public void Remapper_ContourPreservingBassLift_LiftsSub24PhraseWithoutInvertingIntervals()
+        {
+            var midi = new MidiFile();
+            var trk = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)33) { Channel = (FourBitNumber)1, DeltaTime = 0 }, // Electric Bass
+                new NoteOnEvent((SevenBitNumber)14, (SevenBitNumber)95) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)14, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 120 },
+                new NoteOnEvent((SevenBitNumber)19, (SevenBitNumber)95) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)19, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 120 },
+                new NoteOnEvent((SevenBitNumber)26, (SevenBitNumber)95) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)26, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 120 }
+            );
+            midi.Chunks.Add(trk);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
+            var notes = remapped.GetNotes().OrderBy(n => n.Time).Select(n => (byte)n.NoteNumber).ToList();
+
+            // Entire phrase shifts up +12 so 14 < 19 < 26 becomes 26 < 31 < 38 (preserving ascending contour)
+            Assert.Equal(new byte[] { 26, 31, 38 }, notes);
+        }
+
+        [Fact]
+        public void Remapper_Cc10PanThinning_And_EarlyPreRollUniformShift()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            var trk = new TrackChunk(
+                new ControlChangeEvent((SevenBitNumber)10, (SevenBitNumber)20) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)10, (SevenBitNumber)40) { Channel = (FourBitNumber)0, DeltaTime = 5 }, // < 18ms, dropped
+                new ControlChangeEvent((SevenBitNumber)10, (SevenBitNumber)60) { Channel = (FourBitNumber)0, DeltaTime = 5 }, // < 18ms, dropped (Note at tick 10)
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 200 },
+                new ControlChangeEvent((SevenBitNumber)10, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 20 } // ramp settle endpoint
+            );
+            midi.Chunks.Add(trk);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790", EnsureSetupPreRoll = true });
+            var firstNote = remapped.GetNotes().First();
+            Assert.True(firstNote.Time >= 48);
+
+            var panValues = remapped.GetTimedEvents()
+                .Where(te => te.Event is ControlChangeEvent cc && cc.ControlNumber == 10)
+                .Select(te => (byte)((ControlChangeEvent)te.Event).ControlValue)
+                .ToList();
+            Assert.DoesNotContain((byte)40, panValues);
+            Assert.Contains((byte)20, panValues);
+            Assert.Contains((byte)90, panValues);
+        }
+
+        [Fact]
+        public void ReverseRemapper_Ch9Collision_AvoidsMergingOntoCh0_WhenLowerDensityChannelExists()
+        {
+            var pssMidi = new MidiFile();
+            var trk = new TrackChunk();
+            // Ch 0: 4 notes (lead), Ch 1..14 except Ch 14: active; Ch 14: 1 note (least dense), Ch 9: 2 melodic notes, Ch 15: 1 drum note
+            for (int c = 0; c < 15; c++)
+            {
+                if (c == 9) continue;
+                int count = c == 0 ? 4 : (c == 14 ? 1 : 2);
+                for (int i = 0; i < count; i++)
+                {
+                    trk.Events.Add(new NoteOnEvent((SevenBitNumber)(60 + i), (SevenBitNumber)90) { Channel = (FourBitNumber)c, DeltaTime = 0 });
+                    trk.Events.Add(new NoteOffEvent((SevenBitNumber)(60 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)c, DeltaTime = 120 });
+                }
+            }
+            trk.Events.Add(new NoteOnEvent((SevenBitNumber)65, (SevenBitNumber)90) { Channel = (FourBitNumber)9, DeltaTime = 0 });
+            trk.Events.Add(new NoteOffEvent((SevenBitNumber)65, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 120 });
+            trk.Events.Add(new NoteOnEvent((SevenBitNumber)45, (SevenBitNumber)100) { Channel = (FourBitNumber)15, DeltaTime = 0 });
+            trk.Events.Add(new NoteOffEvent((SevenBitNumber)45, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 120 });
+            pssMidi.Chunks.Add(trk);
+
+            var gmMidi = ReverseRemapper.ReverseRemapToGeneralMidi(pssMidi, "pss790");
+            var ch0Notes = gmMidi.GetNotes().Where(n => n.Channel == 0).ToList();
+            var ch14Notes = gmMidi.GetNotes().Where(n => n.Channel == 14).ToList();
+
+            // Ch 0 lead must stay untouched (4 notes), while Ch 9 melodic note (65) moves to Ch 14 (1 + 1 = 2 notes)
+            Assert.Equal(4, ch0Notes.Count);
+            Assert.Equal(2, ch14Notes.Count);
+            Assert.Contains(ch14Notes, n => n.NoteNumber == 65);
         }
 
         #endregion

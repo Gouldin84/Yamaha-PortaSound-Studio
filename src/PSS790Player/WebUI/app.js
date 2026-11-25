@@ -186,10 +186,9 @@ function normalizeFavoriteKey(path) {
 function isSongFavorite(path) {
     if (!path || !state.favorites || state.favorites.size === 0) return false;
     const key = normalizeFavoriteKey(path);
-    const fileName = String(path).split(/[\/\\]/).pop().toLowerCase();
+    if (!key) return false;
     for (const fav of state.favorites) {
-        const normFav = normalizeFavoriteKey(fav);
-        if (normFav === key || normFav.endsWith("/" + key) || key.endsWith("/" + normFav) || normFav === fileName) {
+        if (normalizeFavoriteKey(fav) === key) {
             return true;
         }
     }
@@ -222,9 +221,21 @@ function updateCurrentSongFavoriteButton() {
     }
 }
 
+function escapeUiHtml(str) {
+    return String(str ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 // --- Tab Switching ---
 function switchTab(tab) {
     state.activeTab = tab;
+    if (tab !== "sysex" && typeof vectorState !== "undefined" && vectorState.isOrbiting && !state.vectorQuadActive) {
+        stopVectorOrbit();
+    }
     const isPlayer = tab === "player";
     const isRecorder = tab === "recorder";
     const isSysex = tab === "sysex";
@@ -392,6 +403,10 @@ function handleHostMessage(msg) {
                 const bTgt680 = document.getElementById("batchTarget680Dir");
                 if (bTgt680) bTgt680.value = msg.data.defaultBatchTarget680 || msg.data.defaultBatchTarget;
             }
+            if (msg.data.appVersion) {
+                const aboutVer = document.getElementById("aboutVersionText");
+                if (aboutVer) aboutVer.textContent = `Yamaha PortaSound Studio v${msg.data.appVersion}`;
+            }
             if (msg.data.sysexLibrary) {
                 state.sysexLibrary = msg.data.sysexLibrary;
                 renderSysExLibrary();
@@ -399,10 +414,12 @@ function handleHostMessage(msg) {
             if (msg.data.fmVoiceLibrary) {
                 state.fmVoices = msg.data.fmVoiceLibrary;
                 renderFmVoiceLibrary();
+                syncFmPresetDropdown();
             }
             if (msg.data.vectorLibrary) {
                 state.vectorPresets = msg.data.vectorLibrary;
                 renderVectorPresetLibrary();
+                syncVectorPresetDropdowns();
             }
             initVectorVoiceDropdowns();
             if (msg.data.recordingsLibrary) {
@@ -420,12 +437,16 @@ function handleHostMessage(msg) {
             renderRecorderChannels();
             initSidebarState();
             renderHealthBadge(null);
+            if (state.activeModel !== "pss790") {
+                sendToHost("set_active_model", { model: state.activeModel });
+            }
             break;
 
         case "favorites_updated":
             if (msg.data.favorites) state.favorites = new Set(msg.data.favorites);
             if (msg.data.toastMessage) showToast(msg.data.toastMessage);
             updateCurrentSongFavoriteButton();
+            renderLibrarySelect();
             renderLibraryTree();
             break;
 
@@ -465,6 +486,7 @@ function handleHostMessage(msg) {
                         ch.defaultPssVoice = chInfo.defaultPssVoice;
                         ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
                         ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                        ch.selectedFmPresetKey = null;
                     }
                 });
                 renderMixer();
@@ -483,6 +505,7 @@ function handleHostMessage(msg) {
                         ch.defaultPssVoice = chInfo.defaultPssVoice;
                         ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
                         ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                        ch.selectedFmPresetKey = null;
                     }
                 });
                 renderMixer();
@@ -495,6 +518,8 @@ function handleHostMessage(msg) {
                 clearTimeout(autoAdvanceTimer);
                 autoAdvanceTimer = null;
             }
+            lastSeekSeconds = -1;
+            lastSeekTime = 0;
             state.currentFile = msg.data.fileName;
             state.currentFilePath = msg.data.filePath;
             state.selectedSongPath = msg.data.filePath;
@@ -504,6 +529,7 @@ function handleHostMessage(msg) {
             document.getElementById("totalTimeDisplay").textContent = msg.data.durationFormatted || "00:00";
             document.getElementById("timeScrubber").max = state.durationSeconds;
             if (!isScrubbing && Date.now() >= scrubCooldownUntil) {
+                state.currentSeconds = 0;
                 document.getElementById("timeScrubber").value = 0;
             }
             updatePlaybackUi();
@@ -535,6 +561,8 @@ function handleHostMessage(msg) {
                         ch.defaultPssVoice = chInfo.defaultPssVoice;
                         ch.defaultPssVoiceName = chInfo.defaultPssVoiceName;
                         ch.selectedVoice = chInfo.voiceOverride !== undefined ? chInfo.voiceOverride : null;
+                        ch.selectedFmPresetKey = null;
+                        ch.selectedFmPresetFile = null;
                         ch.octaveShift = chInfo.octaveShift !== undefined ? chInfo.octaveShift : 0;
                     }
                 });
@@ -586,11 +614,22 @@ function handleHostMessage(msg) {
             break;
 
         case "playback_state":
+            if (state.isLoadingSong) {
+                break;
+            }
             const playStateChanged = state.isPlaying !== msg.data.isPlaying || state.isPaused !== msg.data.isPaused;
             state.isPlaying = msg.data.isPlaying;
             state.isPaused = msg.data.isPaused;
-            if (!isScrubbing && Date.now() >= scrubCooldownUntil) {
-                state.currentSeconds = msg.data.currentSeconds || 0;
+            {
+                const serverPos = msg.data.currentSeconds || 0;
+                const inSeekWindow = lastSeekSeconds >= 0 && (Date.now() - lastSeekTime) < 1200;
+                const seekSettled = inSeekWindow && Math.abs(serverPos - lastSeekSeconds) <= 0.75;
+                if (seekSettled) {
+                    lastSeekSeconds = -1;
+                }
+                if (!isScrubbing && Date.now() >= scrubCooldownUntil && (!inSeekWindow || seekSettled)) {
+                    state.currentSeconds = serverPos;
+                }
             }
             if (msg.data.totalSeconds && msg.data.totalSeconds > 0) {
                 state.durationSeconds = msg.data.totalSeconds;
@@ -612,10 +651,11 @@ function handleHostMessage(msg) {
                 break;
             }
             if (state.autoAdvance && !state.isLooping) {
+                const finishedFilePath = state.currentFilePath;
                 if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
                 autoAdvanceTimer = setTimeout(() => {
                     autoAdvanceTimer = null;
-                    if (!state.isPlaying && !state.isLoadingSong) {
+                    if (!state.isPlaying && !state.isLoadingSong && state.currentFilePath === finishedFilePath) {
                         playNextSong();
                     }
                 }, 350);
@@ -719,7 +759,16 @@ function handleHostMessage(msg) {
             break;
 
         case "sysex_library_updated":
-            state.sysexLibrary = msg.data || [];
+            state.sysexLibrary = Array.isArray(msg.data) ? msg.data : (msg.data?.dumps || []);
+            if (state.selectedSysexDump) {
+                const refreshed = state.sysexLibrary.find(d => d.filePath === state.selectedSysexDump.filePath);
+                if (refreshed) {
+                    selectSysexDumpForTransmit(refreshed, true);
+                    break;
+                } else {
+                    clearSelectedSysexDump();
+                }
+            }
             renderSysExLibrary();
             break;
 
@@ -730,6 +779,11 @@ function handleHostMessage(msg) {
         case "fm_voice_library_updated":
             state.fmVoices = msg.data.voices || [];
             renderFmVoiceLibrary();
+            syncFmPresetDropdown();
+            if (state.activeModel === "pss680" && state.channels && state.channels.length > 0) {
+                state.mixerModelBuilt = null; // Force mixer voice dropdown rebuild
+                renderMixer();
+            }
             break;
 
         case "fm_voice_loaded":
@@ -741,6 +795,7 @@ function handleHostMessage(msg) {
         case "vector_library_updated":
             state.vectorPresets = msg.data.presets || [];
             renderVectorPresetLibrary();
+            syncVectorPresetDropdowns();
             break;
 
         case "vector_preset_loaded":
@@ -841,8 +896,6 @@ function renderDeviceSelect(preferredDevice) {
         return;
     }
 
-    if (dot) dot.className = "w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0";
-
     let matchFound = false;
     state.devices.forEach((dev, idx) => {
         const opt = document.createElement("option");
@@ -859,13 +912,19 @@ function renderDeviceSelect(preferredDevice) {
 
     if (!matchFound && state.devices.length > 0) {
         sel.options[0].selected = true;
-        state.selectedDevice = state.devices[0];
+        state.selectedDevice = preferredDevice === null ? null : state.devices[0];
+    }
+    if (dot) {
+        dot.className = (preferredDevice === null && !matchFound)
+            ? "w-2 h-2 rounded-full bg-amber-500 shrink-0"
+            : "w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow shrink-0";
     }
 }
 
 function renderInputDeviceSelect(preferredDevice) {
     const sel = document.getElementById("recorderInputDeviceSelect");
     const dot = document.getElementById("inputStatusDot");
+    const sysexDevEl = document.getElementById("sysexCaptureDevice");
     if (!sel) return;
 
     const currentVal = preferredDevice || sel.value || state.selectedInputDevice;
@@ -875,10 +934,12 @@ function renderInputDeviceSelect(preferredDevice) {
         sel.innerHTML = `<option value="" disabled selected>No Input Ports Detected</option>`;
         if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-slate-600";
         state.selectedInputDevice = null;
+        if (sysexDevEl) {
+            sysexDevEl.textContent = "No MIDI Input";
+            sysexDevEl.className = "text-[11px] font-semibold text-rose-400 truncate block mt-0.5";
+        }
         return;
     }
-
-    if (dot) dot.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
 
     let matchFound = false;
     state.inputDevices.forEach((dev, idx) => {
@@ -896,7 +957,18 @@ function renderInputDeviceSelect(preferredDevice) {
 
     if (!matchFound && state.inputDevices.length > 0) {
         sel.options[0].selected = true;
-        state.selectedInputDevice = state.inputDevices[0];
+        state.selectedInputDevice = preferredDevice === null ? null : state.inputDevices[0];
+    }
+    if (dot) {
+        dot.className = (preferredDevice === null && !matchFound)
+            ? "w-2.5 h-2.5 rounded-full bg-amber-500"
+            : "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+    }
+    if (sysexDevEl) {
+        sysexDevEl.textContent = state.selectedInputDevice || "Not Connected";
+        sysexDevEl.className = state.selectedInputDevice
+            ? "text-[11px] font-semibold text-emerald-400 truncate block mt-0.5"
+            : "text-[11px] font-semibold text-amber-400 truncate block mt-0.5";
     }
 }
 
@@ -906,8 +978,10 @@ function renderLibrarySelect() {
     sel.innerHTML = "";
 
     const lib = state.library;
-    const hasGm = lib.gmFiles && lib.gmFiles.length > 0;
-    const hasPss = lib.pssFiles && lib.pssFiles.length > 0;
+    const gmFiles = lib.gmFiles || [];
+    const pssFiles = lib.pssFiles || [];
+    const hasGm = gmFiles.length > 0;
+    const hasPss = pssFiles.length > 0;
     const is680 = state.activeModel === "pss680";
     const pssGroupLabel = is680 ? "⚡ PSS-680 Midi (Converted - Ready)" : "⚡ PSS-790 Midi (Converted - Ready)";
 
@@ -916,16 +990,38 @@ function renderLibrarySelect() {
         return;
     }
 
-    sel.innerHTML = `<option value="" selected disabled>Select from Library...</option>`;
+    sel.innerHTML = `<option value="" ${!state.selectedSongPath ? 'selected' : ''} disabled>Select from Library...</option>`;
+
+    const formatLabel = (prefix, f) => {
+        const sub = f.subFolder ? `${f.subFolder} / ` : "";
+        return `${prefix} ${sub}${f.fileName}`;
+    };
+
+    const allVisible = [...pssFiles, ...gmFiles];
+    const favFiles = allVisible.filter(f => isSongFavorite(f.fullPath || f.relativePath || f.fileName));
+    if (favFiles.length > 0) {
+        const favGroup = document.createElement("optgroup");
+        favGroup.label = "★ Favourites";
+        favGroup.className = "bg-slate-900 text-amber-400 font-bold";
+        favFiles.forEach(f => {
+            const opt = document.createElement("option");
+            opt.value = f.fullPath;
+            const icon = (f.format === "gm") ? "🎵" : "⚡";
+            opt.textContent = formatLabel(`★ ${icon}`, f);
+            opt.className = "bg-slate-900 text-amber-200 font-normal";
+            favGroup.appendChild(opt);
+        });
+        sel.appendChild(favGroup);
+    }
 
     if (hasGm) {
         const gmGroup = document.createElement("optgroup");
         gmGroup.label = "🎵 GM Midi (Needs Conversion)";
         gmGroup.className = "bg-slate-900 text-indigo-400 font-bold";
-        lib.gmFiles.forEach(f => {
+        gmFiles.forEach(f => {
             const opt = document.createElement("option");
             opt.value = f.fullPath;
-            opt.textContent = `🎵 ${f.fileName}`;
+            opt.textContent = formatLabel("🎵", f);
             opt.className = "bg-slate-900 text-slate-200 font-normal";
             gmGroup.appendChild(opt);
         });
@@ -936,14 +1032,18 @@ function renderLibrarySelect() {
         const pssGroup = document.createElement("optgroup");
         pssGroup.label = pssGroupLabel;
         pssGroup.className = "bg-slate-900 text-emerald-400 font-bold";
-        lib.pssFiles.forEach(f => {
+        pssFiles.forEach(f => {
             const opt = document.createElement("option");
             opt.value = f.fullPath;
-            opt.textContent = `⚡ ${f.fileName}`;
+            opt.textContent = formatLabel("⚡", f);
             opt.className = "bg-slate-900 text-slate-200 font-normal";
             pssGroup.appendChild(opt);
         });
         sel.appendChild(pssGroup);
+    }
+
+    if (state.selectedSongPath) {
+        sel.value = state.selectedSongPath;
     }
 }
 
@@ -1128,8 +1228,9 @@ function toggleCollapseAllFolders() {
             }
         };
 
+        const pssCatKey = state.activeModel === "pss680" ? "pss680" : "pss790";
         const categories = [
-            { tree: state.library.pssTree, key: "pss790" },
+            { tree: state.library.pssTree, key: pssCatKey },
             { tree: state.library.gmTree, key: "gm" }
         ];
 
@@ -2579,8 +2680,7 @@ function collapseCurrentFolder() {
     if (!state.selectedSongPath) return;
     const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
     if (!song || !song.subFolder) return;
-    const is680 = state.activeModel === "pss680";
-    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : "gm";
     const folderKey = `${catKey}:${song.subFolder}`;
     if (state.expandedFolders && state.expandedFolders.has(folderKey)) {
         state.expandedFolders.delete(folderKey);
@@ -2593,8 +2693,7 @@ function expandCurrentFolder() {
     if (!state.selectedSongPath) return;
     const song = (state.visibleSongList || []).find(f => f.fullPath === state.selectedSongPath);
     if (!song || !song.subFolder) return;
-    const is680 = state.activeModel === "pss680";
-    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : (is680 ? "pss680" : "gm");
+    const catKey = (song.format === "pss680" || song.format === "pss790") ? song.format : "gm";
     const folderKey = `${catKey}:${song.subFolder}`;
     if (state.expandedFolders && !state.expandedFolders.has(folderKey)) {
         state.expandedFolders.add(folderKey);
@@ -2877,6 +2976,21 @@ function setupKeyboardShortcuts() {
     });
 }
 
+function resolveVectorPresetEntry(presetKey) {
+    if (!presetKey || presetKey === "current") return null;
+    if (Array.isArray(state.vectorPresets)) {
+        const diskMatch = state.vectorPresets.find(p =>
+            p.filePath === presetKey ||
+            p.fileName === presetKey ||
+            p.name === presetKey);
+        if (diskMatch) return diskMatch;
+    }
+    if (typeof VECTOR_PRESETS !== "undefined" && VECTOR_PRESETS[presetKey]) {
+        return VECTOR_PRESETS[presetKey];
+    }
+    return null;
+}
+
 function applyVectorQuadPreset(presetKey) {
     if (!state.vectorQuadActive) {
         sendToHost("set_vector_playback_mode", { enabled: false });
@@ -2884,8 +2998,8 @@ function applyVectorQuadPreset(presetKey) {
     }
 
     let vA = 0, vB = 34, vC = 16, vD = 56;
-    if (presetKey && presetKey !== "current" && typeof VECTOR_PRESETS !== "undefined" && VECTOR_PRESETS[presetKey]) {
-        const p = VECTOR_PRESETS[presetKey];
+    const p = resolveVectorPresetEntry(presetKey);
+    if (p) {
         vA = p.voiceA;
         vB = p.voiceB;
         vC = p.voiceC;
@@ -2996,20 +3110,8 @@ function renderMixer() {
     if (vecQuadBox) {
         if (state.activeModel === "pss790") {
             vecQuadBox.classList.remove("hidden");
-            if (selVecPreset && selVecPreset.options.length <= 1) {
-                selVecPreset.innerHTML = "";
-                const optCur = document.createElement("option");
-                optCur.value = "current";
-                optCur.textContent = "Current Channel 1-4 Voices";
-                selVecPreset.appendChild(optCur);
-                if (typeof VECTOR_PRESETS !== "undefined") {
-                    Object.entries(VECTOR_PRESETS).forEach(([k, p]) => {
-                        const opt = document.createElement("option");
-                        opt.value = k;
-                        opt.textContent = p.name;
-                        selVecPreset.appendChild(opt);
-                    });
-                }
+            if (selVecPreset) {
+                populateMixerVectorPresetSelect(selVecPreset);
             }
             if (btnVecQuad) {
                 if (state.vectorQuadActive) {
@@ -3047,13 +3149,18 @@ function renderMixer() {
         }
     }
 
-    const canUpdateInPlace = grid.children.length === 16 && state.mixerModelBuilt === state.activeModel && state.mixerLastQuadActive === state.vectorQuadActive;
+    const currentDrumMask = state.channels.reduce((acc, c) => acc | ((c.isDrum !== undefined ? !!c.isDrum : c.channel === 15) ? (1 << c.channel) : 0), 0);
+    const canUpdateInPlace = grid.children.length === 16 &&
+        state.mixerModelBuilt === state.activeModel &&
+        state.mixerLastQuadActive === state.vectorQuadActive &&
+        state.mixerLastDrumMask === currentDrumMask;
     if (canUpdateInPlace) {
         const is680 = state.activeModel === "pss680";
+        const quadPoleNames = ["A (North)", "B (East)", "C (South)", "D (West)"];
         state.channels.forEach(ch => {
             const card = document.getElementById(`ch-card-${ch.channel}`);
             if (!card) return;
-            const isDrum = ch.channel === 15;
+            const isDrum = ch.isDrum !== undefined ? !!ch.isDrum : (ch.channel === 15);
             const isVectorQuad = !is680 && state.vectorQuadActive && ch.channel < 4;
 
             const topAccent = isDrum
@@ -3067,6 +3174,20 @@ function renderMixer() {
                     : (ch.hasNotes ? 'border-cyan-500/25 bg-slate-900/60 shadow-sm' : 'border-slate-800/80 opacity-90'));
 
             card.className = `glass-card channel-strip-card p-2 rounded-xl flex flex-col justify-between space-y-1.5 transition-all duration-200 ${topAccent} ${cardBorder}`;
+
+            const badgesEl = document.getElementById(`ch-badges-${ch.channel}`);
+            if (badgesEl) {
+                const drumTooltip = is680 ? "Channel 16 percussion fixed to 32 PSS-680 hand percussion instruments" : "Channel rhythm fixed to drum map";
+                const dBadge = isDrum
+                    ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 uppercase tracking-tighter shrink-0" title="${drumTooltip}">🥁 DRUMS</span>`
+                    : '';
+                const qBadge = isVectorQuad
+                    ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-bold bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 uppercase tracking-tighter shrink-0">Quad ${quadPoleNames[ch.channel]}</span>`
+                    : (ch.selectedVoice >= 100 && is680
+                        ? `<span class="px-1 py-0.2 rounded text-[7.5px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60 uppercase tracking-tighter shrink-0">Bank ${ch.selectedVoice - 99}</span>`
+                        : '');
+                badgesEl.innerHTML = `${dBadge}${qBadge}`;
+            }
 
             const instEl = document.getElementById(`ch-inst-${ch.channel}`);
             if (instEl) {
@@ -3091,18 +3212,31 @@ function renderMixer() {
                 oct.textContent = (ch.octaveShift || 0) > 0 ? '+' + ((ch.octaveShift || 0) / 12) : ((ch.octaveShift || 0) < 0 ? ((ch.octaveShift || 0) / 12) : '0');
                 oct.className = `font-mono text-[9px] font-bold ${(ch.octaveShift || 0) !== 0 ? 'text-amber-400' : 'text-slate-400'} min-w-[20px] text-center select-none`;
             }
+            const volSlider = document.getElementById(`vol-${ch.channel}`);
+            if (volSlider) volSlider.value = ch.volume;
+            const volVal = document.getElementById(`vol-val-${ch.channel}`);
+            if (volVal) volVal.textContent = ch.volume;
+            const btnMute = document.getElementById(`mute-${ch.channel}`);
+            if (btnMute) {
+                btnMute.className = `w-5 h-5 rounded text-[9px] font-bold ${ch.isMuted ? 'btn-console-m muted bg-rose-600 text-white shadow-sm shadow-rose-500/50 ring-1 ring-rose-400/80' : 'btn-console-m bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50'}`;
+            }
+            const btnSolo = document.getElementById(`solo-${ch.channel}`);
+            if (btnSolo) {
+                btnSolo.className = `w-5 h-5 rounded text-[9px] font-bold ${ch.isSolo ? 'btn-console-s soloed bg-amber-500 text-slate-950 shadow-sm shadow-amber-500/50 ring-1 ring-amber-300' : 'btn-console-s bg-slate-800/90 text-slate-400 hover:text-white hover:bg-slate-700/80 border border-slate-700/50'}`;
+            }
         });
         return;
     }
 
     state.mixerModelBuilt = state.activeModel;
     state.mixerLastQuadActive = state.vectorQuadActive;
+    state.mixerLastDrumMask = currentDrumMask;
     grid.innerHTML = "";
 
     state.channels.forEach(ch => {
         const card = document.createElement("div");
         card.id = `ch-card-${ch.channel}`;
-        const isDrum = ch.channel === 15;
+        const isDrum = ch.isDrum !== undefined ? !!ch.isDrum : (ch.channel === 15);
         const is680 = state.activeModel === "pss680";
         const isVectorQuad = !is680 && state.vectorQuadActive && ch.channel < 4;
         const quadPoleNames = ["A (North)", "B (East)", "C (South)", "D (West)"];
@@ -3161,12 +3295,19 @@ function renderMixer() {
                 <optgroup label="Digital Synthesizer (User Banks)">
                     ${userBanks.map(v => `<option value="${v.number}" ${ch.selectedVoice === v.number ? 'selected' : ''} class="bg-indigo-950 text-indigo-200 font-semibold">${v.number}: ${v.name}</option>`).join('')}
                 </optgroup>
-                <optgroup label="FM Library Presets (Upload & Play)">
-                    ${Object.entries(FM_PRESETS).filter(([k]) => k !== 'init').map(([k, p]) => `
-                        <option value="fm:${k}" ${ch.selectedFmPresetKey === k ? 'selected' : ''} class="bg-cyan-950 text-cyan-200">
-                            ⚡ ${p.name}
-                        </option>
-                    `).join('')}
+                <optgroup label="FM Library Patches (Upload &amp; Play)">
+                    ${(state.fmVoices && state.fmVoices.length > 0)
+                        ? state.fmVoices.map((v, idx) => {
+                            const patchName = escapeHtml(v.voiceName || v.name || (v.fileName ? v.fileName.replace(/\.syx$/i, "") : "Custom FM"));
+                            const bankDisp = (v.bankNumber !== undefined ? v.bankNumber + 1 : 1);
+                            const isSel = ch.selectedFmPresetFile && v.filePath === ch.selectedFmPresetFile;
+                            return `<option value="fm-file:${idx}" ${isSel ? 'selected' : ''} class="bg-cyan-950 text-cyan-200">⚡ ${patchName} [B${bankDisp}]</option>`;
+                        }).join('')
+                        : Object.entries(FM_PRESETS).filter(([k]) => k !== 'init').map(([k, p]) => `
+                            <option value="fm:${k}" ${ch.selectedFmPresetKey === k ? 'selected' : ''} class="bg-cyan-950 text-cyan-200">
+                                ⚡ ${p.name}
+                            </option>
+                        `).join('')}
                 </optgroup>
             `;
         } else {
@@ -3219,10 +3360,10 @@ function renderMixer() {
                 </div>
             </div>
             ` : `
-            <!-- Channel 16 Drum Map Slot (Matched to Octave Box Height) -->
+            <!-- Channel Drum Map Slot (Matched to Octave Box Height) -->
             <div class="flex items-center justify-between bg-slate-950/70 rounded px-1.5 py-0.5 border border-amber-500/30 min-w-0" title="${drumTooltip}">
                 <span class="text-[8px] font-bold text-amber-400/90 uppercase tracking-tight truncate">Fixed Map</span>
-                <span class="font-mono text-[9px] font-bold text-amber-400 select-none px-0.5 shrink-0">CH 16</span>
+                <span class="font-mono text-[9px] font-bold text-amber-400 select-none px-0.5 shrink-0">CH ${ch.channelDisplay}</span>
             </div>
             `}
 
@@ -3250,11 +3391,27 @@ function renderMixer() {
         if (voiceSelect) {
             voiceSelect.addEventListener("change", (e) => {
                 const valStr = e.target.value;
-                if (valStr.startsWith("fm:")) {
+                if (valStr.startsWith("fm-file:")) {
+                    const idx = parseInt(valStr.substring(8), 10);
+                    const patch = (state.fmVoices || [])[idx];
+                    if (patch && patch.filePath) {
+                        const targetBank = patch.bankNumber !== undefined ? patch.bankNumber : 0;
+                        ch.selectedFmPresetFile = patch.filePath;
+                        ch.selectedFmPresetKey = null;
+                        ch.selectedVoice = 100 + targetBank;
+                        sendToHost("override_voice_fm_preset", {
+                            channel: ch.channel,
+                            bank: targetBank,
+                            filePath: patch.filePath
+                        });
+                        renderMixer();
+                    }
+                } else if (valStr.startsWith("fm:")) {
                     const presetKey = valStr.substring(3);
                     const preset = FM_PRESETS[presetKey];
                     if (preset) {
                         ch.selectedFmPresetKey = presetKey;
+                        ch.selectedFmPresetFile = null;
                         ch.selectedVoice = 100; // Bank 1
                         sendToHost("override_voice_fm_preset", {
                             channel: ch.channel,
@@ -3265,6 +3422,7 @@ function renderMixer() {
                     }
                 } else {
                     ch.selectedFmPresetKey = null;
+                    ch.selectedFmPresetFile = null;
                     const val = valStr === "" ? null : parseInt(valStr, 10);
                     ch.selectedVoice = val;
                     sendToHost("override_voice", { channel: ch.channel, voice: val });
@@ -3343,7 +3501,7 @@ function updateChannelLedsBatch(activeArray, velocitiesArray) {
         const led = document.getElementById(`led-${ch}`);
         if (!led) continue;
         const isActive = !!activeArray[ch];
-        const isDrum = ch === 15;
+        const isDrum = !!(state.channels[ch]?.isDrum ?? (ch === 15));
         const activeClass = isDrum ? 'drum-active' : 'active';
         if (isActive) {
             led.classList.add(activeClass);
@@ -3361,7 +3519,7 @@ function updateChannelLed(channel, isActive, velocity) {
     const led = document.getElementById(`led-${channel}`);
     if (!led) return;
 
-    const isDrum = channel === 15;
+    const isDrum = !!(state.channels[channel]?.isDrum ?? (channel === 15));
     const activeClass = isDrum ? 'drum-active' : 'active';
 
     if (isActive && velocity > 0) {
@@ -3985,18 +4143,22 @@ function updatePlaybackUi() {
 
     const statusBadge = document.getElementById("fileStatusBadge");
     if (statusBadge) {
-        if (state.isPlaying) {
-            statusBadge.className = "px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-emerald-950/30";
-            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Playing</span>`;
-        } else if (state.isPaused) {
-            statusBadge.className = "px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 border border-amber-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-amber-950/30";
-            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>Paused</span>`;
-        } else if (state.currentFile) {
-            statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
-            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>Ready</span>`;
-        } else {
-            statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
-            statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Idle</span>`;
+        const badgeKey = state.isPlaying ? "playing" : (state.isPaused ? "paused" : (state.currentFile ? "ready" : "idle"));
+        if (state.lastStatusBadgeKey !== badgeKey) {
+            state.lastStatusBadgeKey = badgeKey;
+            if (badgeKey === "playing") {
+                statusBadge.className = "px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-emerald-950/30";
+                statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span>Playing</span>`;
+            } else if (badgeKey === "paused") {
+                statusBadge.className = "px-2 py-0.5 rounded-full bg-amber-950/80 text-amber-400 border border-amber-800/60 font-semibold text-[10px] cursor-help flex items-center space-x-1 shadow-sm shadow-amber-950/30";
+                statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span><span>Paused</span>`;
+            } else if (badgeKey === "ready") {
+                statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
+                statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>Ready</span>`;
+            } else {
+                statusBadge.className = "px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-medium text-[10px] cursor-help flex items-center space-x-1 border border-slate-700/60";
+                statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span><span>Idle</span>`;
+            }
         }
     }
 }
@@ -4067,6 +4229,10 @@ document.getElementById("btnOpenFolder").addEventListener("click", () => {
 
 // Transport Controls (Player)
 document.getElementById("btnPlayPause").addEventListener("click", () => {
+    if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+    }
     if (state.isPlaying) {
         sendToHost("pause");
     } else if (state.isPaused) {
@@ -4082,6 +4248,11 @@ document.getElementById("btnPlayPause").addEventListener("click", () => {
 });
 
 document.getElementById("btnStop").addEventListener("click", () => {
+    if (autoAdvanceTimer) {
+        clearTimeout(autoAdvanceTimer);
+        autoAdvanceTimer = null;
+    }
+    lastSeekSeconds = -1;
     sendToHost("stop");
 });
 
@@ -4107,20 +4278,66 @@ function updateScrubberVisuals(val) {
 }
 
 if (scrubberEl) {
+    let isPointerDownOnScrubber = false;
+    let scrubSafetyTimer = null;
+
+    const computePointerSec = (e) => {
+        if (!state.durationSeconds || state.durationSeconds <= 0) return parseFloat(scrubberEl.value) || 0;
+        const rect = scrubberEl.getBoundingClientRect();
+        if (!rect.width) return parseFloat(scrubberEl.value) || 0;
+        const thumbPad = 7;
+        const trackWidth = Math.max(1, rect.width - thumbPad * 2);
+        const frac = Math.max(0, Math.min(1, (e.clientX - (rect.left + thumbPad)) / trackWidth));
+        return frac * state.durationSeconds;
+    };
+
+    const commitSeekSeconds = (targetSec) => {
+        if (!isNaN(targetSec) && targetSec >= 0 && state.durationSeconds > 0) {
+            lastSeekSeconds = targetSec;
+            lastSeekTime = Date.now();
+            state.currentSeconds = targetSec;
+            scrubberEl.value = targetSec;
+            scrubCooldownUntil = Date.now() + 350;
+            updateScrubberVisuals(targetSec);
+            sendToHost("seek", { seconds: targetSec });
+        }
+    };
+
     scrubberEl.addEventListener("pointerdown", (e) => {
         isScrubbing = true;
+        isPointerDownOnScrubber = true;
+        if (scrubSafetyTimer) clearTimeout(scrubSafetyTimer);
+        scrubSafetyTimer = setTimeout(() => {
+            if (isScrubbing) finishScrubbing();
+        }, 12000);
         try {
             scrubberEl.setPointerCapture(e.pointerId);
         } catch { }
-        updateScrubberVisuals(parseFloat(scrubberEl.value));
+        const pointedSec = computePointerSec(e);
+        if (!isNaN(pointedSec) && state.durationSeconds > 0) {
+            scrubberEl.value = pointedSec;
+            updateScrubberVisuals(pointedSec);
+        } else {
+            updateScrubberVisuals(parseFloat(scrubberEl.value) || 0);
+        }
     });
 
     scrubberEl.addEventListener("input", (e) => {
-        isScrubbing = true;
-        updateScrubberVisuals(parseFloat(e.target.value));
+        const val = parseFloat(e.target.value);
+        if (isPointerDownOnScrubber) {
+            isScrubbing = true;
+            updateScrubberVisuals(val);
+        } else {
+            commitSeekSeconds(val);
+        }
     });
 
     const finishScrubbing = (e) => {
+        isPointerDownOnScrubber = false;
+        if (scrubSafetyTimer) {
+            clearTimeout(scrubSafetyTimer);
+            scrubSafetyTimer = null;
+        }
         if (!isScrubbing) return;
 
         try {
@@ -4130,15 +4347,8 @@ if (scrubberEl) {
         } catch { }
 
         const targetSec = parseFloat(scrubberEl.value);
-        if (!isNaN(targetSec) && targetSec >= 0 && state.durationSeconds > 0) {
-            lastSeekSeconds = targetSec;
-            lastSeekTime = Date.now();
-            state.currentSeconds = targetSec;
-            sendToHost("seek", { seconds: targetSec });
-        }
-
+        commitSeekSeconds(targetSec);
         isScrubbing = false;
-        scrubCooldownUntil = Date.now() + 150;
 
         if (scrubTooltip) {
             scrubTooltip.classList.add("hidden");
@@ -4147,6 +4357,7 @@ if (scrubberEl) {
 
     scrubberEl.addEventListener("pointerup", finishScrubbing);
     scrubberEl.addEventListener("pointercancel", finishScrubbing);
+    scrubberEl.addEventListener("blur", finishScrubbing);
 
     if (scrubTooltip) {
         const updateScrubTooltip = (e) => {
@@ -4247,11 +4458,18 @@ document.getElementById("btnResetOverrides")?.addEventListener("click", () => {
 });
 
 document.getElementById("btnSoloDrums")?.addEventListener("click", () => {
-    const drumCh = state.channels[15];
+    const drumCh = state.channels.find(c => c.isDrum) || state.channels[15];
     if (!drumCh) return;
+    const drumIdx = drumCh.channel;
     const isSoloed = drumCh.isSolo;
+    if (!isSoloed) {
+        sendToHost("clear_all_solo");
+        sendToHost("set_channel_solo", { channel: drumIdx, solo: true });
+    } else {
+        sendToHost("clear_all_solo");
+    }
     state.channels.forEach(ch => {
-        if (ch.channel === 15) {
+        if (ch.channel === drumIdx) {
             ch.isSolo = !isSoloed;
             ch.isMuted = false;
             sendToHost("set_channel_mute", { channel: ch.channel, mute: false });
@@ -4262,28 +4480,29 @@ document.getElementById("btnSoloDrums")?.addEventListener("click", () => {
         }
     });
     renderMixer();
-    showToast(!isSoloed ? "Soloed Percussion (Channel 16)" : "Restored full mixer playback");
+    showToast(!isSoloed ? `Soloed Percussion (Channel ${drumIdx + 1})` : "Restored full mixer playback");
 });
 
 document.getElementById("btnMuteMelodic")?.addEventListener("click", () => {
-    const melodicChannels = state.channels.filter(ch => ch.channel !== 15);
+    const melodicChannels = state.channels.filter(ch => !(ch.isDrum !== undefined ? ch.isDrum : ch.channel === 15));
     const allMuted = melodicChannels.every(ch => ch.isMuted);
     melodicChannels.forEach(ch => {
         ch.isMuted = !allMuted;
         sendToHost("set_channel_mute", { channel: ch.channel, mute: !allMuted });
     });
     renderMixer();
-    showToast(!allMuted ? "Muted Melodic Channels 1-15 (Drums only)" : "Unmuted Melodic Channels");
+    showToast(!allMuted ? "Muted Melodic Channels (Drums only)" : "Unmuted Melodic Channels");
 });
 
 document.getElementById("btnUnmuteAll")?.addEventListener("click", () => {
+    sendToHost("clear_all_solo");
     state.channels.forEach(ch => {
         ch.isMuted = false;
         ch.isSolo = false;
         sendToHost("set_channel_mute", { channel: ch.channel, mute: false });
     });
     renderMixer();
-    showToast("Unmuted all 16 channels");
+    showToast("Unmuted & cleared solo on all 16 channels");
 });
 
 document.getElementById("btnResetAllFaders")?.addEventListener("click", () => {
@@ -5028,10 +5247,16 @@ function renderSysExLibrary(dumps) {
 
     listEl.innerHTML = items.map((dump) => {
         const isSelected = state.selectedSysexDump && state.selectedSysexDump.filePath === dump.filePath;
-        const isYamaha = dump.manufacturer && dump.manufacturer.toLowerCase().includes("yamaha");
-        const mfrBadgeClass = isYamaha 
-            ? "bg-indigo-950/80 text-indigo-300 border-indigo-700/60" 
+        const mfrText = dump.manufacturer || "SysEx";
+        const isYamaha = mfrText.toLowerCase().includes("yamaha");
+        const mfrBadgeClass = isYamaha
+            ? "bg-indigo-950/80 text-indigo-300 border-indigo-700/60"
             : "bg-slate-800 text-slate-300 border-slate-700";
+        const safeName = escapeUiHtml(dump.fileName || "SysEx Dump");
+        const safePath = escapeUiHtml(dump.filePath || "");
+        const safeMfr = escapeUiHtml(mfrText);
+        const sizeLabel = escapeUiHtml(dump.fileSizeFormatted || dump.formattedSize || formatBytes(dump.fileSizeBytes ?? dump.byteSize ?? 0));
+        const timeLabel = escapeUiHtml(dump.createdAtFormatted || dump.createdTime || "");
 
         return `
             <div class="p-3 rounded-xl border ${isSelected ? 'bg-indigo-950/30 border-indigo-500/80 shadow-lg shadow-indigo-950/40' : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'} transition-all space-y-2 group">
@@ -5039,22 +5264,22 @@ function renderSysExLibrary(dumps) {
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center space-x-2">
                             <span class="text-xs text-indigo-400 font-mono">💾</span>
-                            <span class="text-xs font-bold text-white truncate font-mono" title="${dump.fileName}">${dump.fileName}</span>
+                            <span class="text-xs font-bold text-white truncate font-mono" title="${safeName}">${safeName}</span>
                         </div>
                         <div class="flex items-center space-x-2 text-[10px] text-slate-400 mt-1 flex-wrap gap-y-1">
-                            <span class="px-1.5 py-0.2 rounded font-semibold border ${mfrBadgeClass}">${dump.manufacturer || 'SysEx'}</span>
-                            <span class="font-mono text-slate-300">${dump.formattedSize || formatBytes(dump.byteSize)}</span>
+                            <span class="px-1.5 py-0.2 rounded font-semibold border ${mfrBadgeClass}">${safeMfr}</span>
+                            <span class="font-mono text-slate-300">${sizeLabel}</span>
                             <span class="font-mono text-cyan-400">${dump.packetCount} pkt${dump.packetCount === 1 ? '' : 's'}</span>
-                            <span class="text-slate-500">${dump.createdTime || ''}</span>
+                            <span class="text-slate-500">${timeLabel}</span>
                         </div>
                     </div>
-                    <button class="btn-select-sysex shrink-0 px-2.5 py-1 rounded-lg ${isSelected ? 'bg-indigo-600 text-white font-semibold' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'} text-[11px] border border-slate-700/60 transition active:scale-95" data-filepath="${dump.filePath}" title="${isSelected ? 'This dump is loaded into the staging area for transmission' : 'Select this dump to stage and transmit to your synthesizer'}">
+                    <button class="btn-select-sysex shrink-0 px-2.5 py-1 rounded-lg ${isSelected ? 'bg-indigo-600 text-white font-semibold' : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'} text-[11px] border border-slate-700/60 transition active:scale-95" data-filepath="${safePath}" title="${isSelected ? 'This dump is loaded into the staging area for transmission' : 'Select this dump to stage and transmit to your synthesizer'}">
                         ${isSelected ? '✓ Selected' : 'Select'}
                     </button>
                 </div>
 
                 <div class="flex items-center justify-between border-t border-slate-800/80 pt-2 text-[11px]">
-                    <button class="btn-inspect-sysex flex items-center space-x-1 text-slate-400 hover:text-cyan-300 transition" data-filepath="${dump.filePath}" title="Open hex viewer to inspect binary SysEx packets, headers, and checksums">
+                    <button class="btn-inspect-sysex flex items-center space-x-1 text-slate-400 hover:text-cyan-300 transition" data-filepath="${safePath}" title="Open hex viewer to inspect binary SysEx packets, headers, and checksums">
                         <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
@@ -5062,11 +5287,11 @@ function renderSysExLibrary(dumps) {
                         <span>Inspect Hex</span>
                     </button>
                     <div class="flex items-center space-x-2">
-                        <button class="btn-rename-sysex text-slate-400 hover:text-slate-200 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Rename this SysEx dump file">
+                        <button class="btn-rename-sysex text-slate-400 hover:text-slate-200 transition" data-filepath="${safePath}" data-filename="${safeName}" title="Rename this SysEx dump file">
                             Rename
                         </button>
                         <span class="text-slate-700">•</span>
-                        <button class="btn-delete-sysex text-rose-400/80 hover:text-rose-300 transition" data-filepath="${dump.filePath}" data-filename="${dump.fileName}" title="Permanently delete this SysEx dump file from disk">
+                        <button class="btn-delete-sysex text-rose-400/80 hover:text-rose-300 transition" data-filepath="${safePath}" data-filename="${safeName}" title="Permanently delete this SysEx dump file from disk">
                             Delete
                         </button>
                     </div>
@@ -5112,7 +5337,7 @@ function renderSysExLibrary(dumps) {
     });
 }
 
-function selectSysexDumpForTransmit(dump) {
+function selectSysexDumpForTransmit(dump, skipLibraryRender = false) {
     state.selectedSysexDump = dump;
     const titleEl = document.getElementById("sysexSelectedDumpTitle");
     const sizeEl = document.getElementById("sysexSelectedDumpSize");
@@ -5121,12 +5346,27 @@ function selectSysexDumpForTransmit(dump) {
     const btnTransmit = document.getElementById("btnTransmitSysex");
 
     if (titleEl) titleEl.textContent = dump.fileName;
-    if (sizeEl) sizeEl.textContent = dump.formattedSize || formatBytes(dump.byteSize);
+    if (sizeEl) sizeEl.textContent = dump.fileSizeFormatted || dump.formattedSize || formatBytes(dump.fileSizeBytes ?? dump.byteSize ?? 0);
     if (pktsEl) pktsEl.textContent = `${dump.packetCount} packets`;
     if (mfrEl) mfrEl.textContent = dump.manufacturer || "Generic SysEx";
     if (btnTransmit) btnTransmit.removeAttribute("disabled");
 
     renderSysExLibrary();
+}
+
+function clearSelectedSysexDump() {
+    state.selectedSysexDump = null;
+    const titleEl = document.getElementById("sysexSelectedDumpTitle");
+    const sizeEl = document.getElementById("sysexSelectedDumpSize");
+    const pktsEl = document.getElementById("sysexSelectedDumpPackets");
+    const mfrEl = document.getElementById("sysexSelectedDumpMfr");
+    const btnTransmit = document.getElementById("btnTransmitSysex");
+
+    if (titleEl) titleEl.textContent = "None Selected";
+    if (sizeEl) sizeEl.textContent = "0 B";
+    if (pktsEl) pktsEl.textContent = "0 packets";
+    if (mfrEl) mfrEl.textContent = "-";
+    if (btnTransmit) btnTransmit.setAttribute("disabled", "disabled");
 }
 
 function startSysexCapture() {
@@ -5184,15 +5424,18 @@ function updateSysexCaptureProgress(data) {
 
 function handleSysexDumpCaptured(data) {
     stopSysexCapture();
-    showToast(`Saved SysEx dump: ${data.fileName} (${formatBytes(data.totalBytes)})`);
+    const byteSize = data.fileSizeBytes ?? data.totalBytes ?? 0;
+    const packetCount = data.packetCount ?? data.totalPackets ?? 0;
+    const sizeFormatted = data.fileSizeFormatted || data.fileSize || formatBytes(byteSize);
+    showToast(`Saved SysEx dump: ${data.fileName} (${sizeFormatted})`);
     sendToHost("get_sysex_library");
     selectSysexDumpForTransmit({
         fileName: data.fileName,
         filePath: data.filePath,
-        byteSize: data.totalBytes,
-        packetCount: data.totalPackets,
+        fileSizeBytes: byteSize,
+        packetCount: packetCount,
         manufacturer: data.manufacturer,
-        formattedSize: formatBytes(data.totalBytes)
+        fileSizeFormatted: sizeFormatted
     });
 }
 
@@ -5247,7 +5490,13 @@ function updateSysexTransmitProgress(data) {
     if (percentEl) percentEl.textContent = `${data.percent}%`;
     if (progressBar) progressBar.style.width = `${data.percent}%`;
 
-    if (data.isCompleted) {
+    if (data.isCancelled) {
+        state.isSysexTransmitting = false;
+        if (btnTransmit) btnTransmit.classList.remove("hidden");
+        if (btnCancel) btnCancel.classList.add("hidden");
+        showToast("SysEx transmission cancelled.");
+        if (progressContainer) progressContainer.classList.add("hidden");
+    } else if (data.isCompleted) {
         state.isSysexTransmitting = false;
         if (btnTransmit) btnTransmit.classList.remove("hidden");
         if (btnCancel) btnCancel.classList.add("hidden");
@@ -5256,12 +5505,6 @@ function updateSysexTransmitProgress(data) {
         setTimeout(() => {
             if (!state.isSysexTransmitting && progressContainer) progressContainer.classList.add("hidden");
         }, 2000);
-    } else if (data.isCancelled) {
-        state.isSysexTransmitting = false;
-        if (btnTransmit) btnTransmit.classList.remove("hidden");
-        if (btnCancel) btnCancel.classList.add("hidden");
-        showToast("SysEx transmission cancelled.");
-        if (progressContainer) progressContainer.classList.add("hidden");
     }
 }
 
@@ -5271,7 +5514,8 @@ function showSysexInspectModal(data) {
         return;
     }
 
-    state.lastInspectedHex = data.hexDump || "";
+    const hexContent = data.hexPreview || data.hexDump || "";
+    state.lastInspectedHex = hexContent;
     const modal = document.getElementById("sysexInspectModal");
     const titleEl = document.getElementById("sysexInspectTitle");
     const bytesEl = document.getElementById("sysexInspectBytes");
@@ -5280,10 +5524,10 @@ function showSysexInspectModal(data) {
     const contentEl = document.getElementById("sysexInspectHexContent");
 
     if (titleEl) titleEl.textContent = data.fileName || "SysEx Dump";
-    if (bytesEl) bytesEl.textContent = data.formattedSize || formatBytes(data.byteSize);
+    if (bytesEl) bytesEl.textContent = data.fileSizeFormatted || data.formattedSize || formatBytes(data.fileSizeBytes ?? data.byteSize ?? 0);
     if (pktsEl) pktsEl.textContent = `${data.packetCount} packets`;
     if (mfrEl) mfrEl.textContent = data.manufacturer || "Generic SysEx";
-    if (contentEl) contentEl.textContent = data.hexDump || "No binary content";
+    if (contentEl) contentEl.textContent = hexContent || "No binary content";
 
     if (modal) modal.classList.remove("hidden");
 }
@@ -5357,23 +5601,27 @@ document.getElementById("btnQuickMode99")?.addEventListener("click", () => {
 });
 
 document.getElementById("btnQuickReqVoice")?.addEventListener("click", () => {
+    if (!state.isSysexCapturing) startSysexCapture();
     sendToHost("send_quick_sysex", { command: "req_voice_dump" });
-    showToast("Sent Request FM Voice Bank Dump (Format 00H)");
+    showToast("Capture armed for Format 00H (FM Voices): Hold [MIDI] + press Voice Bank on PSS-680.");
 });
 
 document.getElementById("btnQuickReqMelody")?.addEventListener("click", () => {
+    if (!state.isSysexCapturing) startSysexCapture();
     sendToHost("send_quick_sysex", { command: "req_melody_dump" });
-    showToast("Sent Request Melody Memory Dump (Format 01H)");
+    showToast("Capture armed for Format 01H (Melody Memory): Hold [MIDI] + press Song/Melody on PSS-680.");
 });
 
 document.getElementById("btnQuickReqChord")?.addEventListener("click", () => {
+    if (!state.isSysexCapturing) startSysexCapture();
     sendToHost("send_quick_sysex", { command: "req_chord_dump" });
-    showToast("Sent Request Chord Memory Dump (Format 02H)");
+    showToast("Capture armed for Format 02H (Chord Memory): Hold [MIDI] + press Chord on PSS-680.");
 });
 
 document.getElementById("btnQuickReqRhythm")?.addEventListener("click", () => {
+    if (!state.isSysexCapturing) startSysexCapture();
     sendToHost("send_quick_sysex", { command: "req_rhythm_dump" });
-    showToast("Sent Request Custom Drummer Dump (Format 03H)");
+    showToast("Capture armed for Format 03H (Custom Drummer): Hold [MIDI] + press Custom Drummer on PSS-680.");
 });
 
 document.getElementById("btnQuickMasterVol680")?.addEventListener("click", () => {
@@ -5436,6 +5684,9 @@ function applyActiveModel(modelKey, syncHost = true) {
     localStorage.setItem("yamaha_studio_model", modelKey);
 
     const is680 = modelKey === "pss680";
+    if (is680 && typeof vectorState !== "undefined" && vectorState.isOrbiting) {
+        stopVectorOrbit();
+    }
     if (is680 && state.pss680Voices && state.pss680Voices.length > 0) {
         state.voices = state.pss680Voices;
     } else if (!is680 && state.pss790Voices && state.pss790Voices.length > 0) {
@@ -5675,7 +5926,6 @@ function initSysexViewSwitcher() {
         btnDumps.addEventListener("click", () => {
             state.sysexViewMode = "dumps";
             updateSysexDeckVisibility();
-            applyActiveModel(state.activeModel, false);
         });
     }
 }
@@ -6871,8 +7121,13 @@ function sendFmVoiceLiveThrottled() {
         const voice = collectFmVoiceFromUI();
         sendToHost("transmit_fm_voice", { voice, silent: true });
         if (statusPill) {
-            statusPill.textContent = "Synced";
-            statusPill.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 transition";
+            if (state.selectedDevice) {
+                statusPill.textContent = "Synced";
+                statusPill.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60 transition";
+            } else {
+                statusPill.textContent = "Offline";
+                statusPill.className = "text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700 transition";
+            }
         }
     }, 120);
 }
@@ -6905,7 +7160,7 @@ function setSliderAndVal(sliderId, valId, val, formatter) {
 function estimateFmStageTime(rate, isAttack = false, maxRate = 63) {
     const r = Math.min(maxRate, Math.max(0, parseInt(rate, 10) || 0));
     if (r >= maxRate) return isAttack ? "< 2ms" : "~15ms";
-    if (r <= 0) return isAttack ? "> 10s" : (isAttack ? "> 10s" : "Hold");
+    if (r <= 0) return isAttack ? "> 10s" : "Hold";
     const fraction = r / maxRate;
     const ms = Math.round(15 * Math.pow(10, (1 - fraction) * 2.8));
     if (ms < 1000) return `~${ms}ms`;
@@ -6929,23 +7184,26 @@ function renderFmEnvelopeSvg(svgId, ar, d1r, d1l, d2r, rr, strokeColor, fillColo
     const normD2r = Math.min(31, Math.max(0, parseInt(d2r, 10) || 0));
     const normRr = Math.min(15, Math.max(0, parseInt(rr, 10) || 0));
 
-    // Attack segment width (16px to 110px)
-    const attWidth = Math.max(16, Math.round(95 * (1 - (normAr / 63)) + 16));
+    // Proportional width fit when all rates are extremely slow (totalSpan > xEnd - xStart)
+    const rawAtt = Math.max(16, Math.round(95 * (1 - (normAr / 63)) + 16));
+    const rawD1 = Math.max(22, Math.round(105 * (1 - (normD1r / 63)) + 22));
+    const rawD2 = Math.max(22, Math.round(105 * (1 - (normD2r / 31)) + 22));
+    const rawRr = Math.max(20, Math.round(95 * (1 - (normRr / 15)) + 20));
+    const maxSpan = xEnd - xStart;
+    const totalRaw = rawAtt + rawD1 + rawD2 + rawRr;
+    const widthScale = totalRaw > maxSpan ? (maxSpan / totalRaw) : 1;
 
-    // D1 segment width (22px to 120px)
-    const d1Width = Math.max(22, Math.round(105 * (1 - (normD1r / 63)) + 22));
+    const attWidth = Math.round(rawAtt * widthScale);
+    const d1Width = Math.round(rawD1 * widthScale);
+    const d2Width = Math.round(rawD2 * widthScale);
+    const rrWidth = Math.round(rawRr * widthScale);
 
-    // D1 level Y: level 15 is peak (yPeak, 0dB), level 0 is yZero (-inf dB)
-    const d1LevelFraction = normD1l / 15;
+    // OPLL / PSS-680 D1L is attenuation: 0 = max sustain (0 dB peak), 15 = minimum floor (-inf)
+    const d1LevelFraction = 1 - (normD1l / 15);
     const d1Y = yZero - (d1LevelFraction * height);
 
-    // D2 segment width (22px to 120px)
-    const d2Width = Math.max(22, Math.round(105 * (1 - (normD2r / 31)) + 22));
     const d2LevelFraction = normD2r > 0 ? (d1LevelFraction * Math.max(0.08, 1 - (normD2r / 31))) : d1LevelFraction;
     const d2Y = yZero - (d2LevelFraction * height);
-
-    // Release segment width (20px to 115px)
-    const rrWidth = Math.max(20, Math.round(95 * (1 - (normRr / 15)) + 20));
 
     const p0 = { x: xStart, y: yZero };
     const p1 = { x: p0.x + attWidth, y: yPeak };
@@ -7205,7 +7463,7 @@ function setupFmEnvelopeDragging(svgId, opPrefix) {
             const clampedD1r = Math.max(0, Math.min(63, newD1r));
 
             const levelFrac = Math.max(0, Math.min(1, (yZero - y) / height));
-            const newD1l = Math.round(levelFrac * 15);
+            const newD1l = Math.round((1 - levelFrac) * 15);
             const clampedD1l = Math.max(0, Math.min(15, newD1l));
 
             if (d1rInput) {
@@ -7392,8 +7650,85 @@ function randomizeFmVoice() {
     updateFmVoiceUI(voice);
 }
 
+const FM_PRESET_CATEGORIES = {
+    "Concert Grand Piano": "Acoustic Keyboards (Featured)",
+    "Honky-Tonk Upright Piano": "Acoustic Keyboards (Featured)",
+    "Take On Me Lead": "80s Synth Classics",
+    "Jump OB Brass": "80s Synth Classics",
+    "Axel F Brass Lead": "80s Synth Classics",
+    "Stranger Things Arp Bass": "80s Synth Classics",
+    "Harder Better Lead": "80s Synth Classics",
+    "LatelyBass / Solid Bass": "Basses & Leads",
+    "Sweet Dreams Pulse": "Basses & Leads",
+    "Blue Monday Octaver": "Basses & Leads",
+    "Danger Zone FM Slap": "Basses & Leads",
+    "Chemical Plant Slap Bass": "Basses & Leads",
+    "Go Straight Gritty House Bass": "Basses & Leads",
+    "DX7 Ballad Tine EP": "Pads & Keys",
+    "Blade Runner CS-80 Pad": "Pads & Keys",
+    "Africa Polysynth Pad": "Pads & Keys",
+    "Orinoco Shimmer Pad": "Pads & Keys",
+    "Sky Sanctuary Crystalline Lead": "Chiptune & Sega Genesis",
+    "Green Hill Steel Drum": "Chiptune & Sega Genesis",
+    "Last Christmas FM Bell": "Chiptune & Sega Genesis",
+    "In the Air Glass Chime": "Chiptune & Sega Genesis",
+    "80s DX7 Wood Marimba": "Chiptune & Sega Genesis",
+    "80s Gated Noise Snare": "Percussion Hits",
+    "Planet Rock Sub Kick": "Percussion Hits",
+    "Blue Monday Metallic Clank": "Percussion Hits"
+};
+
+function syncFmPresetDropdown() {
+    const sel = document.getElementById("selFmPresets");
+    if (!sel) return;
+
+    const voices = state.fmVoices || [];
+    if (voices.length === 0) return;
+
+    const grouped = new Map();
+    const order = [
+        "Acoustic Keyboards (Featured)",
+        "Custom & Imported Patches",
+        "80s Synth Classics",
+        "Basses & Leads",
+        "Pads & Keys",
+        "Chiptune & Sega Genesis",
+        "Percussion Hits"
+    ];
+    order.forEach(cat => grouped.set(cat, []));
+
+    voices.forEach(v => {
+        const name = v.voiceName || v.name || (v.fileName ? v.fileName.replace(/\.syx$/i, "") : "Custom FM");
+        const cat = FM_PRESET_CATEGORIES[name] || "Custom & Imported Patches";
+        grouped.get(cat).push({ name, filePath: v.filePath, fileName: v.fileName, bankNumber: v.bankNumber });
+    });
+
+    sel.innerHTML = `<option value="">FM Presets...</option>` +
+        `<optgroup label="Init Templates"><option value="init">Initialize (2-Op Sine)</option></optgroup>`;
+
+    for (const [cat, items] of grouped.entries()) {
+        if (items.length === 0) continue;
+        const grp = document.createElement("optgroup");
+        grp.label = cat;
+        items.forEach(item => {
+            const opt = document.createElement("option");
+            opt.value = item.filePath ? `file:${item.filePath}` : `name:${item.name}`;
+            const bankTag = item.bankNumber !== undefined ? ` [B${item.bankNumber + 1}]` : "";
+            opt.textContent = `${item.name}${bankTag}`;
+            grp.appendChild(opt);
+        });
+        sel.appendChild(grp);
+    }
+}
+
 function applyFmPreset(key) {
-    if (!key || !FM_PRESETS[key]) return;
+    if (!key) return;
+    if (key.startsWith("file:")) {
+        const filePath = key.substring(5);
+        sendToHost("load_fm_voice_patch", { filePath });
+        return;
+    }
+    if (!FM_PRESETS[key]) return;
     const template = JSON.parse(JSON.stringify(FM_PRESETS[key]));
     template.bankNumber = selectedFmBank;
     updateFmVoiceUI(template);
@@ -7408,8 +7743,8 @@ function renderFmVoiceLibrary() {
     const voices = state.fmVoices || [];
     if (countBadge) countBadge.textContent = `${voices.length} ${voices.length === 1 ? 'patch' : 'patches'}`;
 
-    const filtered = filter 
-        ? voices.filter(v => (v.name || v.fileName || "").toLowerCase().includes(filter))
+    const filtered = filter
+        ? voices.filter(v => (v.voiceName || v.name || v.fileName || "").toLowerCase().includes(filter))
         : voices;
 
     if (filtered.length === 0) {
@@ -7422,21 +7757,24 @@ function renderFmVoiceLibrary() {
     }
 
     listEl.innerHTML = filtered.map(v => {
-        const patchName = v.name || (v.fileName ? v.fileName.replace(/\.syx$/i, "") : "Custom FM");
+        const rawPatchName = v.voiceName || v.name || (v.fileName ? v.fileName.replace(/\.syx$/i, "") : "Custom FM");
+        const safePatchName = escapeUiHtml(rawPatchName);
+        const safeFileName = escapeUiHtml(v.fileName || "");
+        const safeFilePath = escapeUiHtml(v.filePath || "");
         const bankNum = (v.bankNumber !== undefined ? v.bankNumber + 1 : 1);
-        const dateStr = v.date || "";
+        const dateStr = escapeUiHtml(v.updatedAt || v.date || "");
         return `
             <div class="p-2 rounded-lg bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 transition flex items-center justify-between group">
                 <div class="min-w-0 flex-1 pr-2">
                     <div class="flex items-center space-x-1.5">
-                        <span class="text-xs font-bold text-white truncate" title="${patchName}">${patchName}</span>
+                        <span class="text-xs font-bold text-white truncate" title="${safePatchName}">${safePatchName}</span>
                         <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/60">B${bankNum}</span>
                     </div>
                     <div class="text-[9px] text-slate-400 truncate">${dateStr ? dateStr + ' • ' : ''}72 bytes SysEx</div>
                 </div>
                 <div class="flex items-center space-x-1 shrink-0">
-                    <button type="button" data-file="${v.fileName || ''}" data-path="${v.filePath || ''}" class="btn-load-fm px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 transition active:scale-95" title="Load into FM Sound Designer">Load</button>
-                    <button type="button" data-path="${v.filePath || ''}" class="btn-del-fm p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete patch">🗑️</button>
+                    <button type="button" data-file="${safeFileName}" data-path="${safeFilePath}" class="btn-load-fm px-1.5 py-0.5 rounded text-[10px] font-semibold bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 transition active:scale-95" title="Load into FM Sound Designer">Load</button>
+                    <button type="button" data-path="${safeFilePath}" class="btn-del-fm p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete patch">🗑️</button>
                 </div>
             </div>
         `;
@@ -7461,13 +7799,12 @@ function renderFmVoiceLibrary() {
 }
 
 function initFmSynthEditor() {
-    // Bank pills
+    // Bank pills (switch active PSS-680 bank without overwriting target slot with editor parameters)
     document.querySelectorAll("#fmBankPills .fm-bank-btn").forEach(btn => {
         btn.addEventListener("click", () => {
             selectedFmBank = parseInt(btn.dataset.bank, 10);
             updateActiveFmBankDisplay(selectedFmBank, 100 + selectedFmBank);
             sendToHost("select_fm_bank", { bank: selectedFmBank });
-            sendFmVoiceLiveThrottled();
         });
     });
 
@@ -8067,15 +8404,22 @@ function updateVectorEffectButtons() {
 
     const colAccents = ["cyan", "emerald", "amber", "rose"];
 
+    const activeEffectAccentClasses = [
+        "text-cyan-300 border-cyan-700/80",
+        "text-emerald-300 border-emerald-700/80",
+        "text-amber-300 border-amber-700/80",
+        "text-rose-300 border-rose-700/80"
+    ];
     for (let ch = 0; ch < 4; ch++) {
         const eff = vectorState.channelEffects[ch] || { rev: 1, vib: 0 };
         const btnRev = document.getElementById(`btnVecRev${ch + 1}`);
         const btnVib = document.getElementById(`btnVecVib${ch + 1}`);
+        const activeCls = activeEffectAccentClasses[ch] || "text-cyan-300 border-cyan-700/80";
 
         if (btnRev) {
             btnRev.textContent = `REV: ${VEC_REV_LABELS[eff.rev] || eff.rev}`;
             if (eff.rev > 0) {
-                btnRev.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-${colAccents[ch]}-300 border border-${colAccents[ch]}-700/80 transition active:scale-95 cursor-pointer shadow-sm`;
+                btnRev.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 ${activeCls} border transition active:scale-95 cursor-pointer shadow-sm`;
             } else {
                 btnRev.className = "vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-900/80 hover:bg-slate-800 text-slate-500 border border-slate-800 transition active:scale-95 cursor-pointer opacity-70";
             }
@@ -8084,7 +8428,7 @@ function updateVectorEffectButtons() {
         if (btnVib) {
             btnVib.textContent = eff.vib === 0 ? "VIB: OFF" : `VIB: ${eff.vib}`;
             if (eff.vib > 0) {
-                btnVib.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 text-${colAccents[ch]}-300 border border-${colAccents[ch]}-700/80 transition active:scale-95 cursor-pointer shadow-sm`;
+                btnVib.className = `vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-800 hover:bg-slate-700 ${activeCls} border transition active:scale-95 cursor-pointer shadow-sm`;
             } else {
                 btnVib.className = "vec-effect-btn w-full py-0.5 rounded text-[8px] font-bold bg-slate-900/80 hover:bg-slate-800 text-slate-500 border border-slate-800 transition active:scale-95 cursor-pointer opacity-70";
             }
@@ -8529,9 +8873,13 @@ function setupVectorTouchpad() {
 }
 
 function startVectorOrbit() {
-    if (vectorState.isOrbiting) return;
-    const mode = document.getElementById("selVecOrbitMode")?.value || "circle";
-    if (mode === "manual") return;
+    if (vectorState.isOrbiting || state.activeModel === "pss680") return;
+    const modeSel = document.getElementById("selVecOrbitMode");
+    let mode = modeSel?.value || "circle";
+    if (mode === "manual") {
+        mode = "circle";
+        if (modeSel) modeSel.value = "circle";
+    }
 
     vectorState.isOrbiting = true;
     vectorState.orbitStartTime = performance.now();
@@ -8547,7 +8895,10 @@ function startVectorOrbit() {
     }
 
     function step(now) {
-        if (!vectorState.isOrbiting) return;
+        if (!vectorState.isOrbiting || state.activeModel === "pss680" || (state.activeTab !== "sysex" && !state.vectorQuadActive)) {
+            stopVectorOrbit();
+            return;
+        }
         const elapsed = (now - vectorState.orbitStartTime) / 1000.0;
         const speedVal = parseFloat(document.getElementById("vecOrbitSpeed")?.value || 30);
         const period = Math.max(0.5, speedVal / 10.0);
@@ -8646,8 +8997,122 @@ function onVectorVoiceChanged() {
     sendToHost("set_vector_voices", { voiceA: vA, voiceB: vB, voiceC: vC, voiceD: vD });
 }
 
+const VECTOR_PRESET_CATEGORIES = {
+    "Take On Me Vector Lead": "Iconic 80s Soundscapes",
+    "Jump OB Vector Brass": "Iconic 80s Soundscapes",
+    "Ballad Tine & Crystal EP": "Iconic 80s Soundscapes",
+    "Axel F Marimba-Brass Lead": "Iconic 80s Soundscapes",
+    "Stranger Things Analog Vector": "Iconic 80s Soundscapes",
+    "Harder Better Talk-Lead": "Iconic 80s Soundscapes",
+    "Blade Runner CS-80 Vector Pad": "Ambient & Ethereal Pads",
+    "Africa Kalimba & Polysynth": "Ambient & Ethereal Pads",
+    "Orinoco Pizzicato & Choir": "Ambient & Ethereal Pads",
+    "Last Christmas Sleigh & Bell": "Ambient & Ethereal Pads",
+    "In the Air Glass & Atmosphere": "Ambient & Ethereal Pads",
+    "What Is Love Club Bass": "Bass & Riff Morph",
+    "Sweet Dreams Vector Pulse": "Bass & Riff Morph",
+    "Blue Monday Choir & Bass": "Bass & Riff Morph",
+    "Danger Zone Slap & Brass": "Bass & Riff Morph",
+    "Chemical Plant Slap & Synth": "Bass & Riff Morph",
+    "Go Straight Rave Stab & Bass": "Bass & Riff Morph",
+    "Big Earl Slap & Clavinet": "Bass & Riff Morph",
+    "Sky Sanctuary Harp & Crystal": "Game & Arcade Morph",
+    "Green Hill Steel Drum Ensemble": "Game & Arcade Morph",
+    "Magical Sound Steel & Marimba": "Game & Arcade Morph",
+    "Metal Squad Vector Shred": "Game & Arcade Morph",
+    "Reincarnated Gothic Harpsichord": "Game & Arcade Morph",
+    "Algol Battle Vector Brass": "Game & Arcade Morph",
+    "Final Take Off Arcade Lead": "Game & Arcade Morph",
+    "Whirlwind Shakuhachi & Koto": "Game & Arcade Morph",
+    "80s Wood Marimba & Vibe": "Percussive & Mallet Morph",
+    "80s Gated Timpani & Metal Hit": "Percussive & Mallet Morph",
+    "Planet Rock Fairlight Hit": "Percussive & Mallet Morph",
+    "Blue Monday Metallic Clank": "Percussive & Mallet Morph"
+};
+
+function populateMixerVectorPresetSelect(selVecPreset) {
+    if (!selVecPreset) return;
+    const prevVal = state.selectedVectorPresetKey || selVecPreset.value || "current";
+    selVecPreset.innerHTML = "";
+    const optCur = document.createElement("option");
+    optCur.value = "current";
+    optCur.textContent = "Current Channel 1-4 Voices";
+    selVecPreset.appendChild(optCur);
+
+    const diskPresets = state.vectorPresets || [];
+    if (diskPresets.length > 0) {
+        diskPresets.forEach(p => {
+            const name = p.name || (p.fileName ? p.fileName.replace(/\.json$/i, "") : "Vector Preset");
+            const opt = document.createElement("option");
+            opt.value = p.filePath || p.fileName || name;
+            opt.textContent = name;
+            selVecPreset.appendChild(opt);
+        });
+    } else if (typeof VECTOR_PRESETS !== "undefined") {
+        Object.entries(VECTOR_PRESETS).forEach(([k, p]) => {
+            const opt = document.createElement("option");
+            opt.value = k;
+            opt.textContent = p.name;
+            selVecPreset.appendChild(opt);
+        });
+    }
+
+    if (prevVal && Array.from(selVecPreset.options).some(o => o.value === prevVal)) {
+        selVecPreset.value = prevVal;
+    }
+}
+
+function syncVectorPresetDropdowns() {
+    const sel = document.getElementById("selVecPresets");
+    const presets = state.vectorPresets || [];
+
+    if (sel && presets.length > 0) {
+        const grouped = new Map();
+        const order = [
+            "Custom & User Presets",
+            "Iconic 80s Soundscapes",
+            "Ambient & Ethereal Pads",
+            "Bass & Riff Morph",
+            "Game & Arcade Morph",
+            "Percussive & Mallet Morph"
+        ];
+        order.forEach(cat => grouped.set(cat, []));
+
+        presets.forEach(p => {
+            const name = p.name || (p.fileName ? p.fileName.replace(/\.json$/i, "") : "Vector Preset");
+            const cat = VECTOR_PRESET_CATEGORIES[name] || "Custom & User Presets";
+            grouped.get(cat).push({ name, filePath: p.filePath, fileName: p.fileName });
+        });
+
+        sel.innerHTML = `<option value="">Vector Presets...</option>`;
+        for (const [cat, items] of grouped.entries()) {
+            if (items.length === 0) continue;
+            const grp = document.createElement("optgroup");
+            grp.label = cat;
+            items.forEach(item => {
+                const opt = document.createElement("option");
+                opt.value = item.filePath ? `file:${item.filePath}` : `name:${item.name}`;
+                opt.textContent = item.name;
+                grp.appendChild(opt);
+            });
+            sel.appendChild(grp);
+        }
+    }
+
+    const selMixer = document.getElementById("selMixerVectorPreset");
+    if (selMixer) {
+        populateMixerVectorPresetSelect(selMixer);
+    }
+}
+
 function applyVectorPreset(key) {
-    if (!key || !VECTOR_PRESETS[key]) return;
+    if (!key) return;
+    if (key.startsWith("file:")) {
+        const filePath = key.substring(5);
+        sendToHost("load_vector_preset", { filePath });
+        return;
+    }
+    if (!VECTOR_PRESETS[key]) return;
     const template = JSON.parse(JSON.stringify(VECTOR_PRESETS[key]));
     updateVectorPresetUI(template);
 }
@@ -8753,8 +9218,11 @@ function renderVectorPresetLibrary() {
     }
 
     listEl.innerHTML = presets.map(p => {
-        const presetName = p.name || (p.fileName ? p.fileName.replace(/\.json$/i, "") : "Vector Preset");
-        const dateStr = p.date || "";
+        const rawPresetName = p.name || (p.fileName ? p.fileName.replace(/\.json$/i, "") : "Vector Preset");
+        const presetName = escapeUiHtml(rawPresetName);
+        const dateStr = escapeUiHtml(p.updatedAt || p.date || "");
+        const safePath = escapeUiHtml(p.filePath || "");
+        const safeFile = escapeUiHtml(p.fileName || "");
         return `
             <div class="p-1.5 rounded-lg bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 transition flex items-center justify-between group">
                 <div class="min-w-0 flex-1 pr-1.5">
@@ -8762,8 +9230,8 @@ function renderVectorPresetLibrary() {
                     <span class="text-[9px] text-slate-400 block">${dateStr}</span>
                 </div>
                 <div class="flex items-center space-x-1 shrink-0">
-                    <button type="button" data-path="${p.filePath || ''}" data-file="${p.fileName || ''}" class="btn-load-vec px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 transition active:scale-95" title="Load Vector Preset">Load</button>
-                    <button type="button" data-path="${p.filePath || ''}" class="btn-del-vec p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete preset">🗑️</button>
+                    <button type="button" data-path="${safePath}" data-file="${safeFile}" class="btn-load-vec px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 transition active:scale-95" title="Load Vector Preset">Load</button>
+                    <button type="button" data-path="${safePath}" class="btn-del-vec p-1 rounded text-[10px] text-slate-500 hover:text-rose-400 hover:bg-slate-800 transition" title="Delete preset">🗑️</button>
                 </div>
             </div>
         `;
@@ -8961,7 +9429,7 @@ function initModelSelector() {
     });
 
     const savedModel = localStorage.getItem("yamaha_studio_model") || "pss790";
-    applyActiveModel(savedModel);
+    applyActiveModel(savedModel, false);
 }
 
 function initMoreToolsMenu() {

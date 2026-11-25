@@ -26,6 +26,7 @@ namespace PSS790Player.Core
         public bool UpdateOutdated { get; set; } = true;
         public bool RemoveOrphans { get; set; } = true;
         public bool PruneEmptyDirectories { get; set; } = true;
+        public bool PruneSourceDirectory { get; set; } = true;
         public bool ForceReconvertAll { get; set; } = false;
         public RemapperOptions? RemapperOptions { get; set; }
     }
@@ -72,7 +73,10 @@ namespace PSS790Player.Core
                 AutoCenterDanglingPitchBends = source?.AutoCenterDanglingPitchBends ?? true,
                 EmulateSustainPedal = source?.EmulateSustainPedal ?? true,
                 FoldExpressionPedal = source?.FoldExpressionPedal ?? true,
-                NormalizeAwmVelocities = source?.NormalizeAwmVelocities ?? true,
+                NormalizeAwmVelocities = is680 ? false : (source?.NormalizeAwmVelocities ?? true),
+                BakeFmVelocity = source?.BakeFmVelocity ?? true,
+                TranslateDrums = source?.TranslateDrums ?? true,
+                VectorQuadLayering = source?.VectorQuadLayering ?? false,
                 EnsureSetupPreRoll = source?.EnsureSetupPreRoll ?? true,
                 DefaultReverbBoost = is680 ? false : (source?.DefaultReverbBoost ?? true),
                 FilterUnsupportedControllers = source?.FilterUnsupportedControllers ?? true,
@@ -492,11 +496,14 @@ namespace PSS790Player.Core
                     progress?.Report((completedOps, totalOps, orphanRel, "delete_orphan"));
                 }
 
-                // 3. Clean up empty directories across target and source
+                // 3. Clean up empty directories across target (and source unless deferred by dual sync)
                 if (options.PruneEmptyDirectories)
                 {
                     result.PrunedDirectoriesCount += PruneEmptyDirectories(targetDir);
-                    result.PrunedDirectoriesCount += PruneEmptyDirectories(sourceDir);
+                    if (options.PruneSourceDirectory)
+                    {
+                        result.PrunedDirectoriesCount += PruneEmptyDirectories(sourceDir);
+                    }
                 }
             }, cancellationToken);
 
@@ -551,6 +558,32 @@ namespace PSS790Player.Core
             };
         }
 
+        private sealed class SynchronousProgress<T> : IProgress<T>
+        {
+            private readonly Action<T> _handler;
+            public SynchronousProgress(Action<T> handler) => _handler = handler;
+            public void Report(T value) => _handler(value);
+        }
+
+        private static int CountPlannedOps(LibrarySyncAnalysis analysis, string sourceDir, LibrarySyncOptions? options)
+        {
+            int ops = 0;
+            if (options?.ForceReconvertAll == true)
+            {
+                ops += Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories)
+                    .Count(f => f.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) ||
+                                f.EndsWith(".midi", StringComparison.OrdinalIgnoreCase));
+            }
+            else
+            {
+                if (options?.ConvertMissing ?? true) ops += analysis.MissingInTarget.Count;
+                if (options?.UpdateOutdated ?? true) ops += analysis.OutdatedInTarget.Count;
+            }
+
+            if (options?.RemoveOrphans ?? true) ops += analysis.OrphanInTarget.Count;
+            return ops;
+        }
+
         public static async Task<LibrarySyncResult> ExecuteDualSyncAsync(
             string sourceDir,
             string target790Dir,
@@ -562,24 +595,52 @@ namespace PSS790Player.Core
         {
             var combinedResult = new LibrarySyncResult();
 
-            // 1. Sync PSS-790 library (preserving caller RemapperOptions)
+            int ops790 = 0;
+            int ops680 = 0;
+            int grandTotal = 0;
+            if (progress != null && Directory.Exists(sourceDir))
+            {
+                var pre = AnalyzeDualSync(sourceDir, target790Dir, target680Dir);
+                ops790 = CountPlannedOps(pre.Analysis790, sourceDir, options);
+                ops680 = CountPlannedOps(pre.Analysis680, sourceDir, options);
+                grandTotal = Math.Max(1, ops790 + ops680);
+            }
+
+            var progress790 = progress == null
+                ? null
+                : new SynchronousProgress<(int Current, int Total, string FileName, string Action)>(p =>
+                {
+                    int capped = ops790 > 0 ? Math.Min(p.Current, ops790) : p.Current;
+                    progress.Report((Math.Min(capped, grandTotal), grandTotal, p.FileName, p.Action));
+                });
+
+            // 1. Sync PSS-790 library (defer source pruning until both targets finish)
             var opt790 = new LibrarySyncOptions
             {
                 ConvertMissing = options?.ConvertMissing ?? true,
                 UpdateOutdated = options?.UpdateOutdated ?? true,
                 RemoveOrphans = options?.RemoveOrphans ?? true,
                 PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
+                PruneSourceDirectory = false,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
                 RemapperOptions = CloneOptionsForModel(options?.RemapperOptions, "pss790")
             };
 
-            var res790 = await ExecuteSyncAsync(sourceDir, target790Dir, opt790, overrideStore, progress, cancellationToken);
+            var res790 = await ExecuteSyncAsync(sourceDir, target790Dir, opt790, overrideStore, progress790, cancellationToken);
             combinedResult.ConvertedCount += res790.ConvertedCount;
             combinedResult.UpdatedCount += res790.UpdatedCount;
             combinedResult.RemovedOrphansCount += res790.RemovedOrphansCount;
             combinedResult.PrunedDirectoriesCount += res790.PrunedDirectoriesCount;
 
             if (cancellationToken.IsCancellationRequested) return combinedResult;
+
+            var progress680 = progress == null
+                ? null
+                : new SynchronousProgress<(int Current, int Total, string FileName, string Action)>(p =>
+                {
+                    int capped = ops680 > 0 ? Math.Min(p.Current, ops680) : p.Current;
+                    progress.Report((Math.Min(ops790 + capped, grandTotal), grandTotal, p.FileName, p.Action));
+                });
 
             // 2. Sync PSS-680 library (preserving caller RemapperOptions with model-specific overrides)
             var opt680 = new LibrarySyncOptions
@@ -588,11 +649,12 @@ namespace PSS790Player.Core
                 UpdateOutdated = options?.UpdateOutdated ?? true,
                 RemoveOrphans = options?.RemoveOrphans ?? true,
                 PruneEmptyDirectories = options?.PruneEmptyDirectories ?? true,
+                PruneSourceDirectory = false,
                 ForceReconvertAll = options?.ForceReconvertAll ?? false,
                 RemapperOptions = CloneOptionsForModel(options?.RemapperOptions, "pss680")
             };
 
-            var res680 = await ExecuteSyncAsync(sourceDir, target680Dir, opt680, overrideStore, progress, cancellationToken);
+            var res680 = await ExecuteSyncAsync(sourceDir, target680Dir, opt680, overrideStore, progress680, cancellationToken);
             combinedResult.ConvertedCount += res680.ConvertedCount;
             combinedResult.UpdatedCount += res680.UpdatedCount;
             combinedResult.RemovedOrphansCount += res680.RemovedOrphansCount;

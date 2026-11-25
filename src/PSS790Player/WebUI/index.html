@@ -12,7 +12,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <!-- Custom Styles -->
-    <link rel="stylesheet" href="styles.css?v=2.8.4">
+    <link rel="stylesheet" href="styles.css?v=2.9.0">
     <script>
         tailwind.config = {
             theme: {
@@ -1006,17 +1006,17 @@
                     <button id="btnQuickMode99" title="PSS-680 Sound Source Mode 99: Press front-panel [MIDI MODE (c)] then [+] on your keyboard to display 'c.99' (12-voice multi-timbral mode). Click to reset all channels & view instructions." class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-emerald-900/60 text-[11px] font-medium text-emerald-300 hover:text-white border border-emerald-800/50 transition active:scale-95">
                         Mode 99 Guide
                     </button>
-                    <button id="btnQuickReqVoice" title="Request Format 00H FM Voice Bank Dump (F0 43 20 23 00 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
-                        Req Voices
+                    <button id="btnQuickReqVoice" title="PSS-680/480/780 ignores remote dump requests. Click to arm Capture & view panel combo: Hold [MIDI] + press Voice Bank (Format 00H)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
+                        Cap Voices
                     </button>
-                    <button id="btnQuickReqMelody" title="Request Format 01H Melody Memory Dump (F0 43 20 23 01 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-cyan-300 hover:text-white border border-cyan-800/40 transition active:scale-95">
-                        Req Melody
+                    <button id="btnQuickReqMelody" title="PSS-680/480/780 ignores remote dump requests. Click to arm Capture & view panel combo: Hold [MIDI] + press Song/Melody (Format 01H)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-cyan-300 hover:text-white border border-cyan-800/40 transition active:scale-95">
+                        Cap Melody
                     </button>
-                    <button id="btnQuickReqChord" title="Request Format 02H Chord Memory Dump (F0 43 20 23 02 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
-                        Req Chord
+                    <button id="btnQuickReqChord" title="PSS-680/480/780 ignores remote dump requests. Click to arm Capture & view panel combo: Hold [MIDI] + press Chord (Format 02H)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95">
+                        Cap Chord
                     </button>
-                    <button id="btnQuickReqRhythm" title="Request Format 03H Custom Drummer Pattern Dump (F0 43 20 23 03 00 F7) from PSS-680" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-indigo-300 hover:text-white border border-indigo-800/40 transition active:scale-95">
-                        Req Drummer
+                    <button id="btnQuickReqRhythm" title="PSS-680/480/780 ignores remote SysEx dump requests. Click to arm Capture & view panel combo: Hold [MIDI] + press Custom Drummer (Format 03H)" class="px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-indigo-300 hover:text-white border border-indigo-800/40 transition active:scale-95">
+                        Cap Drummer
                     </button>
                     <button id="btnQuickMasterVol680" title="Send Universal Master Volume SysEx: Sets master volume to 100%" class="px-2 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-[11px] font-medium text-amber-300 hover:text-white border border-amber-800/40 transition active:scale-95">
                         Vol 100%
@@ -2199,9 +2199,9 @@
                             <input type="checkbox" id="chkBatchCleanControllers680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
                             <span><strong>Purge CC 91 & SysEx:</strong> Strips reverb & foreign SysEx to protect MIDI buffer</span>
                         </label>
-                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="Linear FM Velocity: Preserves full 1-127 dynamics for FM operator modulation">
+                        <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="FM Volume &amp; Expression Velocity Baking: Folds CC 7 and CC 11 into calibrated [24-118] Mode 99 Note-On velocities (since PSS-680 ignores CC 7 in Mode 99)">
                             <input type="checkbox" id="chkBatchFmVelocity680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
-                            <span><strong>Linear FM Dynamics:</strong> Preserves full 1-127 velocity for FM modulation</span>
+                            <span><strong>FM Velocity Baking [24-118]:</strong> Bakes CC 7/11 swells into note velocity for Mode 99</span>
                         </label>
                         <label class="flex items-start space-x-2 cursor-pointer hover:text-white" title="32 Hand Percussion Remap: Translates GM drums to Pad Sets A-D (notes 38-79) with hi-hat choke">
                             <input type="checkbox" id="chkBatchDrums680" checked class="w-3.5 h-3.5 mt-0.5 text-amber-500 rounded bg-slate-800 border-slate-700 focus:ring-0 shrink-0">
@@ -2351,8 +2351,6 @@
             <div class="flex justify-end pt-1">
                 <button id="btnDismissHealthModal" title="Close MIDI diagnostics modal" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">Close Diagnostics</button>
             </div>
-        </div>
-    </div>
         </div>
     </div>
 
@@ -2736,7 +2734,7 @@
                     <img src="app_icon.png" alt="Yamaha PortaSound Studio" class="w-7 h-7 rounded-lg shadow-md shadow-cyan-500/20 border border-slate-700/60 object-cover">
                     <div>
                         <h3 class="text-sm font-bold text-white">About & Legal Notices</h3>
-                        <p class="text-[11px] text-slate-400">Yamaha PortaSound Studio v2.6.12</p>
+                        <p id="aboutVersionText" class="text-[11px] text-slate-400">Yamaha PortaSound Studio</p>
                     </div>
                 </div>
                 <button id="btnCloseAboutModal" class="text-slate-400 hover:text-white transition p-1" title="Close About and legal notices dialog">
@@ -3225,6 +3223,6 @@
     </div>
 
     <!-- Application Script -->
-    <script src="app.js?v=2.8.4"></script>
+    <script src="app.js?v=2.9.0"></script>
 </body>
 </html>

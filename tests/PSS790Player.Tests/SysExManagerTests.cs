@@ -119,7 +119,7 @@ namespace PSS790Player.Tests
             byte[] testContent = new byte[] { 0xF0, 0x43, 0x11, 0x22, 0xF7 };
             File.WriteAllBytes(origPath, testContent);
 
-            var newPath = manager.RenameDump(origPath, "renamed_backup");
+            var newPath = manager.RenameDump(origPath, "renamed_backup", _testDir);
 
             Assert.True(File.Exists(newPath));
             Assert.False(File.Exists(origPath));
@@ -138,7 +138,7 @@ namespace PSS790Player.Tests
             File.WriteAllBytes(filePath, new byte[] { 0xF0, 0x43, 0xF7 });
 
             Assert.True(File.Exists(filePath));
-            var result = manager.DeleteDump(filePath);
+            var result = manager.DeleteDump(filePath, _testDir);
 
             Assert.True(result);
             Assert.False(File.Exists(filePath));

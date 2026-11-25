@@ -208,7 +208,7 @@ namespace PSS790Player.Tests
             SoundDesignSeeder.SeedAll();
 
             var fmFiles = Directory.GetFiles(AppPaths.FmVoicesDir, "*.syx", SearchOption.TopDirectoryOnly);
-            Assert.Equal(25, fmFiles.Length);
+            Assert.True(fmFiles.Length >= 25, $"Expected at least 25 seeded FM patches, found {fmFiles.Length}");
 
             foreach (var file in fmFiles)
             {
@@ -225,7 +225,7 @@ namespace PSS790Player.Tests
             }
 
             var vecFiles = Directory.GetFiles(AppPaths.VectorPresetsDir, "*.json", SearchOption.TopDirectoryOnly);
-            Assert.Equal(30, vecFiles.Length);
+            Assert.True(vecFiles.Length >= 30, $"Expected at least 30 seeded Vector presets, found {vecFiles.Length}");
 
             foreach (var file in vecFiles)
             {

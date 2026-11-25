@@ -99,8 +99,8 @@ namespace PSS790Player.Tests
             Assert.Equal((byte)49, Remapper.TranslateDrumNote(25));
             Assert.Equal((byte)52, Pss680Constants.TranslateDrumNote(25));
 
-            // Note 26: Finger Snap -> High Q / Rimshot (64 on 790, 51 on 680)
-            Assert.Equal((byte)64, Remapper.TranslateDrumNote(26));
+            // Note 26: Finger Snap -> RIM SHOT 1 (46 on 790, 51 on 680)
+            Assert.Equal((byte)46, Remapper.TranslateDrumNote(26));
             Assert.Equal((byte)51, Pss680Constants.TranslateDrumNote(26));
 
             // Notes 29 & 30: Scratch Push/Pull -> Guiro / Hi-Hat

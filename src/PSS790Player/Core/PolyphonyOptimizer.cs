@@ -24,6 +24,7 @@ namespace PSS790Player.Core
             public byte NoteNumber { get; }
             public byte Velocity { get; }
             public int Priority { get; set; } = 1;
+            public int Weight { get; set; } = 1;
 
             public NoteContext(Note note)
             {
@@ -44,7 +45,11 @@ namespace PSS790Player.Core
             _model = model;
         }
 
-        public MidiFile Optimize(MidiFile midiFile, IReadOnlyDictionary<int, byte>? channelGmPrograms = null)
+        public MidiFile Optimize(
+            MidiFile midiFile,
+            IReadOnlyDictionary<int, byte>? channelGmPrograms = null,
+            IReadOnlyDictionary<int, int>? channelVoiceWeights = null,
+            IReadOnlyDictionary<int, List<(long Time, byte Program)>>? channelProgramTimelines = null)
         {
             if (!_enabled)
                 return midiFile;
@@ -151,12 +156,26 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Create tracking contexts for all unique surviving notes
+            // Create tracking contexts for all unique surviving notes with chronological priority & element weight
             var allContexts = allNotes.Select(n => new NoteContext(n)).ToList();
             foreach (var ctx in allContexts)
             {
                 byte prog = resolvedGmPrograms.TryGetValue(ctx.Channel, out var p) ? p : (byte)0;
+                if (channelProgramTimelines != null &&
+                    channelProgramTimelines.TryGetValue(ctx.Channel, out var timeline) &&
+                    timeline.Count > 0)
+                {
+                    for (int i = 0; i < timeline.Count; i++)
+                    {
+                        if (timeline[i].Time <= ctx.Time) prog = timeline[i].Program;
+                        else break;
+                    }
+                }
                 ctx.Priority = GetInstrumentPriority(ctx.Channel, prog);
+                if (ctx.Channel != 15 && channelVoiceWeights != null && channelVoiceWeights.TryGetValue(ctx.Channel, out var w))
+                {
+                    ctx.Weight = Math.Max(1, w);
+                }
             }
 
             // Step 1: Clamp Percussion Note Durations & Choke Open Hi-Hats on Channel 15
@@ -229,13 +248,14 @@ namespace PSS790Player.Core
                 }
             }
 
-            // Step 2b: Model 200ms virtual release-tail window on PSS-680 YM3420 FM melodic voices
+            // Step 2b: Model virtual release-tail window on melodic voices (200ms YM3420 FM on PSS-680, 100ms AWM on PSS-790)
+            var releaseTailMs = is680 ? 200 : 100;
+            var releaseTailSpan = new MetricTimeSpan(0, 0, 0, releaseTailMs);
             foreach (var ctx in allContexts)
             {
-                if (is680 && ctx.Channel != 15)
+                if (ctx.Channel != 15)
                 {
-                    var tailSpan = new MetricTimeSpan(0, 0, 0, 200);
-                    long tailTicks = LengthConverter.ConvertFrom(tailSpan, ctx.EffectiveEndTime, tempoMap);
+                    long tailTicks = LengthConverter.ConvertFrom(releaseTailSpan, ctx.EffectiveEndTime, tempoMap);
                     ctx.SoundEndTime = ctx.EffectiveEndTime + Math.Max(0, tailTicks);
                 }
                 else
@@ -249,12 +269,21 @@ namespace PSS790Player.Core
             var sortedContexts = allContexts.OrderBy(c => c.Time).ToList();
             var activeContexts = new List<NoteContext>();
             int effectiveLimit = Math.Max(1, _threshold);
+            int activeWeightSum = 0;
 
             foreach (var currentCtx in sortedContexts)
             {
                 long currentTime = currentCtx.Time;
-                activeContexts.RemoveAll(c => c.SoundEndTime <= currentTime);
+                for (int i = activeContexts.Count - 1; i >= 0; i--)
+                {
+                    if (activeContexts[i].SoundEndTime <= currentTime)
+                    {
+                        activeWeightSum -= activeContexts[i].Weight;
+                        activeContexts.RemoveAt(i);
+                    }
+                }
                 activeContexts.Add(currentCtx);
+                activeWeightSum += currentCtx.Weight;
 
                 if (is680)
                 {
@@ -277,11 +306,12 @@ namespace PSS790Player.Core
                             contextsToCull.Add(drumToDrop);
                             activeDrums.Remove(drumToDrop);
                             activeContexts.Remove(drumToDrop);
+                            activeWeightSum -= drumToDrop.Weight;
                         }
                     }
 
-                    // If overall concurrent notes exceed threshold (12), cull incidental Latin hand percussion on Ch 15 first
-                    while (activeContexts.Count > effectiveLimit)
+                    // If overall concurrent weighted notes exceed threshold (12), cull incidental Latin hand percussion on Ch 15 first
+                    while (activeWeightSum > effectiveLimit)
                     {
                         var incidentalDrum = activeContexts
                             .Where(c => c.Channel == 15 && Pss680Constants.IncidentalDrums.Contains(c.NoteNumber))
@@ -293,6 +323,7 @@ namespace PSS790Player.Core
                         {
                             contextsToCull.Add(incidentalDrum);
                             activeContexts.Remove(incidentalDrum);
+                            activeWeightSum -= incidentalDrum.Weight;
                             continue;
                         }
 
@@ -300,7 +331,8 @@ namespace PSS790Player.Core
                     }
 
                     var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
-                    while (activeMelodic.Count > effectiveLimit)
+                    int melodicWeight = activeMelodic.Sum(c => c.Weight);
+                    while (melodicWeight > effectiveLimit)
                     {
                         // Shield highest melodic lead and lowest melodic bass (Ch 15 drums excluded)
                         var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
@@ -322,12 +354,16 @@ namespace PSS790Player.Core
                         contextsToCull.Add(candidateToDrop);
                         activeMelodic.Remove(candidateToDrop);
                         activeContexts.Remove(candidateToDrop);
+                        activeWeightSum -= candidateToDrop.Weight;
+                        melodicWeight -= candidateToDrop.Weight;
                     }
                 }
                 else
                 {
-                    // PSS-790 Architecture: 28-voice shared AWM PCM polyphony
-                    while (activeContexts.Count > effectiveLimit)
+                    // PSS-790 Architecture: 28-voice shared AWM PCM polyphony.
+                    // Cull incidental drums above effectiveLimit (e.g. 26), and steal melodic voices above the 28-voice hardware ceiling.
+                    int melodicCeiling = Math.Max(Constants.PolyphonyMax, effectiveLimit);
+                    while (activeWeightSum > effectiveLimit)
                     {
                         var incidentalDrum = activeContexts
                             .Where(c => c.Channel == 15 && Constants.IncidentalDrums.Contains(c.NoteNumber))
@@ -339,11 +375,34 @@ namespace PSS790Player.Core
                         {
                             contextsToCull.Add(incidentalDrum);
                             activeContexts.Remove(incidentalDrum);
+                            activeWeightSum -= incidentalDrum.Weight;
                             continue;
                         }
 
-                        // Preserve melodic notes and core drums on PSS-790
-                        break;
+                        if (activeWeightSum <= melodicCeiling)
+                        {
+                            break;
+                        }
+
+                        var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
+                        var leadNote = activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
+                        var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
+
+                        var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
+                        if (candidates.Count == 0)
+                        {
+                            break;
+                        }
+
+                        var candidateToDrop = candidates
+                            .OrderBy(c => c.Priority)
+                            .ThenBy(c => c.Velocity)
+                            .ThenBy(c => c.Time)
+                            .First();
+
+                        contextsToCull.Add(candidateToDrop);
+                        activeContexts.Remove(candidateToDrop);
+                        activeWeightSum -= candidateToDrop.Weight;
                     }
                 }
             }

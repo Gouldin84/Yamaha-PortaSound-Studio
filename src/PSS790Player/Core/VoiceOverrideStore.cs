@@ -10,7 +10,7 @@ namespace PSS790Player.Core
         private static readonly Lazy<VoiceOverrideStore> _lazyInstance = new(() => new VoiceOverrideStore());
         public static VoiceOverrideStore Instance => _lazyInstance.Value;
 
-        private readonly string _storagePath;
+        private string _storagePath;
         private readonly object _lock = new();
         private Dictionary<string, Dictionary<int, int>> _overrides = new(StringComparer.OrdinalIgnoreCase);
         private volatile bool _isLoaded;
@@ -18,6 +18,20 @@ namespace PSS790Player.Core
         public VoiceOverrideStore(string? customPath = null)
         {
             _storagePath = customPath ?? AppPaths.OverridesFilePath;
+        }
+
+        public void Reload(string? customPath = null)
+        {
+            lock (_lock)
+            {
+                if (!string.IsNullOrWhiteSpace(customPath))
+                {
+                    _storagePath = customPath;
+                }
+                _overrides.Clear();
+                _isLoaded = false;
+            }
+            EnsureLoaded();
         }
 
         private void EnsureLoaded()

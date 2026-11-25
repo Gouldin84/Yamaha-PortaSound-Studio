@@ -66,6 +66,8 @@ In Mode 99, the PSS-680 acts as a standalone 16-channel multi-timbral MIDI sound
   - Channel 16 is dedicated to PCM percussion.
   - Note-On velocity dynamically modulates drum hit volume.
   - Program change messages on Channel 16 are ignored.
+* **Pitch Bend Range (`MIDI IN` vs. Physical Wheel)**:
+  - While the physical Pitch Bend Wheel and Melody Memory support up to $\pm 12$ semitones (Manual p. 14, 41), external `MIDI IN` Pitch Bend messages in Mode 99 respond to fixed $\pm 2$ semitones (1:1 with General MIDI).
 * **System Real-Time**: Clock, Start, and Stop messages are **ignored** in Mode 99.
 
 ---

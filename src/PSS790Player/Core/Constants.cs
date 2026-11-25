@@ -201,7 +201,7 @@ namespace PSS790Player.Core
             { 37, 46 }, // Side Stick -> RIM SHOT 1
             { 38, 49 }, // Acoustic Snare -> SNARE HI
             { 39, 54 }, // Hand Clap -> HAND CLAPS
-            { 40, 49 }, // Electric Snare -> SNARE HI (rock backbeat punch)
+            { 40, 38 }, // Electric Snare -> SYNTH SNARE
             { 41, 47 }, // Low Floor Tom -> TOM BASS
             { 42, 57 }, // Closed Hi-Hat -> HI HAT CLOSED
             { 43, 48 }, // High Floor Tom -> TOM LO

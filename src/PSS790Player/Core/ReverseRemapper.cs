@@ -8,11 +8,14 @@ namespace PSS790Player.Core
 {
     public static class ReverseRemapper
     {
-        public static MidiFile ReverseRemapToGeneralMidi(MidiFile pssMidi, string model = "pss790")
+        public static MidiFile ReverseRemapToGeneralMidi(
+            MidiFile pssMidi,
+            string model = "pss790",
+            IReadOnlyDictionary<int, byte>? pss680BankGmHints = null)
         {
             if (string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) || Remapper.HasPss680Marker(pssMidi))
             {
-                return ReverseRemapPss680ToGeneralMidi(pssMidi);
+                return ReverseRemapPss680ToGeneralMidi(pssMidi, pss680BankGmHints);
             }
 
             return ReverseRemapPss790ToGeneralMidi(pssMidi);
@@ -34,13 +37,18 @@ namespace PSS790Player.Core
                     (te.Event is ProgramChangeEvent pc && pc.Channel == 15));
             }
 
-            // 2. Analyze which channels are active
+            // 2. Analyze active channels and note densities
             var usedChannels = new HashSet<int>();
+            var channelNoteCounts = new int[16];
             foreach (var te in gmMidi.GetTimedEvents())
             {
                 if (te.Event is ChannelEvent ce)
                 {
                     usedChannels.Add(ce.Channel);
+                    if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        channelNoteCounts[ce.Channel]++;
+                    }
                 }
             }
 
@@ -56,7 +64,15 @@ namespace PSS790Player.Core
                         break;
                     }
                 }
-                if (freeMelodicChannel == -1) freeMelodicChannel = 0;
+                if (freeMelodicChannel == -1)
+                {
+                    freeMelodicChannel = System.Linq.Enumerable.Range(0, 15)
+                        .Where(c => c != 9)
+                        .OrderBy(c => c == 0 ? 1 : 0)
+                        .ThenBy(c => channelNoteCounts[c])
+                        .ThenByDescending(c => c)
+                        .First();
+                }
 
                 foreach (var track in gmMidi.GetTrackChunks())
                 {
@@ -68,6 +84,17 @@ namespace PSS790Player.Core
                         }
                     }
                 }
+            }
+
+            // Ensure Standard Drum Kit ProgramChange(0) is initialized at tick 0 on GM Channel 10 only when Ch 9 was previously melodic
+            if (usedChannels.Contains(9) && usedChannels.Contains(15))
+            {
+                var firstTrack = gmMidi.GetTrackChunks().FirstOrDefault();
+                firstTrack?.Events.Insert(0, new ProgramChangeEvent((SevenBitNumber)0)
+                {
+                    Channel = (FourBitNumber)9,
+                    DeltaTime = 0
+                });
             }
 
             // 4. Move Channel 15 (PSS-790 drums) to Channel 9 (GM drums) and translate voices/notes/pitch bends
@@ -121,7 +148,9 @@ namespace PSS790Player.Core
             return gmMidi;
         }
 
-        public static MidiFile ReverseRemapPss680ToGeneralMidi(MidiFile pss680Midi)
+        public static MidiFile ReverseRemapPss680ToGeneralMidi(
+            MidiFile pss680Midi,
+            IReadOnlyDictionary<int, byte>? bankGmHints = null)
         {
             var gmMidi = pss680Midi.Clone();
 
@@ -137,13 +166,18 @@ namespace PSS790Player.Core
                     (te.Event is ProgramChangeEvent pc && pc.Channel == 15));
             }
 
-            // 2. Analyze which channels are active
+            // 2. Analyze active channels and note densities
             var usedChannels = new HashSet<int>();
+            var channelNoteCounts = new int[16];
             foreach (var te in gmMidi.GetTimedEvents())
             {
                 if (te.Event is ChannelEvent ce)
                 {
                     usedChannels.Add(ce.Channel);
+                    if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        channelNoteCounts[ce.Channel]++;
+                    }
                 }
             }
 
@@ -159,7 +193,15 @@ namespace PSS790Player.Core
                         break;
                     }
                 }
-                if (freeMelodicChannel == -1) freeMelodicChannel = 0;
+                if (freeMelodicChannel == -1)
+                {
+                    freeMelodicChannel = System.Linq.Enumerable.Range(0, 15)
+                        .Where(c => c != 9)
+                        .OrderBy(c => c == 0 ? 1 : 0)
+                        .ThenBy(c => channelNoteCounts[c])
+                        .ThenByDescending(c => c)
+                        .First();
+                }
 
                 foreach (var track in gmMidi.GetTrackChunks())
                 {
@@ -171,6 +213,17 @@ namespace PSS790Player.Core
                         }
                     }
                 }
+            }
+
+            // Ensure Standard Drum Kit ProgramChange(0) is initialized at tick 0 on GM Channel 10 only when Ch 9 was previously melodic
+            if (usedChannels.Contains(9) && usedChannels.Contains(15))
+            {
+                var firstTrack = gmMidi.GetTrackChunks().FirstOrDefault();
+                firstTrack?.Events.Insert(0, new ProgramChangeEvent((SevenBitNumber)0)
+                {
+                    Channel = (FourBitNumber)9,
+                    DeltaTime = 0
+                });
             }
 
             // 4. Move Channel 15 (PSS-680 drums) to Channel 9 (GM drums) and translate voices/notes
@@ -204,15 +257,17 @@ namespace PSS790Player.Core
                             int prog = pc.ProgramNumber;
                             if (prog is >= 100 and <= 104)
                             {
-                                // Digital Synthesizer User Banks 1-5 -> GM Lead 1 (Square)
-                                pc.ProgramNumber = (SevenBitNumber)80;
+                                byte mappedUserGm = (bankGmHints != null && bankGmHints.TryGetValue(prog, out var hint))
+                                    ? hint
+                                    : (byte)80;
+                                pc.ProgramNumber = (SevenBitNumber)mappedUserGm;
                             }
                             else if (Pss680Constants.Pss680ToGmVoiceMap.TryGetValue(prog, out var gmProg))
                             {
                                 pc.ProgramNumber = (SevenBitNumber)gmProg;
                             }
                         }
-                        // Note: PSS-680 pitch bend range is +/- 2 semitones (matching standard GM 1:1), so PitchBendEvent values are preserved directly.
+                        // Note: PSS-680 Mode 99 MIDI IN pitch bend range is +/- 2 semitones (matching standard GM 1:1), so PitchBendEvent values are preserved directly.
                     }
                 }
             }
