@@ -906,7 +906,9 @@ namespace PSS790Player.Core
 
         public void SendEvent(MidiEvent midiEvent)
         {
+            if (midiEvent == null) return;
             IOutputDevice? failedDevice = null;
+            bool sent = false;
 
             lock (_deviceLock)
             {
@@ -916,6 +918,7 @@ namespace PSS790Player.Core
                 try
                 {
                     target.SendEvent(midiEvent);
+                    sent = true;
                 }
                 catch
                 {
@@ -923,10 +926,71 @@ namespace PSS790Player.Core
                 }
             }
 
+            if (sent)
+            {
+                TrackLiveEventState(midiEvent);
+            }
+
             if (failedDevice != null)
             {
                 HandleDeviceDisconnectedInternal(failedDevice, deferStop: false);
             }
+        }
+
+        private void TrackLiveEventState(MidiEvent midiEvent)
+        {
+            if (midiEvent is not ChannelEvent ce) return;
+
+            int ch = ce.Channel;
+            TrackDirtyControllerState(this, ch, ce);
+
+            if (ce is NoteOnEvent noteOn)
+            {
+                lock (_notesLock)
+                {
+                    if (noteOn.Velocity > 0)
+                        IncrementActiveNoteLocked(ch, (byte)noteOn.NoteNumber);
+                    else
+                        DecrementActiveNoteLocked(ch, (byte)noteOn.NoteNumber);
+                }
+            }
+            else if (ce is NoteOffEvent noteOff)
+            {
+                lock (_notesLock)
+                {
+                    DecrementActiveNoteLocked(ch, (byte)noteOff.NoteNumber);
+                }
+            }
+        }
+
+        private static void TrackDirtyControllerState(MidiPlayer player, int ch, ChannelEvent evt)
+        {
+            if (ch < 0 || ch >= 16) return;
+            int bit = 1 << ch;
+            SetMaskBit(ref player._usedChannelMask, bit);
+
+            if (evt is PitchBendEvent)
+            {
+                SetMaskBit(ref player._dirtyBendMask, bit);
+            }
+            else if (evt is ControlChangeEvent cc)
+            {
+                if (cc.ControlNumber == 1) SetMaskBit(ref player._dirtyModMask, bit);
+                else if (cc.ControlNumber == 64) SetMaskBit(ref player._dirtySustainMask, bit);
+                else if (cc.ControlNumber == 7) SetMaskBit(ref player._dirtyVolumeMask, bit);
+            }
+        }
+
+        private static void SetMaskBit(ref int field, int bit)
+        {
+            int initial, computed;
+            do
+            {
+                initial = Volatile.Read(ref field);
+                if ((initial & bit) == bit) return;
+                computed = initial | bit;
+            }
+            while (Interlocked.CompareExchange(ref field, computed, initial) != initial);
         }
 
         public void SendSysEx(byte[] rawSysEx)
@@ -1532,36 +1596,6 @@ namespace PSS790Player.Core
                 {
                     _player.HandleDeviceDisconnectedInternal(failedDevice, deferStop: true);
                 }
-            }
-
-            private static void TrackDirtyControllerState(MidiPlayer player, int ch, ChannelEvent evt)
-            {
-                if (ch < 0 || ch >= 16) return;
-                int bit = 1 << ch;
-                SetMaskBit(ref player._usedChannelMask, bit);
-
-                if (evt is PitchBendEvent)
-                {
-                    SetMaskBit(ref player._dirtyBendMask, bit);
-                }
-                else if (evt is ControlChangeEvent cc)
-                {
-                    if (cc.ControlNumber == 1) SetMaskBit(ref player._dirtyModMask, bit);
-                    else if (cc.ControlNumber == 64) SetMaskBit(ref player._dirtySustainMask, bit);
-                    else if (cc.ControlNumber == 7) SetMaskBit(ref player._dirtyVolumeMask, bit);
-                }
-            }
-
-            private static void SetMaskBit(ref int field, int bit)
-            {
-                int initial, computed;
-                do
-                {
-                    initial = Volatile.Read(ref field);
-                    if ((initial & bit) == bit) return;
-                    computed = initial | bit;
-                }
-                while (Interlocked.CompareExchange(ref field, computed, initial) != initial);
             }
 
             private bool TryApplyPss680Scale(ChannelEvent evt, int ch, bool is680, out ChannelEvent result)

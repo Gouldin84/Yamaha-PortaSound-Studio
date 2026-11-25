@@ -3514,9 +3514,8 @@ namespace PSS790Player.Bridge
                         }
                     }
 
-                    int polyLimit = modelSnapshot == "pss680" ? 12 : 28;
                     int totalWithFixes = reports.Count(r => r.AppliedAutoFixes.Count > 0);
-                    int totalHighPolyphony = reports.Count(r => r.PeakPolyphony > polyLimit);
+                    int totalHighPolyphony = reports.Count(r => string.Equals(r.VoiceStressRating, "HighPolyphony", StringComparison.OrdinalIgnoreCase));
                     int totalInferred = reports.Count(r => r.InferredProgramChannels.Count > 0);
                     int totalXg = reports.Count(r => r.XgSysExChannels.Count > 0);
                     int totalStuckPedal = reports.Count(r => r.StuckPedalIntervalsCount > 0);

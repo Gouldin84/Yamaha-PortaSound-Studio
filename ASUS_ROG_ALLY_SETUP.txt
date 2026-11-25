@@ -1,9 +1,10 @@
 ========================================================================
-Yamaha PSS-790 MIDI Player & Remapper - Asus ROG Ally & Windows Setup
+Yamaha PortaSound Studio - Asus ROG Ally & Windows Setup
 ========================================================================
 
-Thank you for downloading the PSS-790 MIDI Player & Recording Studio!
-This application is fully optimized for the Asus ROG Ally Z1 Extreme
+Thank you for downloading Yamaha PortaSound Studio!
+Built for the Yamaha PortaSound PSS-790 (AWM) and PSS-680 / PSS-480 /
+PSS-780 (2-Operator FM), and optimized for the Asus ROG Ally Z1 Extreme
 (7-inch 120Hz touchscreen, 1080p display at 150% Windows scaling).
 
 ------------------------------------------------------------------------
@@ -11,30 +12,30 @@ QUICK-START: 3 WAYS TO LAUNCH
 ------------------------------------------------------------------------
 
 Option 1: 1-Click Launcher (Recommended)
-  Double-tap "Launch-PSS790.bat".
+  Double-tap "Launch-Studio.bat".
   This automatically removes Windows browser download flags and starts
-  the application immediately with zero warnings!
+  the application cleanly with zero SmartScreen prompts!
 
 Option 2: Direct Executable (.exe)
-  1. Double-tap "PSS790Player.exe".
+  1. Double-tap "PSS-Studio.exe".
   2. If Windows SmartScreen appears ("Windows protected your PC"):
      - Tap "More info"
      - Tap "Run anyway"
   You only need to do this once per version!
 
 Option 3: Permanent Manual Unblock
-  1. Press-and-hold (or right-click) "PSS790Player.exe".
+  1. Press-and-hold (or right-click) "PSS-Studio.exe".
   2. Tap "Properties".
   3. At the bottom, check the "Unblock" checkbox.
   4. Tap "OK".
 
 *Pro Tip for Handheld Users*:
-  If you copy PSS790Player.exe to your Asus ROG Ally using a Micro-SD
+  If you copy "PSS-Studio.exe" to your Asus ROG Ally using a Micro-SD
   card, USB-C flash drive, or local network share (SMB), Windows will NOT
   attach download flags, and SmartScreen will NEVER appear!
 
 ------------------------------------------------------------------------
-ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION (v2.6.12)
+ASUS ROG ALLY AUTO / DESKTOP MODE NAVIGATION
 ------------------------------------------------------------------------
 Yamaha PortaSound Studio works natively with the Asus ROG Ally Z1 Extreme
 when left in default "Auto Mode" (or "Desktop Mode"):
@@ -47,29 +48,26 @@ when left in default "Auto Mode" (or "Desktop Mode"):
 - Right Bumper / Trigger: Left mouse click (safely stages/loads songs into the
   player deck without playing, eliminating unexpected playback surprises).
 - Left Bumper / Trigger: Right click (opens song & folder context menu).
-- Button T (or Tap 🖐️): Toggle Handheld Touch Mode (42px enlarged targets).
+- Button T (or Tap Touch Mode): Toggle Handheld Touch Mode (enlarged targets).
 - Button N / P: Quick skip to Next / Previous track.
-- Button Space / Esc: Play/Pause and Emergency Hardware Stop.
+- Space / Esc: Play/Pause and Emergency Hardware Stop.
 
 TOUCHSCREEN & HANDHELD FEATURES FOR ASUS ROG ALLY
 ------------------------------------------------------------------------
-- 120Hz Buttery DOM Virtualization: Massive song libraries (3,800+ songs)
-  scroll effortlessly at native 120 FPS with GPU layer promotion and O(1)
-  targeted item highlighting. Zero micro-stutters or frame drops.
-- Responsive Handheld Top Bar: All header controls are neatly fitted for
-  1080p (with 150%/175% Windows DPI scaling) and 720p displays with zero
-  off-screen clipping. Secondary utilities (Folder, Batch, Shortcuts, About)
-  are organized in a fast-access [⋯] Studio Tools dropdown menu.
+- 120Hz Smooth DOM Virtualization: Massive song libraries (3,800+ songs)
+  scroll effortlessly with GPU layer promotion and O(1) active-row tracking.
+- Responsive Handheld Top Bar & Mixer: Top controls and 16-channel mixer /
+  recorder grids fit cleanly on 1080p@150% and 720p displays without cropping.
+  Secondary utilities (Folder, Batch, Shortcuts, About) sit in the [...] menu.
 - Safe Library Tapping: Tapping or clicking any song stages it onto the
-  player deck at 00:00. Playback strictly waits for Button A or the Play button.
-- Handheld Touch Mode: Tap the 🖐️ Touch button in the header to enlarge
-  slider handles, buttons, and song rows to 42px+ for effortless thumb use.
+  player deck at 00:00. Playback waits for Button A or Play.
+- Handheld Touch Mode: Tap the Touch button in the header to enlarge
+  slider handles, buttons, and song rows for effortless thumb use.
 - Continuous Auto-Advance: When a track finishes, the player automatically
   starts the next song in the folder (tap [Auto-Next] to toggle).
-- Fixed Viewport: The app locks cleanly to 720p/1080p without window scrolling.
-- Multi-Select: Tap checkboxes in select mode for batch moving and management.
-- Docked Batch Bar: [Move] and [Delete] remain docked at bottom of sidebar.
-- 120Hz Kinetic Scrolling: Native buttery-smooth touch flicking and scrolling.
+- Fixed Viewport: Locked cleanly to 720p/1080p without outer window scroll.
+- Dual Hardware Support: Switch seamlessly between PSS-790 and PSS-680 in
+  the top header dropdown; native cross-model songs adapt automatically.
 
 Enjoy making music with your Yamaha PortaSound PSS-790 and PSS-680!
 GitHub: https://github.com/Gouldin84/Yamaha-PortaSound-Studio

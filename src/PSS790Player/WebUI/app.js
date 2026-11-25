@@ -8804,7 +8804,7 @@ function setVectorPosition(x, y, notifyHost = true) {
     // Fluid canvas rendering
     requestAnimationFrame(drawVectorCanvas);
 
-    if (notifyHost) {
+    if (notifyHost && state.selectedDevice) {
         const now = performance.now();
         if (now - vectorState.lastVolumeSendTime > 25) {
             vectorState.lastVolumeSendTime = now;
@@ -8953,7 +8953,8 @@ function startVectorOrbit() {
                 return;
         }
 
-        setVectorPosition(x, y, true);
+        const canSendLive = !!state.selectedDevice && (state.activeTab === "sysex" || state.isPlaying);
+        setVectorPosition(x, y, canSendLive);
         vectorState.animFrameId = requestAnimationFrame(step);
     }
 

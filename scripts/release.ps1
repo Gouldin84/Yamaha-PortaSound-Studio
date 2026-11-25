@@ -42,7 +42,12 @@ if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
 if ($LASTEXITCODE -ne 0) { throw "Publish failed. Aborting release." }
 
 if (-not (Test-Path "dist")) { New-Item -ItemType Directory -Path "dist" | Out-Null }
+Copy-Item "Launch-Studio.bat" "dist\Launch-Studio.bat" -Force
+Copy-Item "ASUS_ROG_ALLY_SETUP.txt" "dist\ASUS_ROG_ALLY_SETUP.txt" -Force
 Copy-Item "$publishDir\PSS-Studio.exe" "dist\PSS-Studio.exe" -Force
+
+# Remove stale versioned release archives in dist/ to prevent local bloat
+Get-ChildItem "dist\PSS-Studio-v*-win-x64.zip" -ErrorAction SilentlyContinue | Remove-Item -Force
 
 $versionZip = "dist\PSS-Studio-$tag-win-x64.zip"
 $latestZip = "dist\PSS-Studio-win-x64.zip"

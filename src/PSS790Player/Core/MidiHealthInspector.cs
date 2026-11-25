@@ -49,7 +49,8 @@ namespace PSS790Player.Core
             string modelName = is680 ? "Yamaha PSS-680" : "Yamaha PSS-790";
 
             var detectedFormat = Remapper.DetectMidiFormat(originalMidi);
-            bool isNativePssInput = detectedFormat is MidiFormat.Pss790Native or MidiFormat.Pss680Native;
+            bool isOpposingNative = (detectedFormat == MidiFormat.Pss790Native && is680) ||
+                                    (detectedFormat == MidiFormat.Pss680Native && !is680);
 
             var ticksPerQuarter = (originalMidi.TimeDivision as TicksPerQuarterNoteTimeDivision)?.TicksPerQuarterNote ?? (short)480;
             long fourMeasuresTicks = ticksPerQuarter * 16;
@@ -58,9 +59,10 @@ namespace PSS790Player.Core
             report.TotalNoteCount = allNotes.Count;
 
             // 1. Identify percussion channels accurately:
-            // Only treat Ch 15 as default drums when input is already native PSS format;
-            // on General MIDI files, Ch 9 is drums and Ch 15 is melodic unless Bank 126/127 or XG SysEx marks it as drums.
-            var drumChannels = isNativePssInput
+            // Any native PSS format carries its percussion on Ch 15 (even when cross-converting to the opposing model).
+            // General MIDI files carry drums on Ch 9 unless Bank 126/127 or XG SysEx marks additional channels.
+            bool hasNativeDrumChannel = detectedFormat is MidiFormat.Pss790Native or MidiFormat.Pss680Native;
+            var drumChannels = hasNativeDrumChannel
                 ? new HashSet<int> { 15 }
                 : new HashSet<int> { 9 };
 
@@ -75,7 +77,7 @@ namespace PSS790Player.Core
                     else if (evt is NormalSysExEvent sysex && sysex.Data != null && sysex.Data.Length > 6)
                     {
                         var d = sysex.Data;
-                        if (d[0] == 0x43 && d[2] == 0x4C && d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
+                        if (d[0] == 0x43 && d[2] == 0x4C && (d[1] & 0xF0) == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d[6] > 0)
                         {
                             drumChannels.Add(d[4]);
                         }
@@ -166,8 +168,8 @@ namespace PSS790Player.Core
                                     report.XgSysExChannels.Add($"Ch {part + 1}: {voiceName} [XG SysEx]");
                                 }
                             }
-                            // Parameter Change: 43 10 4C 08 [part] 03 [prog]
-                            else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x03 && d.Length > 6)
+                            // Parameter Change: 43 1n 4C 08 [part] 03 [prog]
+                            else if ((d[1] & 0xF0) == 0x10 && d[3] == 0x08 && d[5] == 0x03 && d.Length > 6)
                             {
                                 int part = d[4];
                                 byte prog = d[6];
@@ -178,8 +180,8 @@ namespace PSS790Player.Core
                                     report.XgSysExChannels.Add($"Ch {part + 1}: {voiceName} [XG SysEx]");
                                 }
                             }
-                            // Part Mode Drum: 43 10 4C 08 [part] 07 [mode > 0]
-                            else if (d[1] == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d.Length > 6)
+                            // Part Mode Drum: 43 1n 4C 08 [part] 07 [mode > 0]
+                            else if ((d[1] & 0xF0) == 0x10 && d[3] == 0x08 && d[5] == 0x07 && d.Length > 6)
                             {
                                 int part = d[4];
                                 if (d[6] > 0 && !report.NonStandardDrumChannels.Contains(part))
@@ -309,6 +311,12 @@ namespace PSS790Player.Core
 
             report.RunawayPedalCapped = stuckPedalCount > 0;
             report.PitchBendsCenteredAtEof = danglingBends > 0;
+
+            if (isOpposingNative)
+            {
+                string sourceModel = detectedFormat == MidiFormat.Pss790Native ? "PSS-790" : "PSS-680";
+                report.AppliedAutoFixes.Add($"Cross-converted native {sourceModel} voices and Ch 16 drums for {modelName}");
+            }
 
             if (report.InferredProgramChannels.Count > 0)
             {

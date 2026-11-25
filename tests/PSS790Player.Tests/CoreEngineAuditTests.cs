@@ -1072,6 +1072,45 @@ namespace PSS790Player.Tests
             Assert.Equal((SevenBitNumber)80, volCc.ControlValue);
         }
 
+        [Fact]
+        public void MidiHealthInspector_OpposingNativeAndXgDeviceId_DetectedAccurately()
+        {
+            var native790WithXg = new MidiFile(new TrackChunk(
+                new TextEvent(Remapper.Pss790MarkerText),
+                // XG Parameter Change on Device ID 0x12 (Part 0 -> Program 40 Violin)
+                new NormalSysExEvent(new byte[] { 0x43, 0x12, 0x4C, 0x08, 0x00, 0x03, 40, 0xF7 }),
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
+            ));
+
+            var report680 = MidiHealthInspector.Analyze(native790WithXg, null, "Native790On680.mid", "pss680");
+            Assert.Single(report680.XgSysExChannels);
+            Assert.Contains(report680.AppliedAutoFixes, f => f.Contains("Cross-converted native PSS-790", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void MidiPlayer_SendEvent_TracksLiveNotesAndDirtyControllersForPanicCleanup()
+        {
+            using var player = new MidiPlayer();
+            var dev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(dev);
+
+            // Live manual sends outside playback (e.g. Audition / Vector / MIDI Thru)
+            player.SendEvent(new NoteOnEvent((SevenBitNumber)62, (SevenBitNumber)90) { Channel = (FourBitNumber)2 });
+            player.SendEvent(new PitchBendEvent(12000) { Channel = (FourBitNumber)2 });
+            player.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)64) { Channel = (FourBitNumber)2 });
+            player.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)127) { Channel = (FourBitNumber)2 });
+
+            int beforePanic = dev.SnapshotEvents().Count;
+            player.SendPanicNoteOff();
+
+            var panicEvents = dev.SnapshotEvents().Skip(beforePanic).ToList();
+            Assert.Contains(panicEvents, e => e is NoteOffEvent no && no.Channel == 2 && no.NoteNumber == 62);
+            Assert.Contains(panicEvents, e => e is PitchBendEvent pb && pb.Channel == 2 && pb.PitchValue == 8192);
+            Assert.Contains(panicEvents, e => e is ControlChangeEvent cc && cc.Channel == 2 && cc.ControlNumber == 1 && cc.ControlValue == 0);
+            Assert.Contains(panicEvents, e => e is ControlChangeEvent cc && cc.Channel == 2 && cc.ControlNumber == 64 && cc.ControlValue == 0);
+        }
+
         #endregion
     }
 }
