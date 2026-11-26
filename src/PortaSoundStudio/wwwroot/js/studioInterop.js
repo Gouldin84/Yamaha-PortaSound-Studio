@@ -185,12 +185,67 @@ window.studioInterop = (() => {
 
     let vectorBowlCache = null;
     let vectorBowlCacheKey = "";
+    const vectorParticles = [];
+    let vectorMeshPhase = 0;
+
+    // Precomputed 108-angle LUT for 60fps 3D outer harmonic wave mesh + radial swell halo
+    const SWELL_STEPS = 108;
+    const swellLut = Array.from({ length: SWELL_STEPS }, (_, i) => {
+        const th = (i / SWELL_STEPS) * Math.PI * 2;
+        const c = Math.cos(th), s = Math.sin(th);
+        const kA = Math.pow(Math.max(0, -s), 1.35);
+        const kB = Math.pow(Math.max(0, c), 1.35);
+        const kC = Math.pow(Math.max(0, s), 1.35);
+        const kD = Math.pow(Math.max(0, -c), 1.35);
+        const kSum = kA + kB + kC + kD || 1;
+        return {
+            th, c, s, kA, kB, kC, kD,
+            rCol: Math.round((kA * 34 + kB * 16 + kC * 245 + kD * 244) / kSum),
+            gCol: Math.round((kA * 211 + kB * 205 + kC * 158 + kD * 63) / kSum),
+            bCol: Math.round((kA * 238 + kB * 129 + kC * 11 + kD * 94) / kSum)
+        };
+    });
+
+    function colorForAngle(theta) {
+        const kA = Math.max(0, -Math.sin(theta));
+        const kB = Math.max(0, Math.cos(theta));
+        const kC = Math.max(0, Math.sin(theta));
+        const kD = Math.max(0, -Math.cos(theta));
+        const sum = kA + kB + kC + kD || 1;
+        return [
+            Math.round((kA * 34 + kB * 16 + kC * 245 + kD * 244) / sum),
+            Math.round((kA * 211 + kB * 205 + kC * 158 + kD * 63) / sum),
+            Math.round((kA * 238 + kB * 129 + kC * 11 + kD * 94) / sum)
+        ];
+    }
+
+    function spawnVectorParticles(deltaMove, w) {
+        const count = Math.min(4, Math.max(1, Math.ceil(deltaMove * 24)));
+        for (let i = 0; i < count; i++) {
+            if (vectorParticles.length >= 44) vectorParticles.shift();
+            const pick = Math.random();
+            let baseAng = -Math.PI / 2;
+            if (pick > w.wA && pick <= w.wA + w.wB) baseAng = 0;
+            else if (pick > w.wA + w.wB && pick <= w.wA + w.wB + w.wC) baseAng = Math.PI / 2;
+            else if (pick > w.wA + w.wB + w.wC) baseAng = Math.PI;
+            const ang = baseAng + (Math.random() - 0.5) * 1.15;
+            vectorParticles.push({
+                angle: ang,
+                rOff: 111 + Math.random() * 14,
+                vr: 0.42 + Math.random() * 0.78,
+                va: (Math.random() - 0.5) * 0.022,
+                z: 0.5 + Math.random() * 0.9,
+                life: 1.0,
+                rgb: colorForAngle(ang)
+            });
+        }
+    }
 
     function getVectorBowlCache(isLight, dpr) {
         const key = `${isLight ? "L" : "D"}:${dpr}`;
         if (vectorBowlCache && vectorBowlCacheKey === key) return vectorBowlCache;
 
-        const logicalW = 240, logicalH = 240;
+        const logicalW = 288, logicalH = 288;
         const off = document.createElement("canvas");
         off.width = logicalW * dpr;
         off.height = logicalH * dpr;
@@ -198,16 +253,16 @@ window.studioInterop = (() => {
         ctx.save();
         ctx.scale(dpr, dpr);
 
-        const cx = 120, cy = 120, rActive = 84;
+        const cx = 144, cy = 144, rActive = 84;
 
         // 1. Exterior Cast Drop Shadow beneath Machined Flange
-        const outerDrop = ctx.createRadialGradient(cx + 3, cy + 8, rActive * 0.72, cx + 3, cy + 8, rActive + 32);
+        const outerDrop = ctx.createRadialGradient(cx + 3, cy + 7, rActive * 0.72, cx + 3, cy + 7, rActive + 30);
         outerDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.30)" : "rgba(2, 6, 16, 0.80)");
         outerDrop.addColorStop(0.65, isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(2, 6, 16, 0.38)");
         outerDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
         ctx.fillStyle = outerDrop;
         ctx.beginPath();
-        ctx.arc(cx + 3, cy + 8, rActive + 32, 0, Math.PI * 2);
+        ctx.arc(cx + 3, cy + 7, rActive + 30, 0, Math.PI * 2);
         ctx.fill();
 
         // 2. Sculpted Chamfered Hardware Bezel Flange
@@ -382,11 +437,135 @@ window.studioInterop = (() => {
         return off;
     }
 
+    function drawVectorSwellHalo(ctx, cx, cy, rBezel, w, vectorStateX, vectorStateY, rCol, gCol, bCol, isLight, tickParticles) {
+        const outerPts = new Array(SWELL_STEPS);
+        for (let i = 0; i < SWELL_STEPS; i++) {
+            const lut = swellLut[i];
+            const lw = w.wA * lut.kA + w.wB * lut.kB + w.wC * lut.kC + w.wD * lut.kD;
+            const norm = Math.min(1, lw * 1.18);
+            const ripple = Math.sin(lut.th * 5 + vectorMeshPhase) * Math.cos(lut.th * 3 - vectorMeshPhase * 0.7) * (1.2 + norm * 3.8);
+            const rOuter = rBezel + 4 + 27 * norm + ripple * 0.45;
+            outerPts[i] = {
+                x: cx + lut.c * rOuter,
+                y: cy + lut.s * rOuter,
+                norm,
+                rOuter,
+                lut
+            };
+        }
+
+        const buildOuterPath = () => {
+            ctx.beginPath();
+            const last = outerPts[SWELL_STEPS - 1];
+            const first = outerPts[0];
+            ctx.moveTo((last.x + first.x) * 0.5, (last.y + first.y) * 0.5);
+            for (let i = 0; i < SWELL_STEPS; i++) {
+                const p0 = outerPts[i];
+                const p1 = outerPts[(i + 1) % SWELL_STEPS];
+                ctx.quadraticCurveTo(p0.x, p0.y, (p0.x + p1.x) * 0.5, (p0.y + p1.y) * 0.5);
+            }
+            ctx.closePath();
+        };
+
+        // Layer 1: Subsurface Ambient Bloom Fill under Swell Membrane
+        const swellBloom = ctx.createRadialGradient(
+            cx + vectorStateX * 20, cy - vectorStateY * 20, rBezel - 4,
+            cx, cy, rBezel + 38
+        );
+        swellBloom.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, ${isLight ? 0.30 : 0.38})`);
+        swellBloom.addColorStop(0.7, `rgba(${rCol}, ${gCol}, ${bCol}, ${isLight ? 0.12 : 0.16})`);
+        swellBloom.addColorStop(1, "rgba(0, 0, 0, 0)");
+        buildOuterPath();
+        ctx.fillStyle = swellBloom;
+        ctx.fill();
+
+        // Layer 2: 5-Layer Harmonic Dotted Mesh Membrane (Acoustic Wave Lattice)
+        const meshLayers = 5;
+        for (let m = 0; m < meshLayers; m++) {
+            const frac = (m + 1) / (meshLayers + 0.35);
+            const layerAlpha = isLight ? (0.42 + frac * 0.46) : (0.34 + frac * 0.56);
+            const dotSize = m === meshLayers - 1 ? 1.85 : (1.1 + frac * 0.55);
+
+            for (let i = 0; i < SWELL_STEPS; i++) {
+                const pt = outerPts[i];
+                const l = pt.lut;
+                const phaseShift = m * 0.65;
+                const waveOffset = Math.sin(l.th * 6 - vectorMeshPhase + phaseShift) * Math.cos(l.th * 4 + phaseShift) * (0.8 + pt.norm * 4.2);
+                const rDot = (rBezel + 3) + (pt.rOuter - (rBezel + 3)) * frac + waveOffset * (1 - frac * 0.45);
+                if (rDot <= rBezel + 1.5) continue;
+
+                const dx = cx + l.c * rDot;
+                const dy = cy + l.s * rDot;
+                const brightBoost = m === meshLayers - 1 ? 30 : 0;
+                const cr = Math.min(255, l.rCol + brightBoost);
+                const cg = Math.min(255, l.gCol + brightBoost);
+                const cb = Math.min(255, l.bCol + brightBoost);
+
+                ctx.fillStyle = `rgba(${cr}, ${cg}, ${cb}, ${(layerAlpha * (0.42 + pt.norm * 0.58)).toFixed(2)})`;
+                ctx.fillRect(dx - dotSize * 0.5, dy - dotSize * 0.5, dotSize, dotSize);
+            }
+        }
+
+        // Layer 3: Subtle Radial Acoustic Tick Fins (Every 3rd LUT sample = 36 crisp fins)
+        for (let i = 0; i < SWELL_STEPS; i += 3) {
+            const pt = outerPts[i];
+            const l = pt.lut;
+            const r0 = rBezel + 3.5;
+            const r1 = r0 + 3.5 + 22 * pt.norm;
+            const x0 = cx + l.c * r0, y0 = cy + l.s * r0;
+            const x1 = cx + l.c * r1, y1 = cy + l.s * r1;
+            ctx.beginPath();
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(x1, y1);
+            ctx.strokeStyle = `rgba(${l.rCol}, ${l.gCol}, ${l.bCol}, ${(isLight ? 0.45 + pt.norm * 0.45 : 0.35 + pt.norm * 0.55).toFixed(2)})`;
+            ctx.lineWidth = 1.6;
+            ctx.lineCap = "round";
+            ctx.stroke();
+        }
+
+        // Layer 4: Outer Translucent Beveled Glass Ribbon Edge
+        buildOuterPath();
+        ctx.strokeStyle = `rgba(${rCol}, ${gCol}, ${bCol}, ${isLight ? 0.50 : 0.68})`;
+        ctx.lineWidth = 2.8;
+        ctx.stroke();
+
+        buildOuterPath();
+        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.88)" : "rgba(255, 255, 255, 0.50)";
+        ctx.lineWidth = 0.9;
+        ctx.stroke();
+
+        // Layer 5: 3D Z-Depth Sweep Bokeh Particles
+        for (let i = vectorParticles.length - 1; i >= 0; i--) {
+            const p = vectorParticles[i];
+            if (tickParticles) {
+                p.rOff += p.vr;
+                p.angle += p.va;
+                p.life -= 0.032;
+                if (p.life <= 0) {
+                    vectorParticles.splice(i, 1);
+                    continue;
+                }
+            }
+            const px = cx + Math.cos(p.angle) * p.rOff;
+            const py = cy + Math.sin(p.angle) * p.rOff;
+            const rad = (1.6 + p.z * 2.4) * p.life;
+            const [pr, pg, pb] = p.rgb;
+            const pglow = ctx.createRadialGradient(px, py, 0.2, px, py, rad * 2.1);
+            pglow.addColorStop(0, `rgba(255, 255, 255, ${(p.life * 0.92).toFixed(2)})`);
+            pglow.addColorStop(0.38, `rgba(${pr}, ${pg}, ${pb}, ${(p.life * 0.72).toFixed(2)})`);
+            pglow.addColorStop(1, `rgba(${pr}, ${pg}, ${pb}, 0)`);
+            ctx.fillStyle = pglow;
+            ctx.beginPath();
+            ctx.arc(px, py, rad * 2.1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
     function scheduleVectorDecay(canvasId) {
         if (vectorTrailDecayId) return;
         const stepDecay = () => {
             vectorTrailDecayId = null;
-            if (vectorTrail.length === 0) return;
+            if (vectorTrail.length === 0 && vectorParticles.length === 0) return;
             drawVectorCanvas(canvasId, vectorStateX, vectorStateY, false);
         };
         vectorTrailDecayId = requestAnimationFrame(stepDecay);
@@ -404,7 +583,7 @@ window.studioInterop = (() => {
         if (!ctx) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const logicalW = 240, logicalH = 240;
+        const logicalW = 288, logicalH = 288;
         if (canvas.width !== logicalW * dpr || canvas.height !== logicalH * dpr) {
             canvas.width = logicalW * dpr;
             canvas.height = logicalH * dpr;
@@ -418,14 +597,28 @@ window.studioInterop = (() => {
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(bowl, 0, 0);
-        ctx.scale(dpr, dpr);
 
-        const cx = 120, cy = 120, rActive = 84;
+        const cx = 144, cy = 144, rActive = 84, rBezel = rActive + 24;
         const w = calculateVectorWeights(vectorStateX, vectorStateY);
         const rCol = Math.round(w.wA * 34 + w.wB * 52 + w.wC * 251 + w.wD * 251);
         const gCol = Math.round(w.wA * 211 + w.wB * 211 + w.wC * 191 + w.wD * 113);
         const bCol = Math.round(w.wA * 238 + w.wB * 153 + w.wC * 36 + w.wD * 133);
+
+        const deltaMove = Math.hypot(x - prevX, y - prevY);
+        if (recordTrail && deltaMove > 0.008) {
+            vectorMeshPhase += Math.min(0.45, deltaMove * 2.2);
+            spawnVectorParticles(deltaMove, w);
+        }
+
+        // Draw outer 3D volume swell ring + harmonic dotted mesh BEFORE stamping the gimbal bezel on top
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        drawVectorSwellHalo(ctx, cx, cy, rBezel, w, vectorStateX, vectorStateY, rCol, gCol, bCol, isLight, !recordTrail || deltaMove > 0.004);
+        ctx.restore();
+
+        // Draw cached sculpted gimbal flange & recessed dish cleanly in the center
+        ctx.drawImage(bowl, 0, 0);
+        ctx.scale(dpr, dpr);
 
         const puckX = cx + vectorStateX * (rActive - 12);
         const puckY = (cy - 2) - vectorStateY * (rActive - 12);
@@ -463,10 +656,10 @@ window.studioInterop = (() => {
         });
         ctx.restore();
 
-        // 2. Motion Phosphor Trail
+        // 2. Motion Phosphor Trail inside dish
         const nowMs = performance.now();
         const trailLifetimeMs = 300;
-        if (recordTrail && (Math.hypot(x - prevX, y - prevY) > 0.012)) {
+        if (recordTrail && (deltaMove > 0.012)) {
             vectorTrail.push({ x: puckX, y: puckY, t: nowMs });
             if (vectorTrail.length > 20) vectorTrail.shift();
         }
@@ -482,7 +675,7 @@ window.studioInterop = (() => {
             ctx.fillStyle = `rgba(${rCol}, ${gCol}, ${bCol}, ${(life * 0.42).toFixed(3)})`;
             ctx.fill();
         }
-        if (vectorTrail.length > 0) scheduleVectorDecay(canvasId);
+        if (vectorTrail.length > 0 || vectorParticles.length > 0) scheduleVectorDecay(canvasId);
 
         // 3. Cast Shadow on Bowl beneath Shaft & Cap
         const baseCx = cx + (puckX - cx) * 0.14;
@@ -707,7 +900,7 @@ window.studioInterop = (() => {
 
         function computeCoords(e) {
             const rect = canvas.getBoundingClientRect();
-            const scale = (rect.width / 240) * 72;
+            const scale = (rect.width / 288) * 72;
             let x = (e.clientX - rect.left - rect.width / 2) / Math.max(1, scale);
             let y = (rect.height / 2 - (e.clientY - rect.top)) / Math.max(1, scale);
             const dist = Math.sqrt(x * x + y * y);

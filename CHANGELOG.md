@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2026-11-26
+
+### Added
+- **Outer 3D Volume Swell Ring, Dotted Wave Mesh & Bokeh Halo**: Expanded the 2D Quad Vector Gimbal viewport to `288×288` with a concentric outer polar swell envelope, 5-layer harmonic dotted wave lattice membrane, 36 segmented acoustic fins color-interpolated between A (Cyan), B (Emerald), C (Amber), and D (Rose), and sweep-reactive 3D Z-depth bokeh particles.
+
 ## [3.1.2] - 2026-11-26
 
 ### Fixed
