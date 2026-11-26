@@ -25,8 +25,8 @@ Write-Host "=== 2. Bumping Version to $Version ===" -ForegroundColor Cyan
 $csprojPath = "src\PortaSoundStudio\PortaSoundStudio.csproj"
 $csproj = Get-Content $csprojPath -Raw
 $csproj = $csproj -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>"
-$csproj = $csproj -replace '<AssemblyVersion>[^<]+</AssemblyVersion>', "<AssemblyVersion>$Version</Version>"
-$csproj = $csproj -replace '<FileVersion>[^<]+</FileVersion>', "<FileVersion>$Version</Version>"
+$csproj = $csproj -replace '<AssemblyVersion>[^<]+</AssemblyVersion>', "<AssemblyVersion>$Version</AssemblyVersion>"
+$csproj = $csproj -replace '<FileVersion>[^<]+</FileVersion>', "<FileVersion>$Version</FileVersion>"
 Set-Content -Path $csprojPath -Value $csproj -NoNewline
 
 $readmePath = "README.md"

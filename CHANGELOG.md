@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.3] - 2026-11-26
+
+### Fixed
+- **Library category headers — light theme contrast**: Category header rows (Favourites, General MIDI, Yamaha PSS-790/680) in light theme now render with a distinct blue-tinted background (`#dbeafe`) and high-contrast navy text (`#1e3a5f`), eliminating the near-invisible white-on-white appearance.
+- **Channel Mixer fader overflow**: Volume slider thumb in channel strip cards reduced from 20 px → 14 px height and explicitly constrained to `width: 100%`, preventing the pill thumb from overflowing the narrow card boundaries in the 16-channel rack view.
+
 ## [2.8.4] - 2026-11-24
 
 ### Added
