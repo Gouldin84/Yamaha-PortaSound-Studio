@@ -4,30 +4,30 @@
 
 <div class="hw-vfd rounded-xl p-1 relative">
     <canvas id="liveStageCanvas" class="stage-viz-canvas w-full h-16 rounded-lg block"></canvas>
-    <div class="absolute top-1.5 right-2 flex items-center space-x-1 bg-slate-950/75 backdrop-blur-sm border border-slate-700/60 rounded-lg p-0.5 text-[9px] font-bold">
+    <div class="hw-bay absolute top-1.5 right-2 flex items-center space-x-1 rounded-lg p-0.5 text-[9px] font-bold">
         <button id="btnVizSpectrum"
                 type="button"
                 @onclick='() => SetMode("spectrum")'
                 title="16-Channel Live Spectrum Analyzer"
-                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "spectrum" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "spectrum" ? "hw-accent-btn" : "hw-tab-btn")">
             16-Ch Spectrum
         </button>
         <button id="btnVizWaterfall"
                 type="button"
                 @onclick='() => SetMode("waterfall")'
                 title="Live Falling MIDI Note Matrix"
-                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "waterfall" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "waterfall" ? "hw-accent-btn" : "hw-tab-btn")">
             Note Matrix
         </button>
         <button id="btnVizScope"
                 type="button"
                 @onclick='() => SetMode("scope")'
                 title="Stereo VFD Oscilloscope"
-                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "scope" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "scope" ? "hw-accent-btn" : "hw-tab-btn")">
             VFD Scope
         </button>
     </div>
-    <div class="absolute top-1.5 left-2.5 text-[9px] font-mono uppercase tracking-widest opacity-60 pointer-events-none">
+    <div class="absolute top-1.5 left-2.5 text-[9px] font-mono uppercase tracking-widest opacity-70 pointer-events-none" style="color: var(--vfd-text);">
         @(State.IsPlaying ? "LIVE TELEMETRY" : "STAGE READY")
     </div>
 </div>

@@ -1193,12 +1193,21 @@ namespace PSS790Player.Core
         {
             int stopEpoch = Volatile.Read(ref _stopEpoch);
             Playback? p;
+            bool needsInit;
             lock (_stateLock)
             {
                 p = _playback;
+                needsInit = p == null && _currentFile != null;
                 _hasFinished = false;
             }
 
+            if (needsInit && HasOutputDevice())
+            {
+                InitializePlayback();
+                lock (_stateLock) { p = _playback; }
+            }
+
+            var clampedPos = position < TimeSpan.Zero ? TimeSpan.Zero : position;
             // Use fast targeted active-note silencing during scrubbing/seeking so serial MIDI
             // buses (31.25 kbps) and the UI bridge don't stall on 96-event full controller resets.
             SendActiveNotesOffFast();
@@ -1207,7 +1216,6 @@ namespace PSS790Player.Core
             {
                 try
                 {
-                    var clampedPos = position < TimeSpan.Zero ? TimeSpan.Zero : position;
                     lock (_transportLock)
                     {
                         if (_isDisposed || Volatile.Read(ref _stopEpoch) != stopEpoch)
@@ -1232,6 +1240,10 @@ namespace PSS790Player.Core
                     }
                 }
                 catch { }
+            }
+            else
+            {
+                lock (_stateLock) { _lastKnownPosition = clampedPos; }
             }
 
             NotifyState();

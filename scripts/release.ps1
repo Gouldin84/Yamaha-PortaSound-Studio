@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$dotnet = "C:\Users\MichaelGoulding\AppData\Local\Microsoft\dotnet\dotnet.exe"
+$dotnet = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
 if (-not (Test-Path $dotnet)) {
     $dotnet = "dotnet"
 }

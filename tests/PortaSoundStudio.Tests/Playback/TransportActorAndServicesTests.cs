@@ -271,6 +271,48 @@ namespace PSS790Player.Tests
             Assert.DoesNotContain(visibleOn680, f => f.Format == "pss790");
         }
 
+        [Fact]
+        public async Task PlaybackCoordinator_LoadFileWithSettleDelay_PopulatesChannelsImmediatelyAndCancelsOnStop()
+        {
+            var trackPath = Path.Combine(_gmDir, "settle_test.mid");
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            midi.Chunks.Add(new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)4) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 960 }
+            ));
+            midi.Write(trackPath);
+
+            var store = new AppStateStore();
+            using var library = new LibraryService(store);
+            using var devices = new HardwareDeviceService(store);
+            using var mockDev = new ThreadSafeMockDevice();
+            devices.Player.SetOutputDevice(mockDev);
+
+            using var playback = new PlaybackCoordinator(store, devices, library);
+
+            // Start loading with 400ms settle delay so test runs fast
+            var loadTask = playback.LoadFileAsync(trackPath, autoPlay: true, settleDelayMs: 400);
+            await Task.Delay(120);
+
+            Assert.NotNull(store.LoadedSong);
+            Assert.Equal("settle_test.mid", store.LoadedSong!.FileName);
+            Assert.True(store.DurationSeconds > 0);
+
+            // Cancelling via Stop() during settle must clear countdown and keep playback stopped
+            playback.Stop();
+            await loadTask;
+
+            Assert.False(store.IsPreparingPlayback);
+            Assert.False(store.IsPlaying);
+
+            // Seek bounds clamping
+            playback.Seek(store.DurationSeconds * 0.5);
+            Assert.True(store.CurrentSeconds > 0);
+            playback.Seek(9999);
+            Assert.InRange(store.CurrentSeconds, 0, store.DurationSeconds + 0.01);
+        }
+
         private sealed class ThreadSafeMockDevice : Melanchall.DryWetMidi.Multimedia.IOutputDevice
         {
             public event EventHandler<Melanchall.DryWetMidi.Multimedia.MidiEventSentEventArgs>? EventSent;

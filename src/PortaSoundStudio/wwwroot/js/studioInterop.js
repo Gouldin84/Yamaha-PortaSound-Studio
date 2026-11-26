@@ -17,6 +17,8 @@ window.studioInterop = (() => {
     let vectorStateY = 0;
     let lastOrbitDispatchTime = 0;
     const vectorTrail = [];
+    let vectorTrailDecayId = null;
+    let activeVectorCanvasId = null;
 
     // 60fps Stage Visualizer state
     const stageChannelLevels = new Float32Array(16);
@@ -54,6 +56,9 @@ window.studioInterop = (() => {
         localStorage.setItem("yamaha_studio_handheld", handheld ? "true" : "false");
         if (model) {
             localStorage.setItem("yamaha_studio_model", model);
+        }
+        if (activeVectorCanvasId && document.getElementById(activeVectorCanvasId)) {
+            drawVectorCanvas(activeVectorCanvasId, vectorStateX, vectorStateY, false);
         }
     }
 
@@ -178,7 +183,23 @@ window.studioInterop = (() => {
         };
     }
 
-    function drawVectorCanvas(canvasId, x, y) {
+    function scheduleVectorDecay(canvasId) {
+        if (vectorTrailDecayId) return;
+        const stepDecay = () => {
+            vectorTrailDecayId = null;
+            if (vectorTrail.length === 0) return;
+            drawVectorCanvas(canvasId, vectorStateX, vectorStateY, false);
+            if (vectorTrail.length > 0) {
+                vectorTrailDecayId = requestAnimationFrame(stepDecay);
+            }
+        };
+        vectorTrailDecayId = requestAnimationFrame(stepDecay);
+    }
+
+    function drawVectorCanvas(canvasId, x, y, recordTrail = true) {
+        activeVectorCanvasId = canvasId;
+        const prevX = vectorStateX;
+        const prevY = vectorStateY;
         vectorStateX = x;
         vectorStateY = y;
         const canvas = document.getElementById(canvasId);
@@ -199,163 +220,385 @@ window.studioInterop = (() => {
         ctx.scale(dpr, dpr);
         ctx.clearRect(0, 0, logicalW, logicalH);
 
-        const cx = 120, cy = 120, rActive = 96;
-
-        // Outer metallic gimbal collar
-        ctx.beginPath();
-        ctx.arc(cx, cy, rActive + 12, 0, Math.PI * 2);
-        const bezelGrad = ctx.createLinearGradient(cx - rActive, cy - rActive, cx + rActive, cy + rActive);
-        bezelGrad.addColorStop(0, "#334155");
-        bezelGrad.addColorStop(0.5, "#1e293b");
-        bezelGrad.addColorStop(1, "#0f172a");
-        ctx.fillStyle = bezelGrad;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Inner cavity
-        ctx.beginPath();
-        ctx.arc(cx, cy, rActive, 0, Math.PI * 2);
-        const cavityGrad = ctx.createRadialGradient(cx, cy, 6, cx, cy, rActive);
-        cavityGrad.addColorStop(0, "#111c33");
-        cavityGrad.addColorStop(0.7, "#0c1424");
-        cavityGrad.addColorStop(1, "#060a12");
-        ctx.fillStyle = cavityGrad;
-        ctx.fill();
-        ctx.strokeStyle = "rgba(51, 65, 85, 0.8)";
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
-
-        // Cardinal glows
-        const glows = [
-            [cx, cy - rActive * 0.7, "6, 182, 212"],
-            [cx + rActive * 0.7, cy, "16, 185, 129"],
-            [cx, cy + rActive * 0.7, "245, 158, 11"],
-            [cx - rActive * 0.7, cy, "244, 63, 94"]
-        ];
-        glows.forEach(([gx, gy, rgb]) => {
-            const g = ctx.createRadialGradient(gx, gy, 4, gx, gy, 50);
-            g.addColorStop(0, `rgba(${rgb}, 0.22)`);
-            g.addColorStop(1, `rgba(${rgb}, 0)`);
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.arc(gx, gy, 50, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
-        // Rings & ticks
-        [0.25, 0.5, 0.75, 1.0].forEach((r, idx) => {
-            ctx.beginPath();
-            ctx.arc(cx, cy, rActive * r, 0, Math.PI * 2);
-            ctx.strokeStyle = idx === 3 ? "rgba(99, 102, 241, 0.5)" : "rgba(71, 85, 105, 0.3)";
-            ctx.lineWidth = idx === 3 ? 1.5 : 0.8;
-            ctx.stroke();
-        });
-
-        for (let deg = 0; deg < 360; deg += 15) {
-            const rad = (deg * Math.PI) / 180;
-            const isMajor = deg % 90 === 0;
-            const isSemi = deg % 45 === 0;
-            const tickLen = isMajor ? 6 : (isSemi ? 4 : 2.5);
-            ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(rad) * rActive, cy + Math.sin(rad) * rActive);
-            ctx.lineTo(cx + Math.cos(rad) * (rActive - tickLen), cy + Math.sin(rad) * (rActive - tickLen));
-            ctx.strokeStyle = isMajor ? "rgba(226, 232, 240, 0.7)" : (isSemi ? "rgba(148, 163, 184, 0.5)" : "rgba(100, 116, 139, 0.3)");
-            ctx.lineWidth = isMajor ? 1.5 : 1;
-            ctx.stroke();
-        }
-
-        // Crosshair
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - rActive); ctx.lineTo(cx, cy - 6);
-        ctx.moveTo(cx, cy + 6); ctx.lineTo(cx, cy + rActive);
-        ctx.moveTo(cx - rActive, cy); ctx.lineTo(cx - 6, cy);
-        ctx.moveTo(cx + 6, cy); ctx.lineTo(cx + rActive, cy);
-        ctx.strokeStyle = "rgba(71, 85, 105, 0.4)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(148, 163, 184, 0.6)";
-        ctx.stroke();
-
-        // Cardinal letters
-        ctx.font = "bold 10px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#22d3ee"; ctx.fillText("A", cx, cy - rActive - 7);
-        ctx.fillStyle = "#34d399"; ctx.fillText("B", cx + rActive + 7, cy);
-        ctx.fillStyle = "#fbbf24"; ctx.fillText("C", cx, cy + rActive + 7);
-        ctx.fillStyle = "#fb7185"; ctx.fillText("D", cx - rActive - 7, cy);
-
-        const puckX = cx + vectorStateX * rActive;
-        const puckY = cy - vectorStateY * rActive;
-
-        vectorTrail.push({ x: puckX, y: puckY });
-        if (vectorTrail.length > 26) vectorTrail.shift();
-
-        // Phosphor persistence trail
-        for (let i = 0; i < vectorTrail.length - 1; i++) {
-            const pt = vectorTrail[i];
-            const ratio = (i + 1) / vectorTrail.length;
-            ctx.beginPath();
-            ctx.arc(pt.x, pt.y, 1.5 + ratio * 3.5, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(99, 102, 241, ${(ratio * 0.45).toFixed(3)})`;
-            ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.lineTo(puckX, puckY);
-        ctx.strokeStyle = "rgba(99, 102, 241, 0.75)";
-        ctx.lineWidth = 2;
-        ctx.shadowColor = "#6366f1";
-        ctx.shadowBlur = 8;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
+        const isLight = document.body.classList.contains("theme-light");
+        const cx = 120, cy = 120, rActive = 84;
         const w = calculateVectorWeights(vectorStateX, vectorStateY);
         const rCol = Math.round(w.wA * 34 + w.wB * 52 + w.wC * 251 + w.wD * 251);
         const gCol = Math.round(w.wA * 211 + w.wB * 211 + w.wC * 191 + w.wD * 113);
         const bCol = Math.round(w.wA * 238 + w.wB * 153 + w.wC * 36 + w.wD * 133);
 
-        const puckGlow = ctx.createRadialGradient(puckX, puckY, 2, puckX, puckY, 18);
-        puckGlow.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, 0.9)`);
-        puckGlow.addColorStop(0.5, `rgba(${rCol}, ${gCol}, ${bCol}, 0.35)`);
-        puckGlow.addColorStop(1, `rgba(${rCol}, ${gCol}, ${bCol}, 0)`);
-        ctx.fillStyle = puckGlow;
+        // 1. Deep Exterior Cast Drop Shadow beneath Raised Machined Joystick Flange
+        const outerDrop = ctx.createRadialGradient(cx + 3, cy + 8, rActive * 0.72, cx + 3, cy + 8, rActive + 32);
+        outerDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.32)" : "rgba(2, 6, 16, 0.80)");
+        outerDrop.addColorStop(0.65, isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(2, 6, 16, 0.38)");
+        outerDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = outerDrop;
         ctx.beginPath();
-        ctx.arc(puckX, puckY, 18, 0, Math.PI * 2);
+        ctx.arc(cx + 3, cy + 8, rActive + 32, 0, Math.PI * 2);
         ctx.fill();
 
+        // 2. Sculpted Chamfered Hardware Bezel Flange (Top-left light source 315°)
         ctx.beginPath();
-        ctx.arc(puckX, puckY, 10, 0, Math.PI * 2);
-        const knobGrad = ctx.createRadialGradient(puckX - 3, puckY - 3, 1, puckX, puckY, 10);
-        knobGrad.addColorStop(0, "#f8fafc");
-        knobGrad.addColorStop(0.3, "#94a3b8");
-        knobGrad.addColorStop(0.75, "#334155");
-        knobGrad.addColorStop(1, "#0f172a");
-        ctx.fillStyle = knobGrad;
+        ctx.arc(cx, cy, rActive + 24, 0, Math.PI * 2);
+        const flangeGrad = ctx.createLinearGradient(cx - rActive - 20, cy - rActive - 20, cx + rActive + 20, cy + rActive + 20);
+        if (isLight) {
+            flangeGrad.addColorStop(0, "#ffffff");
+            flangeGrad.addColorStop(0.35, "#e6edf6");
+            flangeGrad.addColorStop(0.75, "#c2cfdf");
+            flangeGrad.addColorStop(1, "#94a6be");
+        } else {
+            flangeGrad.addColorStop(0, "#516488");
+            flangeGrad.addColorStop(0.38, "#34425c");
+            flangeGrad.addColorStop(0.78, "#222c40");
+            flangeGrad.addColorStop(1, "#141c2b");
+        }
+        ctx.fillStyle = flangeGrad;
         ctx.fill();
-        ctx.strokeStyle = "#cbd5e1";
-        ctx.lineWidth = 1.2;
+        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.22)";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
 
+        // Corner Hex Mounting Screws on Bezel (at 45°, 135°, 225°, 315°)
+        [45, 135, 225, 315].forEach(deg => {
+            const rad = (deg * Math.PI) / 180;
+            const sx = cx + Math.cos(rad) * (rActive + 16);
+            const sy = cy + Math.sin(rad) * (rActive + 16);
+            ctx.beginPath();
+            ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
+            ctx.fillStyle = isLight ? "#94a3b8" : "#111827";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2.7, 0, Math.PI * 2);
+            const screwG = ctx.createLinearGradient(sx - 2, sy - 2, sx + 2, sy + 2);
+            screwG.addColorStop(0, isLight ? "#ffffff" : "#94a3b8");
+            screwG.addColorStop(1, isLight ? "#cbd5e1" : "#334155");
+            ctx.fillStyle = screwG;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(sx - 1.5, sy - 0.8);
+            ctx.lineTo(sx + 1.5, sy + 0.8);
+            ctx.strokeStyle = isLight ? "#475569" : "#0f172a";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        });
+
+        // 3. Stepped Deep Parabolic Rim Wall (Receding inward into the pit)
+        // Outer recessed lip highlight
         ctx.beginPath();
-        ctx.arc(puckX, puckY, 6.5, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+        ctx.arc(cx, cy, rActive + 9, 0, Math.PI * 2);
+        const lipWallGrad = ctx.createLinearGradient(cx - rActive, cy - rActive, cx + rActive, cy + rActive);
+        if (isLight) {
+            lipWallGrad.addColorStop(0, "#7f92ab");
+            lipWallGrad.addColorStop(0.55, "#b7c6da");
+            lipWallGrad.addColorStop(1, "#f8fafc");
+        } else {
+            lipWallGrad.addColorStop(0, "#0b111c");
+            lipWallGrad.addColorStop(0.55, "#1f2a3f");
+            lipWallGrad.addColorStop(1, "#45587a");
+        }
+        ctx.fillStyle = lipWallGrad;
+        ctx.fill();
+
+        // 4. Deep Concave Funnel Bowl (Concentric Depth Shading: Brighter edge -> Deep Pit Center!)
+        // Subtle 3D perspective center offset (+0px, +5px) gives an overhead 15-degree camera pitch down into the dish
+        const pitAnchorX = cx + vectorStateX * 9;
+        const pitAnchorY = (cy + 5) - vectorStateY * 9;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, rActive + 2, 0, Math.PI * 2);
+        ctx.clip();
+
+        // Base angled funnel slope (top-left inner wall sits in shadow, bottom-right wall catches overhead studio light!)
+        const slopeGrad = ctx.createLinearGradient(cx - rActive * 0.8, cy - rActive * 0.8, cx + rActive * 0.85, cy + rActive * 0.85);
+        if (isLight) {
+            slopeGrad.addColorStop(0, "#91a3bc");
+            slopeGrad.addColorStop(0.32, "#bac8db");
+            slopeGrad.addColorStop(0.68, "#dce6f2");
+            slopeGrad.addColorStop(1, "#f8fbff");
+        } else {
+            slopeGrad.addColorStop(0, "#0c1322");
+            slopeGrad.addColorStop(0.38, "#182236");
+            slopeGrad.addColorStop(0.75, "#25334d");
+            slopeGrad.addColorStop(1, "#354769");
+        }
+        ctx.fillStyle = slopeGrad;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        // Deep concentric depth darkening down into the center bowl
+        const depthWell = ctx.createRadialGradient(pitAnchorX, pitAnchorY, 4, cx, cy, rActive + 2);
+        if (isLight) {
+            depthWell.addColorStop(0, "rgba(15, 23, 42, 0.72)");
+            depthWell.addColorStop(0.28, "rgba(30, 41, 59, 0.44)");
+            depthWell.addColorStop(0.62, "rgba(71, 85, 105, 0.16)");
+            depthWell.addColorStop(1, "rgba(255, 255, 255, 0)");
+        } else {
+            depthWell.addColorStop(0, "rgba(2, 5, 12, 0.94)");
+            depthWell.addColorStop(0.32, "rgba(5, 10, 22, 0.70)");
+            depthWell.addColorStop(0.68, "rgba(12, 18, 34, 0.28)");
+            depthWell.addColorStop(1, "rgba(0, 0, 0, 0)");
+        }
+        ctx.fillStyle = depthWell;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        // Strong inner-rim overhang cast shadow (top-left shadow lip falling onto bowl wall)
+        const overhangShadow = ctx.createRadialGradient(cx + 8, cy + 10, rActive * 0.78, cx, cy, rActive + 4);
+        overhangShadow.addColorStop(0, "rgba(0,0,0,0)");
+        overhangShadow.addColorStop(1, isLight ? "rgba(15, 23, 42, 0.34)" : "rgba(0, 0, 0, 0.75)");
+        ctx.fillStyle = overhangShadow;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        // Cardinal Voice Color Wash inside bowl walls
+        const glows = [
+            [cx, cy - rActive * 0.68, "6, 182, 212"],
+            [cx + rActive * 0.68, cy, "16, 185, 129"],
+            [cx, cy + rActive * 0.68, "245, 158, 11"],
+            [cx - rActive * 0.68, cy, "244, 63, 94"]
+        ];
+        glows.forEach(([gx, gy, rgb]) => {
+            const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, 48);
+            g.addColorStop(0, `rgba(${rgb}, ${isLight ? 0.26 : 0.24})`);
+            g.addColorStop(1, `rgba(${rgb}, 0)`);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(gx, gy, 48, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        // Stepped Perspective Elevation Contours inside Bowl (Receding deeper toward pitAnchor)
+        [0.88, 0.70, 0.52, 0.36].forEach((f, idx) => {
+            const lerp = (1 - f) * 0.85;
+            const ringX = cx + (pitAnchorX - cx) * lerp;
+            const ringY = cy + (pitAnchorY - cy) * lerp;
+            const ringR = rActive * f;
+            ctx.beginPath();
+            ctx.arc(ringX, ringY, ringR, 0, Math.PI * 2);
+            ctx.strokeStyle = isLight
+                ? `rgba(15, 23, 42, ${0.10 + idx * 0.05})`
+                : `rgba(148, 163, 184, ${0.12 + idx * 0.03})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Subtle lower-right highlight arc on each step contour
+            ctx.beginPath();
+            ctx.arc(ringX, ringY, ringR - 0.8, 0.1 * Math.PI, 0.65 * Math.PI);
+            ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.08)";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        });
+
+        // Recessed Axis Guide Grooves converging into bottom pit
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - rActive); ctx.lineTo(pitAnchorX, pitAnchorY);
+        ctx.moveTo(cx, cy + rActive); ctx.lineTo(pitAnchorX, pitAnchorY);
+        ctx.moveTo(cx - rActive, cy); ctx.lineTo(pitAnchorX, pitAnchorY);
+        ctx.moveTo(cx + rActive, cy); ctx.lineTo(pitAnchorX, pitAnchorY);
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.22)" : "rgba(148, 163, 184, 0.20)";
         ctx.lineWidth = 1;
         ctx.stroke();
 
+        // 5. Deep Gimbal Socket Well & Pleated Articulated Rubber Bellows (Dust Boot)
+        const puckX = cx + vectorStateX * (rActive - 12);
+        const puckY = (cy - 2) - vectorStateY * (rActive - 12);
+
+        // Deep Mechanical Socket Floor
         ctx.beginPath();
-        ctx.arc(puckX, puckY, 3, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${rCol}, ${gCol}, ${bCol})`;
+        ctx.arc(cx, cy + 5, 28, 0, Math.PI * 2);
+        const pitFloor = ctx.createRadialGradient(cx, cy + 5, 4, cx, cy + 5, 28);
+        pitFloor.addColorStop(0, "#02050c");
+        pitFloor.addColorStop(0.65, isLight ? "#1e293b" : "#070c16");
+        pitFloor.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = pitFloor;
         ctx.fill();
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 0.8;
+
+        // 3 Concentric Molded Rubber Gaiter Ribs stepping up toward the Stick Neck
+        const ribRadii = [23, 17.5, 12.5];
+        ribRadii.forEach((rr, idx) => {
+            const t = (idx + 1) / (ribRadii.length + 1);
+            const rx = cx + (puckX - cx) * (t * 0.42);
+            const ry = (cy + 5) + (puckY - (cy + 5)) * (t * 0.42);
+            // Pleat drop shadow
+            ctx.beginPath();
+            ctx.arc(rx + 1.5, ry + 2.5, rr + 1, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+            ctx.fill();
+            // Pleat rubber body
+            ctx.beginPath();
+            ctx.arc(rx, ry, rr, 0, Math.PI * 2);
+            const bootG = ctx.createRadialGradient(rx - rr * 0.3, ry - rr * 0.3, 1, rx, ry, rr);
+            if (isLight) {
+                bootG.addColorStop(0, "#475569");
+                bootG.addColorStop(0.65, "#1e293b");
+                bootG.addColorStop(1, "#090d16");
+            } else {
+                bootG.addColorStop(0, "#334155");
+                bootG.addColorStop(0.65, "#161f30");
+                bootG.addColorStop(1, "#050810");
+            }
+            ctx.fillStyle = bootG;
+            ctx.fill();
+            ctx.strokeStyle = isLight ? "rgba(255,255,255,0.22)" : "rgba(148,163,184,0.20)";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        });
+
+        ctx.restore();
+
+        // Engraved Cardinal Corner Badges on the Bezel (A, B, C, D)
+        ctx.font = "900 11px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = isLight ? "#0284c7" : "#22d3ee"; ctx.fillText("A", cx, cy - rActive - 15);
+        ctx.fillStyle = isLight ? "#059669" : "#34d399"; ctx.fillText("B", cx + rActive + 15, cy);
+        ctx.fillStyle = isLight ? "#d97706" : "#fbbf24"; ctx.fillText("C", cx, cy + rActive + 15);
+        ctx.fillStyle = isLight ? "#e11d48" : "#fb7185"; ctx.fillText("D", cx - rActive - 15, cy);
+
+        // Motion Phosphor Trail (Fades out completely over 320ms once stationary)
+        const nowMs = performance.now();
+        const trailLifetimeMs = 320;
+        if (recordTrail && (Math.hypot(x - prevX, y - prevY) > 0.012)) {
+            vectorTrail.push({ x: puckX, y: puckY, t: nowMs });
+            if (vectorTrail.length > 24) vectorTrail.shift();
+        }
+        while (vectorTrail.length > 0 && (nowMs - vectorTrail[0].t) > trailLifetimeMs) {
+            vectorTrail.shift();
+        }
+        for (let i = 0; i < vectorTrail.length; i++) {
+            const pt = vectorTrail[i];
+            const life = Math.max(0, 1.0 - (nowMs - pt.t) / trailLifetimeMs);
+            if (life <= 0) continue;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 2 + life * 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rCol}, ${gCol}, ${bCol}, ${(life * 0.42).toFixed(3)})`;
+            ctx.fill();
+        }
+        if (vectorTrail.length > 0) scheduleVectorDecay(canvasId);
+
+        // 6. Cast Shadows beneath Raised Chrome Shaft & Elevated Thumb Hat (15° Overhead Key Light)
+        const shaftBaseX = cx + (puckX - cx) * 0.14;
+        const shaftBaseY = (cy + 5) + (puckY - (cy + 5)) * 0.14;
+        const hatShadowX = puckX + 6 + vectorStateX * 4;
+        const hatShadowY = puckY + 11 - vectorStateY * 4;
+
+        ctx.beginPath();
+        ctx.moveTo(shaftBaseX + 3, shaftBaseY + 6);
+        ctx.lineTo(hatShadowX, hatShadowY);
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.30)" : "rgba(0, 0, 0, 0.72)";
+        ctx.lineWidth = 8;
+        ctx.lineCap = "round";
         ctx.stroke();
+
+        const hatDrop = ctx.createRadialGradient(hatShadowX, hatShadowY, 5, hatShadowX, hatShadowY, 26);
+        hatDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.42)" : "rgba(0, 0, 0, 0.85)");
+        hatDrop.addColorStop(0.55, isLight ? "rgba(15, 23, 42, 0.18)" : "rgba(0, 0, 0, 0.42)");
+        hatDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = hatDrop;
+        ctx.beginPath();
+        ctx.arc(hatShadowX, hatShadowY, 26, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 7. Foreshortened Steel Shaft extending out from the Deep Gimbal Pit
+        // Draws from shaftBase up to thumb cap neck even at (0,0) because cy+5 pit -> cy-2 elevated hat!
+        const shaftGrad = ctx.createLinearGradient(shaftBaseX - 5, shaftBaseY, puckX + 5, puckY);
+        shaftGrad.addColorStop(0, "#1e293b");
+        shaftGrad.addColorStop(0.42, "#e2e8f0");
+        shaftGrad.addColorStop(0.75, "#94a3b8");
+        shaftGrad.addColorStop(1, "#334155");
+        ctx.beginPath();
+        ctx.moveTo(shaftBaseX, shaftBaseY);
+        ctx.lineTo(puckX, puckY + 3);
+        ctx.strokeStyle = shaftGrad;
+        ctx.lineWidth = 8.5;
+        ctx.lineCap = "round";
+        ctx.stroke();
+
+        // 8. Luminous LED Blend Collar Ring tucked directly beneath the Mushroom Cap
+        const collarGlow = ctx.createRadialGradient(puckX, puckY + 2, 10, puckX, puckY + 2, 26);
+        collarGlow.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, 0.85)`);
+        collarGlow.addColorStop(0.65, `rgba(${rCol}, ${gCol}, ${bCol}, 0.24)`);
+        collarGlow.addColorStop(1, `rgba(${rCol}, ${gCol}, ${bCol}, 0)`);
+        ctx.fillStyle = collarGlow;
+        ctx.beginPath();
+        ctx.arc(puckX, puckY + 2, 26, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 9. Thick 3D Sculpted Hardware Joystick Cap (Skirt -> Knurled Bevel -> Concave Thumb Dish)
+        const capR = 20;
+        // Lower 3D Cylinder Skirt / Side Wall (offset slightly downward for perspective thickness)
+        ctx.beginPath();
+        ctx.arc(puckX, puckY + 3.2, capR, 0, Math.PI * 2);
+        const skirtGrad = ctx.createLinearGradient(puckX - capR, puckY, puckX + capR, puckY + 6);
+        skirtGrad.addColorStop(0, isLight ? "#64748b" : "#1e293b");
+        skirtGrad.addColorStop(0.5, isLight ? "#334155" : "#090f1d");
+        skirtGrad.addColorStop(1, "#020617");
+        ctx.fillStyle = skirtGrad;
+        ctx.fill();
+
+        // Colored LED Accent Ring around Cap Waist
+        ctx.beginPath();
+        ctx.arc(puckX, puckY + 1.4, capR - 0.5, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(${rCol}, ${gCol}, ${bCol}, 0.90)`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // Top Mushroom Dome Rim
+        ctx.beginPath();
+        ctx.arc(puckX, puckY, capR - 1, 0, Math.PI * 2);
+        const domeTop = ctx.createRadialGradient(puckX - 6, puckY - 7, 2, puckX, puckY, capR);
+        if (isLight) {
+            domeTop.addColorStop(0, "#ffffff");
+            domeTop.addColorStop(0.45, "#dbe4f0");
+            domeTop.addColorStop(0.85, "#8fa1b9");
+            domeTop.addColorStop(1, "#475569");
+        } else {
+            domeTop.addColorStop(0, "#8fa4c4");
+            domeTop.addColorStop(0.40, "#4b5c7d");
+            domeTop.addColorStop(0.82, "#243047");
+            domeTop.addColorStop(1, "#0f172a");
+        }
+        ctx.fillStyle = domeTop;
+        ctx.fill();
+        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.92)" : "rgba(255, 255, 255, 0.35)";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // Sculpted Concave Thumb Dimple (Inner illumination flipped: dark top-left, bright bottom-right!)
+        const dimpleR = 12;
+        ctx.beginPath();
+        ctx.arc(puckX, puckY, dimpleR, 0, Math.PI * 2);
+        const dimpleGrad = ctx.createLinearGradient(puckX - dimpleR, puckY - dimpleR, puckX + dimpleR, puckY + dimpleR);
+        if (isLight) {
+            dimpleGrad.addColorStop(0, "#7c8ea7");
+            dimpleGrad.addColorStop(0.5, "#cfdbe9");
+            dimpleGrad.addColorStop(1, "#ffffff");
+        } else {
+            dimpleGrad.addColorStop(0, "#0b111e");
+            dimpleGrad.addColorStop(0.52, "#1f2b40");
+            dimpleGrad.addColorStop(1, "#4d6185");
+        }
+        ctx.fillStyle = dimpleGrad;
+        ctx.fill();
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.25)" : "rgba(0, 0, 0, 0.65)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Concentric Thumb Grip Texture Rings + Tiny Center LED Jewel
+        [8.5, 5.5].forEach(gr => {
+            ctx.beginPath();
+            ctx.arc(puckX, puckY, gr, 0, Math.PI * 2);
+            ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.08)";
+            ctx.lineWidth = 0.7;
+            ctx.stroke();
+        });
+
+        ctx.beginPath();
+        ctx.arc(puckX, puckY, 2.8, 0, Math.PI * 2);
+        const pipGrad = ctx.createRadialGradient(puckX - 0.8, puckY - 0.8, 0.3, puckX, puckY, 3);
+        pipGrad.addColorStop(0, "#ffffff");
+        pipGrad.addColorStop(0.55, `rgb(${rCol}, ${gCol}, ${bCol})`);
+        pipGrad.addColorStop(1, "rgba(15, 23, 42, 0.85)");
+        ctx.fillStyle = pipGrad;
+        ctx.fill();
 
         ctx.restore();
     }
@@ -370,7 +613,7 @@ window.studioInterop = (() => {
 
         function handlePointer(e, forceSend) {
             const rect = canvas.getBoundingClientRect();
-            const scale = (rect.width / 240) * 96;
+            const scale = (rect.width / 240) * 72;
             let x = (e.clientX - rect.left - rect.width / 2) / Math.max(1, scale);
             let y = (rect.height / 2 - (e.clientY - rect.top)) / Math.max(1, scale);
             const dist = Math.sqrt(x * x + y * y);
@@ -444,11 +687,105 @@ window.studioInterop = (() => {
         vectorOrbitAnimId = requestAnimationFrame(step);
     }
 
+    function clearVectorTrail() {
+        vectorTrail.length = 0;
+        if (activeVectorCanvasId) {
+            drawVectorCanvas(activeVectorCanvasId, vectorStateX, vectorStateY, false);
+        }
+    }
+
     function stopVectorOrbit() {
         if (vectorOrbitAnimId) {
             cancelAnimationFrame(vectorOrbitAnimId);
             vectorOrbitAnimId = null;
         }
+    }
+
+    // Precision Timeline Scrubber (Immune to 10Hz Blazor timer value overwrites)
+    const scrubState = { dragging: false, duration: 0, pct: 0, current: 0 };
+
+    function fmtSec(sec) {
+        const s = Math.max(0, Math.floor(sec || 0));
+        const m = Math.floor(s / 60);
+        const rem = s % 60;
+        return String(m).padStart(2, "0") + ":" + String(rem).padStart(2, "0");
+    }
+
+    function renderScrubberVisuals(pct) {
+        const clampedPct = Math.max(0, Math.min(100, pct));
+        scrubState.pct = clampedPct;
+        const fill = document.getElementById("timeScrubberFill");
+        const thumb = document.getElementById("timeScrubberThumb");
+        const tip = document.getElementById("timeScrubberTooltip");
+        const track = document.getElementById("timeScrubber");
+        if (fill) fill.style.width = clampedPct.toFixed(2) + "%";
+        if (thumb) thumb.style.left = clampedPct.toFixed(2) + "%";
+        if (tip) {
+            tip.style.left = clampedPct.toFixed(2) + "%";
+            tip.textContent = fmtSec((clampedPct / 100.0) * scrubState.duration);
+        }
+        if (track) track.setAttribute("aria-valuenow", String(Math.round((clampedPct / 100.0) * scrubState.duration)));
+    }
+
+    function syncTimelineScrubber(currentSeconds, durationSeconds) {
+        scrubState.duration = Math.max(0, durationSeconds || 0);
+        if (scrubState.dragging) return;
+        const pct = scrubState.duration > 0.05
+            ? Math.min(100, Math.max(0, (currentSeconds / scrubState.duration) * 100.0))
+            : 0;
+        renderScrubberVisuals(pct);
+    }
+
+    function initTimelineScrubber(trackId, dotNetRef) {
+        const track = document.getElementById(trackId);
+        if (!track || track.dataset.bound === "true") return;
+        track.dataset.bound = "true";
+
+        function computeRatio(clientX) {
+            const rect = track.getBoundingClientRect();
+            if (rect.width <= 1) return 0;
+            return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+        }
+
+        function previewAt(clientX) {
+            const ratio = computeRatio(clientX);
+            renderScrubberVisuals(ratio * 100.0);
+            const curEl = document.getElementById("currentTimeDisplay");
+            if (curEl) curEl.textContent = fmtSec(ratio * scrubState.duration);
+            return ratio * scrubState.duration;
+        }
+
+        track.addEventListener("pointerdown", (e) => {
+            if (scrubState.duration <= 0.05) return;
+            scrubState.dragging = true;
+            track.classList.add("is-scrubbing");
+            try { track.setPointerCapture(e.pointerId); } catch { }
+            previewAt(e.clientX);
+            e.preventDefault();
+        });
+
+        track.addEventListener("pointermove", (e) => {
+            const ratio = computeRatio(e.clientX);
+            const tip = document.getElementById("timeScrubberTooltip");
+            if (tip && !scrubState.dragging && scrubState.duration > 0.05) {
+                tip.style.left = (ratio * 100.0).toFixed(2) + "%";
+                tip.textContent = fmtSec(ratio * scrubState.duration);
+            }
+            if (scrubState.dragging) {
+                previewAt(e.clientX);
+            }
+        });
+
+        const finishScrub = (e) => {
+            if (!scrubState.dragging) return;
+            scrubState.dragging = false;
+            track.classList.remove("is-scrubbing");
+            const targetSec = previewAt(e.clientX);
+            try { if (track.hasPointerCapture(e.pointerId)) track.releasePointerCapture(e.pointerId); } catch { }
+            dotNetRef.invokeMethodAsync("CommitScrubSeconds", targetSec);
+        };
+        track.addEventListener("pointerup", finishScrub);
+        track.addEventListener("pointercancel", finishScrub);
     }
 
     function initFmEnvelopeDrag(svgId, isModulator, dotNetRef) {
@@ -603,11 +940,12 @@ window.studioInterop = (() => {
                     ctx.clearRect(0, 0, w, h);
 
                     const bodyStyles = getComputedStyle(document.body);
+                    const isLight = document.body.classList.contains("theme-light");
                     const acc = bodyStyles.getPropertyValue("--acc").trim() || "#06b6d4";
                     const acc2 = bodyStyles.getPropertyValue("--acc-2").trim() || "#6366f1";
 
                     // Background horizon grid
-                    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+                    ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.08)" : "rgba(148, 163, 184, 0.08)";
                     ctx.lineWidth = 1;
                     for (let gy = Math.round(h * 0.28); gy < h; gy += Math.round(h * 0.28)) {
                         ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
@@ -694,13 +1032,13 @@ window.studioInterop = (() => {
                             const pY = h - Math.max(4, stageChannelPeaks[i] * (h - 14)) - 7;
                             if (stageChannelPeaks[i] > 0.08) {
                                 ctx.shadowBlur = 0;
-                                ctx.fillStyle = "#f8fafc";
+                                ctx.fillStyle = isLight ? "#0f172a" : "#f8fafc";
                                 ctx.fillRect(bx, pY, barW, 1.8);
                             }
 
                             // Tiny channel index base tick
                             ctx.shadowBlur = 0;
-                            ctx.fillStyle = "rgba(148, 163, 184, 0.45)";
+                            ctx.fillStyle = isLight ? "rgba(15, 23, 42, 0.55)" : "rgba(148, 163, 184, 0.45)";
                             ctx.font = "700 8px ui-monospace, monospace";
                             ctx.textAlign = "center";
                             ctx.fillText(String(i + 1), bx + barW / 2, h - 0.5);
@@ -822,6 +1160,9 @@ window.studioInterop = (() => {
         playMetronomeClick,
         feedVuMeter,
         drawVectorCanvas,
+        clearVectorTrail,
+        initTimelineScrubber,
+        syncTimelineScrubber,
         setupVectorTouchpad,
         startVectorOrbit,
         stopVectorOrbit,

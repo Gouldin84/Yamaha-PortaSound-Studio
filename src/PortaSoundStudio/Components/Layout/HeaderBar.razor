@@ -32,7 +32,7 @@
                             @(IsPss680 ? "2-Op FM" : "AWM Vector")
                         </span>
                     </div>
-                    <p id="activeModelSubtitle" class="hidden xl:block text-[9px] font-mono" style="color: var(--text-lo);">PortaSound Workstation v3.0.3</p>
+                    <p id="activeModelSubtitle" class="hidden xl:block text-[9px] font-mono" style="color: var(--text-lo);">PortaSound Workstation v3.1.0</p>
                 </div>
                 <svg id="modelDropdownChevron"
                      class="w-3.5 h-3.5 transition-transform duration-200 ml-0.5 shrink-0 @(ShowModelMenu ? "rotate-180" : "")"
@@ -53,15 +53,15 @@
 
                     <button type="button"
                             @onclick='() => SelectModel("pss790")'
-                            class="model-option-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition mb-1.5 cursor-pointer @(!IsPss680 ? "bg-slate-900/80 border-cyan-500/50" : "border-transparent hover:bg-slate-900/40")">
+                            class="model-option-btn hw-list-card @(!IsPss680 ? "is-selected" : "") w-full flex items-center justify-between p-2.5 text-left mb-1.5 cursor-pointer">
                         <div class="flex items-center space-x-2.5 min-w-0">
                             <img src="images/app_icon.png" alt="PSS-790" class="w-8 h-8 rounded-lg border border-cyan-500/40 shrink-0" />
                             <div class="min-w-0">
-                                <div class="text-xs font-bold text-white flex items-center space-x-1.5">
+                                <div class="text-xs font-bold flex items-center space-x-1.5" style="color: var(--text-hi);">
                                     <span>Yamaha PSS-790</span>
                                     <span class="px-1.5 py-0.2 text-[8px] font-bold rounded bg-cyan-950 text-cyan-300 border border-cyan-800">28-Voice AWM</span>
                                 </div>
-                                <div class="text-[10px] text-slate-400 truncate">AWM PCM + 2D Vector Joystick Synth</div>
+                                <div class="text-[10px] truncate" style="color: var(--text-mid);">AWM PCM + 2D Vector Joystick Synth</div>
                             </div>
                         </div>
                         @if (!IsPss680)
@@ -72,15 +72,15 @@
 
                     <button type="button"
                             @onclick='() => SelectModel("pss680")'
-                            class="model-option-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition cursor-pointer @(IsPss680 ? "bg-slate-900/80 border-amber-500/50" : "border-transparent hover:bg-slate-900/40")">
+                            class="model-option-btn hw-list-card @(IsPss680 ? "is-selected" : "") w-full flex items-center justify-between p-2.5 text-left cursor-pointer">
                         <div class="flex items-center space-x-2.5 min-w-0">
                             <img src="images/pss680_icon.png" alt="PSS-680" class="w-8 h-8 rounded-lg border border-amber-500/40 shrink-0" />
                             <div class="min-w-0">
-                                <div class="text-xs font-bold text-white flex items-center space-x-1.5">
+                                <div class="text-xs font-bold flex items-center space-x-1.5" style="color: var(--text-hi);">
                                     <span>Yamaha PSS-680 / 480 / 780</span>
                                     <span class="px-1.5 py-0.2 text-[8px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">12-Voice FM</span>
                                 </div>
-                                <div class="text-[10px] text-slate-400 truncate">2-Op FM Synth &bull; Custom Drummer &bull; SysEx</div>
+                                <div class="text-[10px] truncate" style="color: var(--text-mid);">2-Op FM Synth &bull; Custom Drummer &bull; SysEx</div>
                             </div>
                         </div>
                         @if (IsPss680)

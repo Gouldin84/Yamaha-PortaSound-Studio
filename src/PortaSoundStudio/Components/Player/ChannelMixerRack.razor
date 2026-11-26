@@ -58,7 +58,7 @@
     </div>
 
     <!-- Dual-Row 2x8 Vertical Console Strips (Fits cleanly at 1280x720 / ROG Ally 150% DPI) -->
-    <div id="mixerGrid" class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-1.5">
+    <div id="mixerGrid" class="mixer-grid-responsive">
         @foreach (var ch in channels)
         {
             bool active = State.ChannelActive[ch.Channel];
@@ -74,7 +74,7 @@
                 <div class="flex items-center justify-between gap-1">
                     <div class="flex items-center space-x-1 min-w-0">
                         <span class="meter-led @ledCls w-2 h-2 rounded-full bg-slate-800 border border-slate-700 shrink-0"></span>
-                        <span class="text-[10px] font-extrabold font-mono tracking-tight truncate" style="color: var(--text-hi);">CH @(ch.Channel + 1)</span>
+                        <span class="text-[10px] font-extrabold font-mono tracking-tight whitespace-nowrap shrink-0" style="color: var(--text-hi);">@(ch.IsDrum ? $"C{ch.Channel + 1}" : $"CH {ch.Channel + 1}")</span>
                         @if (ch.IsDrum)
                         {
                             <span class="strip-drum-pill rounded font-bold bg-amber-950 text-amber-300 border border-amber-700/70 shrink-0">DRUM</span>
@@ -104,8 +104,8 @@
                     <div class="flex items-center space-x-0.5">
                         @if (ch.IsDrum)
                         {
-                            <div class="hw-vfd w-full px-1 py-0.5 rounded text-[9px] font-bold truncate text-center" style="color: #fbbf24 !important;">
-                                @ch.PssVoiceName
+                            <div class="hw-vfd w-full px-1 py-0.5 rounded text-[9px] font-bold truncate text-center" style="color: #d97706 !important;">
+                                @ch.PssVoiceName.Replace(" (Ch 16)", "")
                             </div>
                         }
                         else
@@ -113,7 +113,7 @@
                             <select @key="@($"{State.ActiveModel}-{ch.Channel}")"
                                     value="@ch.PssVoice"
                                     @onchange="(e) => OnVoiceChanged(ch.Channel, e.Value?.ToString())"
-                                    class="flex-1 min-w-0 bg-slate-900 border @(ch.IsOverridden ? "border-cyan-500 text-cyan-300 font-bold" : "border-slate-700 text-slate-200") rounded px-1 py-0.5 text-[9px] focus:outline-none focus:border-cyan-500 cursor-pointer truncate">
+                                    class="hw-select flex-1 min-w-0 @(ch.IsOverridden ? "border-cyan-500 font-bold" : "") rounded px-1 py-0.5 text-[9px] cursor-pointer truncate">
                                 @foreach (var v in voices)
                                 {
                                     <option value="@v.Number">@($"{v.Number:D2}: {v.Name}")</option>
@@ -132,14 +132,17 @@
 
                 <!-- Vertical Fader + Live Velocity Meter Bay -->
                 <div class="v-fader-stage hw-bay rounded-lg py-1.5 px-2 flex items-center justify-center space-x-2.5">
-                    <!-- Velocity Peak Ladder -->
-                    <div class="v-meter-groove w-2 h-full rounded-full overflow-hidden flex flex-col justify-end" title="Live Note Velocity">
-                        <div class="v-meter-fill @(ch.IsDrum ? "drum" : "") w-full rounded-full" style="height: @(velPct)%;"></div>
+                    <!-- Velocity Peak Ladder (Visible etched scale at rest, lit when active) -->
+                    <div class="v-meter-groove w-2.5 h-full rounded-full overflow-hidden flex flex-col justify-between p-[1px] relative" title="Live Note Velocity">
+                        <div class="w-full h-full flex flex-col justify-end rounded-full overflow-hidden">
+                            <div class="v-meter-fill @(ch.IsDrum ? "drum" : "") w-full rounded-full" style="height: @(Math.Max(6, velPct))%; opacity: @(velPct > 0 ? "1" : "0.28");"></div>
+                        </div>
                     </div>
 
-                    <!-- Sculpted Vertical Volume Fader -->
+                    <!-- Sculpted Vertical Volume Fader with Synced 3D Metallic Cap -->
                     <div class="v-fader-track w-2.5 h-full rounded-full flex items-center justify-center relative">
                         <div class="v-fader-fill w-full rounded-full absolute bottom-0 left-0 right-0 pointer-events-none" style="height: @(ch.Volume)%;"></div>
+                        <div class="v-fader-cap-visual" style="bottom: @($"{Math.Clamp(ch.Volume * 0.82 + 9, 9, 91):0.#}%");"></div>
                         <input type="range"
                                min="0" max="100"
                                value="@ch.Volume"
@@ -180,7 +183,7 @@
         {
             Channel = ch,
             Role = $"Channel {ch + 1}",
-            PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion (Ch 16)" : "Fixed Rhythm (Ch 16)") : (is680 ? "Piano" : "PIANO"),
+            PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion" : "Fixed Rhythm") : (is680 ? "Piano" : "PIANO"),
             IsDrum = ch == 15,
             Volume = 100
         }).ToList();

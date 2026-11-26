@@ -55,7 +55,7 @@
                 {
                     bool isPreviewing = string.Equals(State.PreviewingRecordingPath, take.FilePath, StringComparison.OrdinalIgnoreCase);
                     bool isRenaming = string.Equals(_renamingPath, take.FilePath, StringComparison.OrdinalIgnoreCase);
-                    <div class="p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-900 border @(isPreviewing ? "border-rose-500/60" : "border-slate-800") space-y-2 transition">
+                    <div class="hw-list-card @(isPreviewing ? "is-selected" : "") p-2.5 space-y-2">
                         <div class="flex items-start justify-between gap-2">
                             @if (isRenaming)
                             {
@@ -63,33 +63,33 @@
                                     <input type="text"
                                            value="@_renameDraft"
                                            @oninput="(e) => _renameDraft = e.Value?.ToString() ?? string.Empty"
-                                           class="flex-1 min-w-0 px-2 py-0.5 rounded bg-slate-950 border border-cyan-500 text-xs text-white font-mono focus:outline-none" />
-                                    <button type="button" @onclick="CommitRename" class="px-2 py-0.5 rounded bg-cyan-600 text-[10px] font-bold text-white">OK</button>
-                                    <button type="button" @onclick="CancelRename" class="px-1.5 py-0.5 rounded bg-slate-800 text-[10px] text-slate-300">✕</button>
+                                           class="hw-input flex-1 min-w-0 px-2 py-0.5 rounded text-xs font-mono" />
+                                    <button type="button" @onclick="CommitRename" class="hw-accent-btn px-2 py-0.5 rounded text-[10px] font-bold">OK</button>
+                                    <button type="button" @onclick="CancelRename" class="hw-close-chip px-1.5 py-0.5 rounded text-[10px]">✕</button>
                                 </div>
                             }
                             else
                             {
                                 <div class="min-w-0">
-                                    <div class="text-xs font-bold text-white truncate" title="@take.FileName">@take.FileName</div>
-                                    <div class="text-[10px] text-slate-400 font-mono">@take.DurationFormatted &bull; @take.NoteCount notes &bull; @take.CreatedAtFormatted</div>
+                                    <div class="text-xs font-bold truncate" style="color: var(--text-hi);" title="@take.FileName">@take.FileName</div>
+                                    <div class="text-[10px] font-mono" style="color: var(--text-lo);">@take.DurationFormatted &bull; @take.NoteCount notes &bull; @take.CreatedAtFormatted</div>
                                 </div>
                             }
                         </div>
                         <div class="flex items-center flex-wrap gap-1">
                             @if (isPreviewing)
                             {
-                                <button type="button" @onclick="() => Recorder.StopPreview()" class="px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-bold">⏹ Stop</button>
+                                <button type="button" @onclick="() => Recorder.StopPreview()" class="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[10px] font-bold">Stop</button>
                             }
                             else
                             {
-                                <button type="button" @onclick="() => Recorder.PreviewRecording(take.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-cyan-600 text-cyan-300 hover:text-white text-[10px] font-semibold">▶ Preview</button>
+                                <button type="button" @onclick="() => Recorder.PreviewRecording(take.FilePath)" class="hw-btn px-2 py-0.5 rounded-lg text-[10px] font-semibold" style="color: var(--acc-hi);">▶ Preview</button>
                             }
-                            <button type="button" @onclick="() => Recorder.LoadRecordingInPlayer(take.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-semibold">🎹 Player</button>
-                            <button type="button" @onclick="() => Recorder.ExportRecordingToPss(take.FilePath)" title="Export into native PSS library" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-emerald-300 text-[10px] font-semibold">Native</button>
-                            <button type="button" @onclick="() => Recorder.ExportRecordingToGm(take.FilePath)" title="Export to GM Library" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-300 text-[10px] font-semibold">GM</button>
-                            <button type="button" @onclick="() => BeginRename(take)" title="Rename take" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]">✏️</button>
-                            <button type="button" @onclick="() => Recorder.DeleteRecording(take.FilePath)" title="Delete take" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-700 text-rose-400 hover:text-white text-[10px]">🗑</button>
+                            <button type="button" @onclick="() => Recorder.LoadRecordingInPlayer(take.FilePath)" class="hw-btn px-2 py-0.5 rounded-lg text-[10px] font-semibold">Player</button>
+                            <button type="button" @onclick="() => Recorder.ExportRecordingToPss(take.FilePath)" title="Export into native PSS library" class="hw-btn px-2 py-0.5 rounded-lg text-emerald-400 text-[10px] font-semibold">Native</button>
+                            <button type="button" @onclick="() => Recorder.ExportRecordingToGm(take.FilePath)" title="Export to GM Library" class="hw-btn px-2 py-0.5 rounded-lg text-indigo-400 text-[10px] font-semibold">GM</button>
+                            <button type="button" @onclick="() => BeginRename(take)" title="Rename take" class="hw-btn px-1.5 py-0.5 rounded-lg text-[10px]">Rename</button>
+                            <button type="button" @onclick="() => Recorder.DeleteRecording(take.FilePath)" title="Delete take" class="hw-close-chip px-1.5 py-0.5 rounded-lg text-[10px] font-bold">✕</button>
                         </div>
                     </div>
                 }
@@ -209,7 +209,7 @@
         }
 
         <!-- Telemetry + Live Chord + Stereo VU Ladders -->
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
+        <div class="rec-three-col">
             <!-- Timer & Transport Buttons -->
             <div class="hw-panel p-3.5 space-y-3 flex flex-col justify-between">
                 <div class="flex items-center justify-between">

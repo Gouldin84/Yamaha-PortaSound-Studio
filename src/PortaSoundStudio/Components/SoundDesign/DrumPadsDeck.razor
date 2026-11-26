@@ -105,10 +105,10 @@
             {
                 int rowIdx = r;
                 var row = State.DrummerRows[rowIdx];
-                <div class="flex items-center space-x-2 p-1.5 rounded-xl bg-slate-900/70 border border-slate-800/80 min-w-max">
+                <div class="hw-list-card flex items-center space-x-2 p-1.5 min-w-max">
                     <div class="w-36 shrink-0 flex items-center justify-between pr-1">
-                        <span class="text-[11px] font-semibold text-slate-200 truncate">@row.InstrumentName</span>
-                        <span class="text-[9px] font-mono text-amber-400/80">@row.PadLabel</span>
+                        <span class="text-[11px] font-semibold truncate" style="color: var(--text-hi);">@row.InstrumentName</span>
+                        <span class="text-[9px] font-mono text-amber-400">@row.PadLabel</span>
                     </div>
                     <div class="flex items-center space-x-1">
                         @for (int b = 0; b < beats; b++)
@@ -121,7 +121,7 @@
                                 bool isOn = (byteVal & bitMask) != 0;
                                 <button type="button"
                                         @onclick="() => SoundDesign.ToggleDrummerStep(rowIdx, stepIdx)"
-                                        class="@(sub == 0 ? "ml-1.5" : "") w-6 h-6 sm:w-7 sm:h-7 rounded border text-[9px] font-mono transition active:scale-90 @(isOn ? "bg-amber-500 border-amber-300 text-slate-950 font-bold" : "bg-slate-900 border-slate-700/80 text-slate-600 hover:border-slate-500")">
+                                        class="@(sub == 0 ? "ml-1.5" : "") w-6 h-6 sm:w-7 sm:h-7 rounded border text-[9px] font-mono transition active:scale-90 @(isOn ? "hw-accent-btn font-bold" : "hw-btn")">
                                     @(isOn ? "●" : "·")
                                 </button>
                             }

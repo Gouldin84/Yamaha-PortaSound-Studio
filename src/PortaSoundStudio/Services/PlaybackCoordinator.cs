@@ -75,7 +75,7 @@ namespace PSS790Player.Services
             get { lock (_stateLock) return _currentFilePath; }
         }
 
-        public async Task LoadFileAsync(string filePath, bool autoPlay = false)
+        public async Task LoadFileAsync(string filePath, bool autoPlay = false, int settleDelayMs = 2000)
         {
             if (_isDisposed || string.IsNullOrWhiteSpace(filePath)) return;
             if (!File.Exists(filePath))
@@ -96,14 +96,21 @@ namespace PSS790Player.Services
                 token = _loadCts.Token;
             }
 
+            // Clear active notes, transient meters, and outdated playback UI immediately
+            ResetChannelActivity();
             _state.Mutate(s =>
             {
                 s.SelectedSongPath = filePath;
                 if (autoPlay) s.PlayingSongPath = filePath;
                 s.IsLoadingSong = true;
-            }, StateScope.Transport | StateScope.Library);
+                s.IsPreparingPlayback = false;
+                s.PlaybackCountdownSeconds = 0;
+                s.IsPlaying = false;
+                s.IsPaused = false;
+                s.CurrentSeconds = 0;
+            }, StateScope.Transport | StateScope.Library | StateScope.Channels);
 
-            // Stop active audio immediately on the Transport Actor before parsing/remapping
+            // Stop active audio & flush all hardware MIDI states immediately before loading new track
             await _devices.Player.StopAsync().ConfigureAwait(false);
             if (token.IsCancellationRequested || seq != Interlocked.Read(ref _loadSequence)) return;
 
@@ -193,15 +200,44 @@ namespace PSS790Player.Services
                         _state.AddToast("No MIDI output device selected — select a synthesizer in the top bar.", ToastSeverity.Warning);
                         return;
                     }
-                    await _devices.Player.PlayAsync().ConfigureAwait(false);
+
+                    if (settleDelayMs > 0)
+                    {
+                        int remainingMs = settleDelayMs;
+                        while (remainingMs > 0)
+                        {
+                            if (token.IsCancellationRequested || _userRequestedStop || _isDisposed || seq != Interlocked.Read(ref _loadSequence))
+                            {
+                                _state.Mutate(s => { s.IsPreparingPlayback = false; s.PlaybackCountdownSeconds = 0; }, StateScope.Transport);
+                                return;
+                            }
+                            _state.Mutate(s =>
+                            {
+                                s.IsPreparingPlayback = true;
+                                s.PlaybackCountdownSeconds = remainingMs / 1000.0;
+                            }, StateScope.Transport);
+                            int step = Math.Min(200, remainingMs);
+                            await Task.Delay(step, token).ConfigureAwait(false);
+                            remainingMs -= step;
+                        }
+                    }
+
+                    _state.Mutate(s => { s.IsPreparingPlayback = false; s.PlaybackCountdownSeconds = 0; }, StateScope.Transport);
+                    if (!token.IsCancellationRequested && !_userRequestedStop && seq == Interlocked.Read(ref _loadSequence))
+                    {
+                        await _devices.Player.PlayAsync().ConfigureAwait(false);
+                    }
                 }
             }
-            catch (OperationCanceledException) { }
+            catch (OperationCanceledException)
+            {
+                _state.Mutate(s => { s.IsLoadingSong = false; s.IsPreparingPlayback = false; s.PlaybackCountdownSeconds = 0; }, StateScope.Transport);
+            }
             catch (Exception ex)
             {
                 if (seq == Interlocked.Read(ref _loadSequence))
                 {
-                    _state.Mutate(s => s.IsLoadingSong = false);
+                    _state.Mutate(s => { s.IsLoadingSong = false; s.IsPreparingPlayback = false; s.PlaybackCountdownSeconds = 0; }, StateScope.Transport);
                     _state.AddToast($"Failed to load MIDI: {ex.Message}", ToastSeverity.Error);
                 }
             }
@@ -296,10 +332,16 @@ namespace PSS790Player.Services
         public void Stop()
         {
             _userRequestedStop = true;
+            lock (_stateLock)
+            {
+                try { _loadCts?.Cancel(); } catch { }
+            }
             _ = _devices.Player.StopAsync();
             ResetChannelActivity();
             _state.Mutate(s =>
             {
+                s.IsPreparingPlayback = false;
+                s.PlaybackCountdownSeconds = 0;
                 s.IsPlaying = false;
                 s.IsPaused = false;
                 s.CurrentSeconds = 0;
@@ -310,7 +352,8 @@ namespace PSS790Player.Services
 
         public void Seek(double seconds)
         {
-            double clamped = Math.Max(0, seconds);
+            double maxDur = Math.Max(0, _state.DurationSeconds);
+            double clamped = maxDur > 0 ? Math.Clamp(seconds, 0, maxDur) : Math.Max(0, seconds);
             _state.Mutate(s => s.CurrentSeconds = clamped, StateScope.Transport);
             _ = _devices.Player.SeekAsync(TimeSpan.FromSeconds(clamped));
         }

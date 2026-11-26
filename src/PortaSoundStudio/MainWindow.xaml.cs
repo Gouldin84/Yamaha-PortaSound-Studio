@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -62,7 +63,7 @@ namespace PSS790Player
             if (Width > workArea.Width) Width = Math.Max(MinWidth, workArea.Width - 16);
             if (Height > workArea.Height) Height = Math.Max(MinHeight, workArea.Height - 16);
 
-            if (!string.IsNullOrEmpty(App.SmokeMarkerPath) || !string.IsNullOrEmpty(App.DiagMarkerPath))
+            if (!string.IsNullOrEmpty(App.SmokeMarkerPath) || !string.IsNullOrEmpty(App.DiagMarkerPath) || !string.IsNullOrEmpty(App.ScreenshotsDirPath))
             {
                 if (!string.IsNullOrEmpty(App.SmokeMarkerPath))
                 {
@@ -71,6 +72,11 @@ namespace PSS790Player
                 }
                 else
                 {
+                    if (!string.IsNullOrEmpty(App.ScreenshotsDirPath))
+                    {
+                        Width = 1280;
+                        Height = 720;
+                    }
                     Left = -3000;
                     Top = -3000;
                     ShowInTaskbar = false;
@@ -83,7 +89,61 @@ namespace PSS790Player
                         await System.Threading.Tasks.Task.Delay(1200);
                         try
                         {
-                            if (!string.IsNullOrEmpty(App.DiagMarkerPath))
+                            if (!string.IsNullOrEmpty(App.ScreenshotsDirPath))
+                            {
+                                string outDir = App.ScreenshotsDirPath!;
+                                System.IO.Directory.CreateDirectory(outDir);
+                                async System.Threading.Tasks.Task Snap(string name)
+                                {
+                                    await System.Threading.Tasks.Task.Delay(500);
+                                    var path = System.IO.Path.Combine(outDir, name);
+                                    using var fs = new System.IO.FileStream(path, System.IO.FileMode.Create, System.IO.FileAccess.Write);
+                                    await args.WebView.CoreWebView2.CapturePreviewAsync(Microsoft.Web.WebView2.Core.CoreWebView2CapturePreviewImageFormat.Png, fs);
+                                }
+
+                                async System.Threading.Tasks.Task SetTheme(bool dark, bool handheld = false)
+                                {
+                                    _state.Mutate(s => { s.IsDarkTheme = dark; s.HandheldMode = handheld; });
+                                    await args.WebView.ExecuteScriptAsync($"studioInterop.applyBodyPreferences({(dark ? "true" : "false")}, {(handheld ? "true" : "false")}, '{_state.ActiveModel}')");
+                                }
+
+                                var firstSong = _state.Library.AllFiles.FirstOrDefault(f => !string.Equals(f.Format, "pss680", StringComparison.OrdinalIgnoreCase));
+                                if (firstSong != null)
+                                {
+                                    await _playback.LoadFileAsync(firstSong.FullPath, autoPlay: false, settleDelayMs: 0);
+                                }
+
+                                _playback.SetActiveModel("pss790");
+                                _state.Mutate(s => s.ActiveTab = StudioTab.Player);
+                                await SetTheme(true);
+                                await Snap("01_player_dark.png");
+
+                                await SetTheme(false);
+                                await Snap("02_player_light.png");
+
+                                await SetTheme(true, handheld: true);
+                                await Snap("07_touch_dark.png");
+
+                                await SetTheme(false, handheld: true);
+                                await Snap("08_touch_light.png");
+
+                                _state.Mutate(s => { s.ActiveTab = StudioTab.SysEx; s.SysExViewMode = "vector"; });
+                                await SetTheme(false, handheld: false);
+                                await Snap("03_vector_light.png");
+
+                                await SetTheme(true, handheld: false);
+                                await Snap("04_vector_dark.png");
+
+                                _playback.SetActiveModel("pss680");
+                                _state.Mutate(s => { s.ActiveTab = StudioTab.SysEx; s.SysExViewMode = "fm"; });
+                                await SetTheme(true);
+                                await Snap("05_fm_dark.png");
+
+                                _state.Mutate(s => s.ActiveTab = StudioTab.Recorder);
+                                await SetTheme(true);
+                                await Snap("06_recorder_dark.png");
+                            }
+                            else if (!string.IsNullOrEmpty(App.DiagMarkerPath))
                             {
                                 var script = @"
                                     (() => {
@@ -243,15 +303,15 @@ namespace PSS790Player
                 int darkMode = isDark ? 1 : 0;
                 DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
 
-                // COLORREF format is 0x00BBGGRR: Obsidian (#080d1a) vs Anodized Silver (#e2e8f2)
-                int captionColor = isDark ? 0x001A0D08 : 0x00F2E8E2;
+                // COLORREF format is 0x00BBGGRR: Smoked Gunmetal (#1e2738) vs Anodized Silver (#e2e8f2)
+                int captionColor = isDark ? 0x0038271E : 0x00F2E8E2;
                 DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
             }
             catch { }
 
             Background = new System.Windows.Media.SolidColorBrush(
                 isDark
-                    ? System.Windows.Media.Color.FromRgb(7, 11, 20)
+                    ? System.Windows.Media.Color.FromRgb(30, 39, 56)
                     : System.Windows.Media.Color.FromRgb(217, 224, 234));
         }
 

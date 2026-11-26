@@ -1,6 +1,7 @@
 @inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject LibraryService Library
+@inject IJSRuntime JS
 
 @{
     var song = State.LoadedSong;
@@ -49,8 +50,16 @@
                     }
                 </div>
                 <div class="flex items-center space-x-2 text-[10px] font-mono" style="color: var(--text-mid);">
-                    <span id="fileStatusBadge" class="px-1.5 py-0.2 rounded hw-bay font-semibold" style="color: var(--acc-hi);">
-                        @(State.IsLoadingSong ? "LOADING..." : State.IsPlaying ? "PLAYING" : State.IsPaused ? "PAUSED" : hasSong ? "READY" : "IDLE")
+                    <span id="fileStatusBadge" class="px-1.5 py-0.2 rounded hw-bay font-semibold @(State.IsPreparingPlayback ? "animate-pulse" : "")" style="color: @(State.IsPreparingPlayback ? "#fbbf24" : "var(--acc-hi)");">
+                        @(State.IsLoadingSong
+                            ? "LOADING..."
+                            : State.IsPreparingPlayback
+                                ? $"SYNCING HARDWARE ({State.PlaybackCountdownSeconds:0.0}s)..."
+                                : State.IsPlaying
+                                    ? "PLAYING"
+                                    : State.IsPaused
+                                        ? "PAUSED"
+                                        : hasSong ? "READY" : "IDLE")
                     </span>
                     <span id="channelSummary">
                         @(hasSong ? $"{song!.Channels.Count(c => c.HasNotes)} Active Channels" : "16 Channels Ready")
@@ -67,7 +76,7 @@
             </button>
 
             <button id="btnPlayPause" type="button" @onclick="() => Playback.TogglePlayPause()" title="Play / Pause (Spacebar)"
-                    class="hw-accent-btn w-9 h-9 rounded-full flex items-center justify-center @(State.IsPlaying ? "play-core-active" : "")">
+                    class="hw-accent-btn w-9 h-9 rounded-full flex items-center justify-center @(State.IsPlaying || State.IsPreparingPlayback ? "play-core-active" : "")">
                 @if (State.IsPlaying)
                 {
                     <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
@@ -95,7 +104,8 @@
                     bool activeSpd = Math.Abs(State.Speed - spd) < 0.01;
                     <button type="button"
                             @onclick="() => Playback.SetSpeed(spd)"
-                            class="px-1.5 py-0.5 text-[10px] font-bold rounded-lg transition cursor-pointer @(activeSpd ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+                            class="px-1.5 py-0.5 text-[10px] font-bold rounded-lg transition cursor-pointer @(activeSpd ? "hw-accent-btn" : "hover:brightness-125")"
+                            style="@(activeSpd ? "" : "color: var(--text-mid);")">
                         @($"{spd:0.##}x")
                     </button>
                 }
@@ -150,27 +160,31 @@
     <!-- 60fps Live Stage Visualizer (Defaults to 16-Ch Spectrum) -->
     <MidiVisualizerDeck />
 
-    <!-- Illuminated Timeline Scrubber + VFD Timecode -->
+    <!-- Custom Pointer-Captured Precision Scrubber + VFD Timecodes -->
     <div class="flex items-center space-x-2.5 pt-0.5">
         <span id="currentTimeDisplay" class="hw-vfd px-2 py-0.5 rounded-lg text-[11px] font-bold shrink-0">@PlaybackCoordinator.FormatDuration(State.CurrentSeconds)</span>
 
-        <input type="range"
-               id="timeScrubber"
-               min="0"
-               max="@maxSec"
-               step="0.1"
-               value="@curSec"
-               style="--seek-pct: @($"{pct:0.0}%");"
-               @onchange="(e) => { if (double.TryParse(e.Value?.ToString(), out var v)) Playback.Seek(v); }"
-               class="flex-1 h-1.5 cursor-pointer" />
+        <div id="timeScrubber"
+             role="slider"
+             tabindex="0"
+             aria-label="Playback Timeline"
+             aria-valuemin="0"
+             aria-valuemax="@((int)Math.Round(maxSec))"
+             aria-valuenow="@((int)Math.Round(curSec))"
+             class="hw-scrub-wrap flex-1">
+            <div class="hw-scrub-rail">
+                <div id="timeScrubberFill" class="hw-scrub-fill" style="width: @($"{pct:0.##}%");"></div>
+                <div id="timeScrubberThumb" class="hw-scrub-thumb" style="left: @($"{pct:0.##}%");"></div>
+                <div id="timeScrubberTooltip" class="hw-scrub-tooltip" style="left: @($"{pct:0.##}%");">@PlaybackCoordinator.FormatDuration(State.CurrentSeconds)</div>
+            </div>
+        </div>
 
         @if (hasSong && song!.IsGmFile)
         {
             <select value="@song.PitchBendMode"
                     @onchange="(e) => Playback.SetPitchBendMode(e.Value?.ToString())"
                     title="Pitch Bend Scale Mode"
-                    class="hw-bay rounded-lg px-2 py-0.5 text-[10px] font-semibold focus:outline-none cursor-pointer shrink-0"
-                    style="color: var(--text-hi);">
+                    class="hw-select rounded-lg px-2 py-0.5 text-[10px] font-semibold cursor-pointer shrink-0">
                 <option value="Auto">Pitch Bend: Auto</option>
                 <option value="DivideBy6">Divide by 6 (±2 st on PSS)</option>
                 <option value="Preserve1to1">Preserve 1:1</option>
@@ -185,6 +199,29 @@
 @code {
     protected override StateScope SubscribedScopes => StateScope.Transport | StateScope.Library | StateScope.Shell;
 
+    private DotNetObjectReference<TransportDeck>? _dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("studioInterop.initTimelineScrubber", "timeScrubber", _dotNetRef);
+            }
+            catch { }
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("studioInterop.syncTimelineScrubber", State.CurrentSeconds, State.DurationSeconds);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public void CommitScrubSeconds(double seconds) => Playback.Seek(seconds);
+
     private void ToggleCurrentFavorite()
     {
         if (State.LoadedSong != null && !string.IsNullOrEmpty(State.LoadedSong.FilePath))
@@ -192,4 +229,6 @@
             Library.ToggleFavorite(State.LoadedSong.FilePath);
         }
     }
+
+    protected override void OnDisposing() => _dotNetRef?.Dispose();
 }

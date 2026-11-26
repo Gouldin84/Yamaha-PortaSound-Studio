@@ -175,12 +175,19 @@ input[type="range"].accent-indigo-400::-webkit-slider-thumb:hover {
 
 /* Tactile Backlit Console Mute & Solo Buttons */
 .btn-console-m, .btn-console-s {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 -1.5px 0 rgba(0, 0, 0, 0.55), 0 2px 4px rgba(0, 0, 0, 0.3);
     user-select: none;
+}
+body.theme-light .btn-console-m:not(.muted),
+body.theme-light .btn-console-s:not(.soloed) {
+    background: linear-gradient(180deg, #ffffff 0%, #e7edf6 100%) !important;
+    border-color: #bcc9dc !important;
+    box-shadow: inset 0 1px 0 #ffffff, inset 0 -1.5px 0 rgba(100, 116, 139, 0.28), 0 2px 3px rgba(15, 23, 42, 0.1) !important;
 }
 
 .btn-console-m:active, .btn-console-s:active {
-    transform: scale(0.92);
+    transform: translateY(1px) scale(0.94);
 }
 
 .btn-console-m.muted {
@@ -477,11 +484,12 @@ body.is-resizing-sidebar {
 }
 
 /* ==========================================================================
-   Modern Refined Dark Studio Theme (Deep Midnight Charcoal & High Legibility)
+   Smoked Gunmetal Graphite Dark Studio Theme (Balanced Surface Separation)
    ========================================================================== */
 
 body:not(.theme-light) {
-    background-color: #0b1324 !important;
+    background: var(--chassis-mesh) !important;
+    background-color: var(--chassis-bg) !important;
     color: #f8fafc;
 }
 
@@ -489,56 +497,56 @@ body:not(.theme-light) .bg-slate-950,
 body:not(.theme-light) .bg-slate-950\/95,
 body:not(.theme-light) .bg-slate-950\/90,
 body:not(.theme-light) .bg-slate-950\/80 {
-    background-color: #0d1629 !important;
+    background-color: #182030 !important;
 }
 
 body:not(.theme-light) .bg-slate-900,
 body:not(.theme-light) .bg-slate-900\/90,
 body:not(.theme-light) .bg-slate-900\/80 {
-    background-color: #121e36 !important;
+    background-color: #263248 !important;
 }
 
 body:not(.theme-light) .bg-slate-800,
 body:not(.theme-light) .bg-slate-800\/90,
 body:not(.theme-light) .bg-slate-800\/80,
 body:not(.theme-light) .bg-slate-800\/60 {
-    background-color: #1a2947 !important;
+    background-color: #34425e !important;
 }
 
 body:not(.theme-light) .glass-panel {
-    background: rgba(18, 30, 54, 0.85);
-    border-color: rgba(43, 62, 98, 0.7);
+    background: var(--panel-bg);
+    border-color: var(--panel-border);
 }
 
 body:not(.theme-light) .glass-card {
-    background: rgba(18, 30, 54, 0.75);
-    border-color: rgba(43, 62, 98, 0.7);
+    background: var(--strip-bg);
+    border-color: var(--panel-border);
 }
 
 body:not(.theme-light) .border-slate-800,
 body:not(.theme-light) .border-slate-800\/80,
 body:not(.theme-light) .border-slate-800\/60 {
-    border-color: #243556 !important;
+    border-color: #3a4a68 !important;
 }
 
 body:not(.theme-light) .border-slate-700,
 body:not(.theme-light) .border-slate-700\/80,
 body:not(.theme-light) .border-slate-700\/60 {
-    border-color: #33476e !important;
+    border-color: #4a5c80 !important;
 }
 
 /* Enhanced Text Legibility in Dark Theme */
 body:not(.theme-light) .text-slate-400 {
-    color: #94a3b8 !important;
+    color: #cbd5e1 !important;
 }
 
 body:not(.theme-light) .text-slate-500 {
-    color: #8194ad !important;
+    color: #94a3b8 !important;
 }
 
 /* FM Sound Designer Large Dual Envelope Cards */
 #cardModEnvelope, #cardCarEnvelope {
-    box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 16px -2px rgba(4, 8, 18, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 body.theme-light #cardModEnvelope, body.theme-light #cardCarEnvelope {
     box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.8);
@@ -548,12 +556,14 @@ body.theme-light #cardModEnvelope, body.theme-light #cardCarEnvelope {
 /* Circular Vector Synth Touchpad */
 #vecCanvas {
     touch-action: none;
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6), inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 0 12px rgba(99, 102, 241, 0.25);
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 body.theme-light #vecCanvas {
-    background-color: #f8fafc !important;
-    border-color: #cbd5e1 !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), inset 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 /* ==========================================================================
@@ -561,25 +571,26 @@ body.theme-light #vecCanvas {
    ========================================================================== */
 
 body.theme-light {
-    background-color: #f1f5f9 !important;
+    background: var(--chassis-mesh) !important;
+    background-color: var(--chassis-bg) !important;
     color: #0f172a !important;
 }
 
 body.theme-light .glass-panel {
-    background: rgba(255, 255, 255, 0.9) !important;
-    border-color: rgba(226, 232, 240, 0.95) !important;
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+    background: var(--panel-bg) !important;
+    border-color: var(--panel-border) !important;
+    box-shadow: inset 0 2px 3px var(--panel-highlight), inset 2px 0 3px var(--panel-side-glow), inset 0 -5px 8px var(--panel-lip), var(--panel-shadow) !important;
 }
 
 body.theme-light .glass-card {
-    background: #ffffff !important;
-    border-color: #e2e8f0 !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+    background: var(--strip-bg) !important;
+    border: 1.5px solid var(--panel-border) !important;
+    box-shadow: inset 0 2px 3px #ffffff, inset 0 -3px 5px rgba(126, 146, 188, 0.24), 0 3px 0 rgba(164, 180, 212, 0.65), 0 8px 16px -4px rgba(55, 76, 128, 0.16) !important;
 }
 
 body.theme-light .glass-card:hover {
-    border-color: rgba(8, 145, 178, 0.4) !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06) !important;
+    border-color: var(--acc) !important;
+    box-shadow: inset 0 2px 3px #ffffff, inset 0 -3px 5px rgba(126, 146, 188, 0.26), 0 4px 0 rgba(164, 180, 212, 0.7), 0 10px 20px -3px rgba(55, 76, 128, 0.22) !important;
 }
 
 /* Panel & Card Background Overrides */
@@ -602,11 +613,13 @@ body.theme-light .tab-btn:not(.active):hover {
 }
 
 body.theme-light .bg-slate-900,
+body.theme-light .bg-slate-900\/95,
 body.theme-light .bg-slate-900\/90,
 body.theme-light .bg-slate-900\/80,
+body.theme-light .bg-slate-900\/70,
 body.theme-light .bg-slate-900\/60,
 body.theme-light .bg-slate-900\/50 {
-    background-color: #e4eaf3 !important;
+    background-color: #f3f6fb !important;
 }
 
 body.theme-light .bg-slate-800,
@@ -654,10 +667,16 @@ body.theme-light .text-slate-500 {
 /* Form Controls & Inputs */
 body.theme-light input[type="text"],
 body.theme-light input[type="number"],
-body.theme-light select {
+body.theme-light select:not(.bg-transparent) {
     background-color: #ffffff !important;
     color: #0f172a !important;
     border-color: #cbd5e1 !important;
+}
+
+body.theme-light select.bg-transparent {
+    background-color: transparent !important;
+    color: #0f172a !important;
+    border-color: transparent !important;
 }
 
 body.theme-light input::placeholder {
@@ -1216,16 +1235,22 @@ body.theme-light #recordingsSearchInput::placeholder {
     box-shadow: 0 0 8px rgba(16, 185, 129, 0.5) !important;
 }
 #vecCanvas {
-    box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.8), 0 0 20px rgba(99, 102, 241, 0.25);
-    background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+    box-shadow: none !important;
+    background: transparent !important;
     touch-action: none;
+}
+body.theme-light #vecCanvas {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
 }
 
 /* Handheld Touch Mode - Enlarged Targets for 7" Asus ROG Ally Touchscreen */
+body.handheld-touch-mode .tree-folder-group > div:first-child,
 body.handheld-touch-mode .tree-song-item {
-    padding-top: 0.45rem !important;
-    padding-bottom: 0.45rem !important;
-    min-height: 38px !important;
+    padding-top: 0.42rem !important;
+    padding-bottom: 0.42rem !important;
+    min-height: 36px !important;
 }
 
 body.handheld-touch-mode input[type="range"]::-webkit-slider-thumb {
@@ -1235,33 +1260,57 @@ body.handheld-touch-mode input[type="range"]::-webkit-slider-thumb {
     transform: scale(1.1);
 }
 
-body.handheld-touch-mode #timeScrubber::-webkit-slider-thumb {
-    width: 18px !important;
-    height: 32px !important;
-    border-radius: 8px !important;
+body.handheld-touch-mode .hw-scrub-wrap {
+    height: 28px !important;
+}
+
+body.handheld-touch-mode .hw-scrub-rail {
+    height: 11px !important;
+}
+
+body.handheld-touch-mode .hw-scrub-thumb {
+    width: 20px !important;
+    height: 25px !important;
+    border-radius: 7px !important;
 }
 
 body.handheld-touch-mode #btnPlayPause {
-    width: 2.75rem !important;
-    height: 2.75rem !important;
+    width: 2.65rem !important;
+    height: 2.65rem !important;
 }
 
 body.handheld-touch-mode #btnStop,
 body.handheld-touch-mode #btnPrevTrack,
 body.handheld-touch-mode #btnNextTrack {
-    width: 2.35rem !important;
-    height: 2.35rem !important;
+    width: 2.25rem !important;
+    height: 2.25rem !important;
 }
 
-body.handheld-touch-mode .tab-btn {
-    padding: 0.45rem 0.75rem !important;
-    font-size: 0.825rem !important;
+body.handheld-touch-mode header .hw-tab-btn,
+body.handheld-touch-mode header .tab-btn {
+    padding: 0.36rem 0.78rem !important;
+    font-size: 0.8rem !important;
+}
+
+body.handheld-touch-mode header .hw-btn,
+body.handheld-touch-mode header .hw-accent-btn {
+    min-height: 32px !important;
 }
 
 body.handheld-touch-mode .btn-song-play {
-    width: 1.85rem !important;
-    height: 1.85rem !important;
+    width: 1.9rem !important;
+    height: 1.9rem !important;
     font-size: 0.85rem !important;
+}
+
+body.handheld-touch-mode .strip-ms-btn {
+    width: 19px !important;
+    height: 23px !important;
+    font-size: 8.5px !important;
+}
+
+body.handheld-touch-mode .mpc-pad {
+    min-height: 68px !important;
 }
 
 /* Vector Synthesizer Per-Channel Effect Buttons (Reverb & Vibrato) */

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-11-26
+
+### Added
+- **Frosted 3D Translucent Hardware Redesign**:
+  - Dual translucent acrylic workstation finishes: **Smoked Sapphire Crystal (Dark)** and **Frosted Periwinkle Crystal (Light)** with extruded `3px`/`4px` 3D panel & keycap depth, subsurface ambient lighting orbs, vector SVG icons (`StudioIcon`), tab transition choreography, and Windows 11 DWM caption bar sync.
+  - Model-reactive accent profiles (`PSS-790` Electric Cyan / `PSS-680` Warm Amber) dynamically tinting VFD displays, active controls, and ambient glow orbs.
+- **60fps Stage Visualizer & Sculpted 3D Vector Joystick**:
+  - Added hardware-accelerated canvas visualizer defaulting to `16-Ch Spectrum` alongside `Note Matrix` and `VFD Scope` modes.
+  - Rebuilt the 2D Quad Vector Gimbal into a 3D recessed stepped funnel well with pleated rubber dust-boot bellows, chrome shaft, concave thumb cap, corner hex screws, and 320 ms fading motion trail.
+- **ASUS ROG Ally (`1280x720` @ 150% DPI) & Handheld Touch Mode Tuning**:
+  - Compact dual-row `2x8` vertical console strips with synchronized metallic fader caps and velocity meters.
+  - Enlarged Touch Mode tap targets (`.hw-scrub-wrap`, header nav tabs, library rows, faders, drum pads) tuned to fit cleanly inside `720px` viewport height with zero bottom clipping.
+- **2-Second Library Play Hardware Settle Sequence**:
+  - Clicking Play in the library now immediately resets MIDI state and populates player channels/voices before counting down 2.0 s (`SYNCING HARDWARE...`) prior to starting playback (cancellable on Stop or track change).
+
+### Fixed
+- **Timeline Scrubber Dragging & Seeking**: Replaced native `<input type="range">` with a custom pointer-captured hardware scrubber eliminating 10 Hz Blazor snap-back during drags, adding idle/pre-play seeking and hover/drag timestamps.
+
 ## [3.0.3] - 2026-11-26
 
 ### Fixed

@@ -15,6 +15,7 @@ public partial class App : Application
 {
     internal static string? SmokeMarkerPath { get; private set; }
     internal static string? DiagMarkerPath { get; private set; }
+    internal static string? ScreenshotsDirPath { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -27,6 +28,10 @@ public partial class App : Application
             else if (string.Equals(e.Args[i], "--diag", StringComparison.OrdinalIgnoreCase))
             {
                 DiagMarkerPath = e.Args[i + 1];
+            }
+            else if (string.Equals(e.Args[i], "--screenshots", StringComparison.OrdinalIgnoreCase))
+            {
+                ScreenshotsDirPath = e.Args[i + 1];
             }
         }
 
