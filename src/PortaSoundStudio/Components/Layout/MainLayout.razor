@@ -1,6 +1,10 @@
 @inherits StudioComponentBase
 
-<div class="h-screen w-screen flex flex-col overflow-hidden relative">
+<div class="h-screen w-screen flex flex-col overflow-hidden relative" style="background: var(--chassis-bg); color: var(--text-hi);">
+    <!-- Model-Reactive Ambient Hardware Lighting -->
+    <div class="ambient-orb ambient-orb-primary ambient-orb-1"></div>
+    <div class="ambient-orb ambient-orb-secondary ambient-orb-2"></div>
+
     <HeaderBar />
 
     @if (!string.IsNullOrEmpty(State.ActiveHeaderMenu))
@@ -8,17 +12,23 @@
         <div class="fixed inset-0 z-30" @onclick="() => State.Mutate(s => s.ActiveHeaderMenu = null, StateScope.Shell)"></div>
     }
 
-    <main class="flex-1 min-h-0 flex p-2 sm:p-2.5 w-full overflow-hidden">
+    <main class="flex-1 min-h-0 flex p-2 sm:p-3 w-full overflow-hidden relative z-10">
         @switch (State.ActiveTab)
         {
             case StudioTab.Player:
-                <PlayerWorkspace />
+                <div @key="StudioTab.Player" class="workspace-enter w-full h-full min-h-0 flex">
+                    <PlayerWorkspace />
+                </div>
                 break;
             case StudioTab.Recorder:
-                <RecorderWorkspace />
+                <div @key="StudioTab.Recorder" class="workspace-enter w-full h-full min-h-0 flex">
+                    <RecorderWorkspace />
+                </div>
                 break;
             case StudioTab.SysEx:
-                <SoundDesignWorkspace />
+                <div @key="StudioTab.SysEx" class="workspace-enter w-full h-full min-h-0 flex">
+                    <SoundDesignWorkspace />
+                </div>
                 break;
         }
     </main>

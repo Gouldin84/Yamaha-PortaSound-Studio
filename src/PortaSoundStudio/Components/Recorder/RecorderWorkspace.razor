@@ -211,16 +211,16 @@
         <!-- Telemetry + Live Chord + Stereo VU Ladders -->
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
             <!-- Timer & Transport Buttons -->
-            <div class="glass-panel p-4 rounded-xl border border-slate-800/80 space-y-3 flex flex-col justify-between">
+            <div class="hw-panel p-3.5 space-y-3 flex flex-col justify-between">
                 <div class="flex items-center justify-between">
                     <div>
-                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Elapsed Time</span>
-                        <span class="lcd-display px-2.5 py-1 text-2xl font-mono font-black text-cyan-300 inline-block mt-1">@timerText</span>
+                        <span class="text-[10px] font-bold uppercase block" style="color: var(--text-lo);">Elapsed Time</span>
+                        <span class="hw-vfd px-2.5 py-1 rounded-lg text-2xl font-mono font-black inline-block mt-1">@timerText</span>
                     </div>
                     <div class="text-right">
-                        <span class="text-[10px] font-bold uppercase text-slate-400 block">Bar : Beat</span>
-                        <span class="text-xl font-mono font-bold text-white">@($"{State.RecorderBar:D2} : {State.RecorderBeat}")</span>
-                        <div class="text-[10px] font-mono text-slate-400">@State.RecorderNoteCount notes &bull; @State.RecorderEventCount ev</div>
+                        <span class="text-[10px] font-bold uppercase block" style="color: var(--text-lo);">Bar : Beat</span>
+                        <span class="text-xl font-mono font-bold" style="color: var(--text-hi);">@($"{State.RecorderBar:D2} : {State.RecorderBeat}")</span>
+                        <div class="text-[10px] font-mono" style="color: var(--text-mid);">@State.RecorderNoteCount notes &bull; @State.RecorderEventCount ev</div>
                     </div>
                 </div>
 
@@ -228,42 +228,43 @@
                     <button type="button"
                             disabled="@isRecordingOrCountIn"
                             @onclick="() => _ = Recorder.StartRecordingAsync()"
-                            class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-rose-600/25 transition active:scale-95">
-                        ⏺ @(isRecordingOrCountIn ? "Recording..." : "Start Recording")
+                            class="flex-1 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-rose-600/25 flex items-center justify-center space-x-1.5 transition active:scale-95">
+                        <StudioIcon Name="recorder" Class="w-3.5 h-3.5" />
+                        <span>@(isRecordingOrCountIn ? "Recording..." : "Start Recording")</span>
                     </button>
                     <button type="button"
                             disabled="@(!isRecordingOrCountIn)"
                             @onclick="() => _ = Recorder.StopRecordingAsync()"
-                            class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-white font-bold text-xs border border-slate-700 transition active:scale-95">
-                        ⏹ Stop &amp; Save
+                            class="hw-btn px-3.5 py-2 rounded-xl disabled:opacity-40 font-bold text-xs">
+                        Stop &amp; Save
                     </button>
                 </div>
             </div>
 
             <!-- Live Chord Recognition LCD -->
-            <div id="liveChordDisplay" class="glass-panel p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between space-y-2">
+            <div id="liveChordDisplay" class="hw-panel p-3.5 flex flex-col justify-between space-y-2">
                 <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Live Inbound Chord Analyzer</span>
-                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold @(State.RecorderState == RecorderState.Recording ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse" : "bg-slate-800 text-slate-400")">
+                    <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-mid);">Live Inbound Chord Matrix</span>
+                    <span class="px-2 py-0.5 rounded-full text-[9px] font-bold @(State.RecorderState == RecorderState.Recording ? "bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse" : "hw-bay")">
                         @State.RecorderState
                     </span>
                 </div>
-                <div class="lcd-display p-3 rounded-xl text-center space-y-1">
-                    <div class="text-2xl font-black text-cyan-300 font-mono truncate">@chordName</div>
-                    <div class="text-xs font-mono text-slate-300 truncate">@chordNotes</div>
-                    <div class="text-[10px] text-slate-500">@chordSub</div>
+                <div class="hw-vfd p-3 rounded-xl text-center space-y-1">
+                    <div class="text-2xl font-black font-mono truncate">@chordName</div>
+                    <div class="text-xs font-mono opacity-85 truncate">@chordNotes</div>
+                    <div class="text-[10px] opacity-60">@chordSub</div>
                 </div>
             </div>
 
             <!-- 12-Segment Stereo VU Peak Meters -->
-            <div class="glass-panel p-4 rounded-xl border border-slate-800/80 flex flex-col justify-between space-y-2">
+            <div class="hw-panel p-3.5 flex flex-col justify-between space-y-2">
                 <div class="flex items-center justify-between">
-                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Stereo Peak VU Meter</span>
-                    <span class="text-[10px] font-mono text-slate-500">dB Peak Hold</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-mid);">Stereo Peak Bridge</span>
+                    <span class="text-[10px] font-mono" style="color: var(--text-lo);">dB Peak Hold</span>
                 </div>
-                <div class="space-y-2.5 bg-slate-950/90 p-3 rounded-xl border border-slate-800">
+                <div class="hw-vfd space-y-2.5 p-3 rounded-xl">
                     <div class="flex items-center space-x-2">
-                        <span class="text-[10px] font-mono font-bold text-slate-400 w-3">L</span>
+                        <span class="text-[10px] font-mono font-bold w-3">L</span>
                         <div class="flex-1 grid grid-cols-12 gap-1 h-4">
                             @for (int i = 0; i < 12; i++)
                             {
@@ -273,7 +274,7 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <span class="text-[10px] font-mono font-bold text-slate-400 w-3">R</span>
+                        <span class="text-[10px] font-mono font-bold w-3">R</span>
                         <div class="flex-1 grid grid-cols-12 gap-1 h-4">
                             @for (int i = 0; i < 12; i++)
                             {

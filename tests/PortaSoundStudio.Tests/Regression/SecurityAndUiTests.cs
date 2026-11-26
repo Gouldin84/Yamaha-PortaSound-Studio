@@ -227,6 +227,27 @@ namespace PSS790Player.Tests
             Assert.Contains("@if (is680)", drumPads);
         }
 
+        [Fact]
+        public void BlazorHybrid_Assets_IncludeNeoVintageDesignSystemAndVisualizer()
+        {
+            var srcDir = FindRepoSrcDir();
+            Assert.NotNull(srcDir);
+
+            var indexHtml = File.ReadAllText(Path.Combine(srcDir!, "wwwroot", "index.html"));
+            Assert.Contains("css/design-system.css", indexHtml);
+
+            var designSystem = File.ReadAllText(Path.Combine(srcDir!, "wwwroot", "css", "design-system.css"));
+            Assert.Contains("--vfd-bg:", designSystem);
+            Assert.Contains(".v-fader-stage", designSystem);
+            Assert.Contains("max-height: 760px", designSystem);
+
+            var vizDeck = File.ReadAllText(Path.Combine(srcDir!, "Components", "Player", "MidiVisualizerDeck.razor"));
+            Assert.Contains("liveStageCanvas", vizDeck);
+            Assert.Contains("16-Ch Spectrum", vizDeck);
+            Assert.Contains("Note Matrix", vizDeck);
+            Assert.Contains("VFD Scope", vizDeck);
+        }
+
         private static string? FindRepoSrcDir()
         {
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

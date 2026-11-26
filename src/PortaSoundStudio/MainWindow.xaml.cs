@@ -15,6 +15,11 @@ namespace PSS790Player
     {
         private const int WM_DEVICECHANGE = 0x0219;
         private const int DBT_DEVNODES_CHANGED = 0x0007;
+        private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        private const int DWMWA_CAPTION_COLOR = 35;
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
 
         private readonly ServiceProvider _serviceProvider;
         private readonly AppStateStore _state;
@@ -24,6 +29,7 @@ namespace PSS790Player
         private readonly SoundDesignService _soundDesign;
         private readonly RecorderService _recorder;
         private string _lastAppliedModel = string.Empty;
+        private bool? _lastAppliedDarkTheme;
 
         public MainWindow()
         {
@@ -50,6 +56,11 @@ namespace PSS790Player
             _recorder = _serviceProvider.GetRequiredService<RecorderService>();
 
             InitializeComponent();
+
+            // Ensure initial window fits cleanly on scaled displays (e.g. ROG Ally 1920x1080 @ 150% = 1280x720 DIP)
+            var workArea = SystemParameters.WorkArea;
+            if (Width > workArea.Width) Width = Math.Max(MinWidth, workArea.Width - 16);
+            if (Height > workArea.Height) Height = Math.Max(MinHeight, workArea.Height - 16);
 
             if (!string.IsNullOrEmpty(App.SmokeMarkerPath) || !string.IsNullOrEmpty(App.DiagMarkerPath))
             {
@@ -101,16 +112,59 @@ namespace PSS790Player
                                 var r3 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ recOpen: !!document.getElementById('recordingsSidebar') })");
                                 await args.WebView.ExecuteScriptAsync("document.getElementById('tabBtnSysex')?.click()");
                                 await System.Threading.Tasks.Task.Delay(300);
-                                var r4 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ fmOpen: !!document.getElementById('deckFmSoundDesigner'), vecOpen: !!document.getElementById('deckVectorSynthesizer') })");
+                                var r4 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ fmOpen: !!document.getElementById('deckFmSoundDesigner'), fmScopeOk: (document.getElementById('fmScopeCanvas')?.width || 0) > 0, modSvg: !!document.getElementById('svgFmModEnv'), carSvg: !!document.getElementById('svgFmCarEnv'), bodyModel: document.body.dataset.model })");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnSysexViewDrums')?.click()");
+                                await System.Threading.Tasks.Task.Delay(250);
+                                var r4b = await args.WebView.ExecuteScriptAsync("JSON.stringify({ mpcPads: document.querySelectorAll('#drumPadsContainer .mpc-pad').length, has03H: !!document.getElementById('drummerGridContainer') })");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnSysexViewDumps')?.click()");
+                                await System.Threading.Tasks.Task.Delay(250);
+                                var r4c = await args.WebView.ExecuteScriptAsync("JSON.stringify({ vaultOpen: !!document.getElementById('deckBulkDumps') })");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnSysexViewDesigner')?.click()");
+                                await System.Threading.Tasks.Task.Delay(200);
                                 await args.WebView.ExecuteScriptAsync("document.getElementById('modelSelectorBtn')?.click()");
                                 await System.Threading.Tasks.Task.Delay(200);
                                 await args.WebView.ExecuteScriptAsync("document.querySelectorAll('#modelDropdownMenu button')[0]?.click()");
                                 await System.Threading.Tasks.Task.Delay(350);
-                                var r5 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ title790: document.getElementById('activeModelTitle')?.innerText, vecOpenAfterSwitch: !!document.getElementById('deckVectorSynthesizer') })");
+                                var r5 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ title790: document.getElementById('activeModelTitle')?.innerText, vecOpenAfterSwitch: !!document.getElementById('deckVectorSynthesizer'), vecCanvasW: document.getElementById('vecCanvas')?.width || 0, bodyModel: document.body.dataset.model })");
                                 await args.WebView.ExecuteScriptAsync("document.getElementById('tabBtnPlayer')?.click()");
                                 await System.Threading.Tasks.Task.Delay(300);
-                                var r6 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ playerOpen: !!document.getElementById('quickPickSidebar'), has790Tree: document.getElementById('treeContainer')?.innerText?.includes('Yamaha PSS-790'), has680Tree: document.getElementById('treeContainer')?.innerText?.includes('Yamaha PSS-680') })");
-                                System.IO.File.WriteAllText(App.DiagMarkerPath, $"R1={r1}\nR2={r2}\nR2b={r2b}\nR3={r3}\nR4={r4}\nR5={r5}\nR6={r6}");
+                                var firstSong = _state.Library.AllFiles.FirstOrDefault(f => !string.Equals(f.Format, "pss680", StringComparison.OrdinalIgnoreCase));
+                                if (firstSong != null)
+                                {
+                                    await _playback.LoadFileAsync(firstSong.FullPath, autoPlay: false);
+                                    await System.Threading.Tasks.Task.Delay(400);
+                                }
+                                var loadedTitle = await args.WebView.ExecuteScriptAsync("document.getElementById('currentSongTitle')?.innerText");
+                                var themeBefore = await args.WebView.ExecuteScriptAsync("document.body.classList.contains('theme-light')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnThemeToggle')?.click()");
+                                await System.Threading.Tasks.Task.Delay(250);
+                                var themeAfter = await args.WebView.ExecuteScriptAsync("document.body.classList.contains('theme-light')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnThemeToggle')?.click()");
+                                await System.Threading.Tasks.Task.Delay(200);
+                                var touchBefore = await args.WebView.ExecuteScriptAsync("document.body.classList.contains('handheld-touch-mode')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnToggleHandheldMode')?.click()");
+                                await System.Threading.Tasks.Task.Delay(200);
+                                var touchAfter = await args.WebView.ExecuteScriptAsync("document.body.classList.contains('handheld-touch-mode')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnToggleHandheldMode')?.click()");
+                                await System.Threading.Tasks.Task.Delay(150);
+                                await args.WebView.ExecuteScriptAsync("document.querySelector('#mixerGrid .btn-console-m')?.click()");
+                                await System.Threading.Tasks.Task.Delay(200);
+                                var mutedCh1 = await args.WebView.ExecuteScriptAsync("document.querySelector('#mixerGrid .btn-console-m')?.classList.contains('muted')");
+                                await args.WebView.ExecuteScriptAsync("document.querySelector('#mixerGrid .btn-console-m')?.click()");
+                                await System.Threading.Tasks.Task.Delay(150);
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnShortcuts')?.click(); document.getElementById('btnMoreTools')?.click();");
+                                await System.Threading.Tasks.Task.Delay(150);
+                                var moreOpen = await args.WebView.ExecuteScriptAsync("!!document.getElementById('moreToolsDropdownMenu')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnVizWaterfall')?.click()");
+                                await System.Threading.Tasks.Task.Delay(150);
+                                var vizWf = await args.WebView.ExecuteScriptAsync("localStorage.getItem('yamaha_studio_viz_mode')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnVizScope')?.click()");
+                                await System.Threading.Tasks.Task.Delay(150);
+                                var vizSc = await args.WebView.ExecuteScriptAsync("localStorage.getItem('yamaha_studio_viz_mode')");
+                                await args.WebView.ExecuteScriptAsync("document.getElementById('btnVizSpectrum')?.click()");
+                                await System.Threading.Tasks.Task.Delay(200);
+                                var r6 = await args.WebView.ExecuteScriptAsync("JSON.stringify({ playerOpen: !!document.getElementById('quickPickSidebar'), has790Tree: document.getElementById('treeContainer')?.innerText?.includes('Yamaha PSS-790'), has680Tree: document.getElementById('treeContainer')?.innerText?.includes('Yamaha PSS-680'), stageW: document.getElementById('liveStageCanvas')?.width || 0, strips: document.querySelectorAll('#mixerGrid .channel-strip-card').length, faders: document.querySelectorAll('#mixerGrid input.v-fader-input').length, vizDefault: localStorage.getItem('yamaha_studio_viz_mode') })");
+                                System.IO.File.WriteAllText(App.DiagMarkerPath, $"R1={r1}\nR2={r2}\nR2b={r2b}\nR3={r3}\nR4={r4}\nR4b={r4b}\nR4c={r4c}\nR5={r5}\nLOADED={loadedTitle}\nTHEME={themeBefore}->{themeAfter}\nTOUCH={touchBefore}->{touchAfter}\nMUTE_CH1={mutedCh1}\nMORE_OPEN={moreOpen}\nVIZ_WF={vizWf}\nVIZ_SC={vizSc}\nR6={r6}");
                             }
                             else if (!string.IsNullOrEmpty(App.SmokeMarkerPath))
                             {
@@ -148,6 +202,7 @@ namespace PSS790Player
             if (PresentationSource.FromVisual(this) is HwndSource source)
             {
                 source.AddHook(WndProcHook);
+                ApplyWindowThemeChrome(source.Handle, _state.IsDarkTheme);
             }
         }
 
@@ -163,10 +218,41 @@ namespace PSS790Player
         private void OnStateChanged()
         {
             var model = _state.ActiveModel;
+            bool isDark = _state.IsDarkTheme;
             if (!string.Equals(model, _lastAppliedModel, StringComparison.OrdinalIgnoreCase))
             {
                 Dispatcher.BeginInvoke(() => ApplyWindowModelBranding(model));
             }
+            if (_lastAppliedDarkTheme != isDark)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    if (PresentationSource.FromVisual(this) is HwndSource source)
+                    {
+                        ApplyWindowThemeChrome(source.Handle, isDark);
+                    }
+                });
+            }
+        }
+
+        private void ApplyWindowThemeChrome(IntPtr hwnd, bool isDark)
+        {
+            _lastAppliedDarkTheme = isDark;
+            try
+            {
+                int darkMode = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkMode, sizeof(int));
+
+                // COLORREF format is 0x00BBGGRR: Obsidian (#080d1a) vs Anodized Silver (#e2e8f2)
+                int captionColor = isDark ? 0x001A0D08 : 0x00F2E8E2;
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+            catch { }
+
+            Background = new System.Windows.Media.SolidColorBrush(
+                isDark
+                    ? System.Windows.Media.Color.FromRgb(7, 11, 20)
+                    : System.Windows.Media.Color.FromRgb(217, 224, 234));
         }
 
         private void ApplyWindowModelBranding(string model)

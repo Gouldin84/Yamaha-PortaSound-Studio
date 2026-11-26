@@ -8,12 +8,19 @@
     <link rel="icon" type="image/x-icon" href="images/favicon.ico" />
     <link href="css/tailwind.css" rel="stylesheet" />
     <link href="css/styles.css" rel="stylesheet" />
+    <link href="css/design-system.css" rel="stylesheet" />
 </head>
-<body class="bg-slate-950 text-slate-100 antialiased overflow-hidden h-screen flex flex-col select-none">
+<body class="bg-slate-950 text-slate-100 antialiased overflow-hidden h-screen flex flex-col select-none" data-model="pss790">
     <div id="app" class="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <div class="flex-1 flex flex-col items-center justify-center space-y-3 bg-slate-950 text-slate-400 text-xs font-mono">
-            <img src="images/app_icon.png" alt="Logo" class="w-12 h-12 rounded-xl border border-slate-800 shadow-lg animate-pulse" />
-            <span>Initializing Yamaha PortaSound Studio Engine...</span>
+        <div class="flex-1 flex flex-col items-center justify-center space-y-4 text-xs font-mono" style="background: #070b14; color: #94a3b8;">
+            <div class="relative flex items-center justify-center">
+                <div class="absolute inset-0 rounded-2xl blur-xl opacity-50 animate-pulse" style="background: #06b6d4;"></div>
+                <img src="images/app_icon.png" alt="Logo" class="relative w-14 h-14 rounded-2xl border border-slate-700/80 shadow-2xl" />
+            </div>
+            <div class="text-center space-y-1">
+                <div class="text-sm font-bold tracking-tight text-slate-100">Yamaha PortaSound Studio</div>
+                <div class="text-[11px] text-cyan-400 tracking-wider uppercase">Initializing Hardware Audio &amp; Visual Engine...</div>
+            </div>
         </div>
     </div>
 

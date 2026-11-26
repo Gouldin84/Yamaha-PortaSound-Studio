@@ -38,10 +38,11 @@ namespace PSS790Player.Services
         public bool IsDarkTheme { get; set; } = true;
         public bool HandheldMode { get; set; }
         public bool IsSidebarCollapsed { get; set; }
-        public int SidebarWidth { get; set; } = 300;
+        public int SidebarWidth { get; set; } = 276;
         public bool ShowStudioHardwareGuide { get; set; }
         public string StudioGuideModelTab { get; set; } = "pss790";
         public string SysExGuideModelTab { get; set; } = "pss790";
+        public string VisualizerMode { get; set; } = "spectrum"; // spectrum, waterfall, scope
 
         // Devices & Settings
         public List<string> OutputDevices { get; set; } = new();

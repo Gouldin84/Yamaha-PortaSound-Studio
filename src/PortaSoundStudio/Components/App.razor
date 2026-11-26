@@ -29,6 +29,7 @@
                     s.IsDarkTheme = prefs.IsDark;
                     s.HandheldMode = prefs.Handheld;
                     s.ShowStudioHardwareGuide = prefs.GuideOpen;
+                    if (!string.IsNullOrEmpty(prefs.VizMode)) s.VisualizerMode = prefs.VizMode;
                 });
 
                 if (modelChanged && !string.IsNullOrEmpty(prefs.Model))
@@ -167,5 +168,6 @@
         public bool Handheld { get; set; }
         public string Model { get; set; } = "pss790";
         public bool GuideOpen { get; set; }
+        public string VizMode { get; set; } = "spectrum";
     }
 }

@@ -10,7 +10,7 @@
         Title="Yamaha PortaSound Studio"
         Height="860" Width="1380" MinHeight="640" MinWidth="960"
         WindowStartupLocation="CenterScreen"
-        Background="#0b1324">
+        Background="#070b14">
     <Grid>
         <core:SingleFileBlazorWebView x:Name="MainBlazorWebView"
                                       HostPage="wwwroot\index.html"

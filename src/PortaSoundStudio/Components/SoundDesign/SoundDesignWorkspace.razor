@@ -12,71 +12,81 @@
 
 <section class="w-full h-full flex flex-col space-y-2.5 min-h-0 overflow-hidden">
     <!-- Top Sub-Header Pill Bar -->
-    <div class="glass-panel px-3 py-2 rounded-xl border border-slate-800/80 shadow-lg flex flex-wrap items-center justify-between gap-2 shrink-0">
+    <div class="hw-panel px-3 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0">
         <div class="min-w-0">
-            <h2 id="sysexVaultHeaderTitle" class="text-xs sm:text-sm font-bold text-white truncate">
+            <h2 id="sysexVaultHeaderTitle" class="text-xs sm:text-sm font-bold truncate" style="color: var(--text-hi);">
                 @(is680 ? "Yamaha PSS-680 FM Sound Designer & SysEx Vault" : "Yamaha PSS-790 Vector Synthesizer & SysEx Vault")
             </h2>
-            <p id="sysexVaultHeaderSubtitle" class="text-[10px] text-slate-400 truncate">
+            <p id="sysexVaultHeaderSubtitle" class="text-[10px] font-mono truncate" style="color: var(--text-lo);">
                 @(is680
-                    ? "Design 2-op FM voices, access 18 hidden parameters, build 03H drum patterns & manage memory backups"
-                    : "Real-time 2D 4-voice vector synthesis, LFO orbit automation, Chart 1 percussion & memory backups")
+                    ? "Design 2-op FM voices, 18 hidden parameters, 03H drum patterns & memory backups"
+                    : "Real-time 2D 4-voice vector synthesis, LFO orbit automation, Chart 1 percussion & backups")
             </p>
         </div>
 
         <div class="flex items-center flex-wrap gap-2 shrink-0">
-            <div class="flex items-center bg-slate-900 rounded-xl p-0.5 border border-slate-800 space-x-1">
+            <div class="hw-bay flex items-center rounded-xl p-1 space-x-1">
                 <button id="btnSysexViewDesigner"
                         type="button"
                         @onclick='() => SetViewMode(is680 ? "fm" : "vector")'
-                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode is "fm" or "vector" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
-                    <span id="sysexDesignerPillIcon">@(is680 ? "🎛️" : "🕹️")</span>
+                        class="hw-tab-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold flex items-center space-x-1.5 @(mode is "fm" or "vector" ? "active" : "")">
+                    <StudioIcon Name="@(is680 ? "synth" : "vector")" Class="w-3.5 h-3.5" />
                     <span id="sysexDesignerPillLabel">@(is680 ? "FM Sound Designer" : "Vector Synthesizer")</span>
                 </button>
                 <button id="btnSysexViewDrums"
                         type="button"
                         @onclick='() => SetViewMode("drums")'
-                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode == "drums" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
-                    <span>🥁</span>
+                        class="hw-tab-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold flex items-center space-x-1.5 @(mode == "drums" ? "active" : "")">
+                    <StudioIcon Name="drums" Class="w-3.5 h-3.5" />
                     <span>@(is680 ? "Drummer & Pads" : "Drum Pads")</span>
                 </button>
                 <button id="btnSysexViewDumps"
                         type="button"
                         @onclick='() => SetViewMode("vault")'
-                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode == "vault" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
-                    <span>🗄️</span>
+                        class="hw-tab-btn px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold flex items-center space-x-1.5 @(mode == "vault" ? "active" : "")">
+                    <StudioIcon Name="vault" Class="w-3.5 h-3.5" />
                     <span>SysEx Bulk Vault</span>
                 </button>
             </div>
 
             <button type="button" @onclick='() => SoundDesign.SendQuickSysEx("all_reset")' title="Send All Notes Off & Reset Controllers across 16 channels"
-                    class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-800/50 text-xs font-bold transition active:scale-95">
-                ⚡ Panic Reset
+                    class="px-2.5 py-1 rounded-xl bg-rose-950/60 hover:bg-rose-700 text-rose-300 hover:text-white border border-rose-700/60 text-xs font-bold flex items-center space-x-1 transition active:scale-95">
+                <StudioIcon Name="bolt" Class="w-3.5 h-3.5" />
+                <span>Panic Reset</span>
             </button>
             <button type="button" @onclick="() => SoundDesign.OpenSysExFolder()" title="Open SysEx Vault Folder"
-                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-semibold transition active:scale-95">
-                📁 Vault
+                    class="hw-btn px-2.5 py-1 rounded-xl text-amber-400 text-xs font-semibold flex items-center space-x-1">
+                <StudioIcon Name="folder" Class="w-3.5 h-3.5" />
+                <span>Vault</span>
             </button>
         </div>
     </div>
 
-    <!-- Active Sub-Deck -->
+    <!-- Active Sub-Deck with Transition Choreography -->
     <div class="flex-1 min-h-0 overflow-hidden">
         @if (mode == "drums")
         {
-            <DrumPadsDeck />
+            <div @key="@("drums")" class="workspace-enter w-full h-full min-h-0">
+                <DrumPadsDeck />
+            </div>
         }
         else if (mode == "vault")
         {
-            <SysExVaultPanel />
+            <div @key="@("vault")" class="workspace-enter w-full h-full min-h-0">
+                <SysExVaultPanel />
+            </div>
         }
         else if (is680)
         {
-            <FmVoiceDesigner />
+            <div @key="@("fm")" class="workspace-enter w-full h-full min-h-0">
+                <FmVoiceDesigner />
+            </div>
         }
         else
         {
-            <VectorSynthPad />
+            <div @key="@("vector")" class="workspace-enter w-full h-full min-h-0">
+                <VectorSynthPad />
+            </div>
         }
     </div>
 </section>

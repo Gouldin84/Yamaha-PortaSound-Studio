@@ -43,17 +43,19 @@
         </div>
 
         <div id="drumPadsContainer" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
-            @foreach (var pad in pads)
+            @for (int pIdx = 0; pIdx < pads.Length; pIdx++)
             {
+                var pad = pads[pIdx];
                 bool flashed = _lastHitNote == pad.Note;
                 <button type="button"
+                        style="--idx: @pIdx;"
                         @onpointerdown="() => HitPad(pad.Note)"
-                        class="min-h-[68px] p-2.5 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-amber-900/50 hover:to-slate-900 border @(flashed ? "border-amber-400 ring-2 ring-amber-400" : "border-slate-700") active:scale-95 transition flex flex-col items-start justify-between text-left shadow-md">
+                        class="mpc-pad stagger-card @(flashed ? "mpc-hit" : "") min-h-[64px] p-2.5 rounded-xl flex flex-col items-start justify-between text-left cursor-pointer">
                     <div class="w-full flex items-center justify-between">
-                        <span class="px-1.5 py-0.5 rounded bg-slate-950 text-amber-400 font-mono text-[10px] font-bold">@pad.Pad</span>
-                        <span class="text-[10px] font-mono text-slate-500">N@pad.Note</span>
+                        <span class="hw-vfd px-1.5 py-0.5 rounded font-mono text-[9px] font-bold" style="color: #fbbf24 !important;">@pad.Pad</span>
+                        <span class="text-[9px] font-mono" style="color: var(--text-lo);">N@pad.Note</span>
                     </div>
-                    <span class="text-xs font-bold text-white leading-tight">@pad.Name</span>
+                    <span class="text-xs font-bold leading-tight truncate w-full" style="color: var(--text-hi);">@pad.Name</span>
                 </button>
             }
         </div>

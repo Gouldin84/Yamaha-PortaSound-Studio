@@ -1,0 +1,98 @@
+@inherits StudioComponentBase
+@inject PlaybackCoordinator Playback
+@inject IJSRuntime JS
+
+<div class="hw-vfd rounded-xl p-1 relative">
+    <canvas id="liveStageCanvas" class="stage-viz-canvas w-full h-16 rounded-lg block"></canvas>
+    <div class="absolute top-1.5 right-2 flex items-center space-x-1 bg-slate-950/75 backdrop-blur-sm border border-slate-700/60 rounded-lg p-0.5 text-[9px] font-bold">
+        <button id="btnVizSpectrum"
+                type="button"
+                @onclick='() => SetMode("spectrum")'
+                title="16-Channel Live Spectrum Analyzer"
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "spectrum" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+            16-Ch Spectrum
+        </button>
+        <button id="btnVizWaterfall"
+                type="button"
+                @onclick='() => SetMode("waterfall")'
+                title="Live Falling MIDI Note Matrix"
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "waterfall" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+            Note Matrix
+        </button>
+        <button id="btnVizScope"
+                type="button"
+                @onclick='() => SetMode("scope")'
+                title="Stereo VFD Oscilloscope"
+                class="px-1.5 py-0.5 rounded transition cursor-pointer @(Mode == "scope" ? "hw-accent-btn" : "text-slate-400 hover:text-white")">
+            VFD Scope
+        </button>
+    </div>
+    <div class="absolute top-1.5 left-2.5 text-[9px] font-mono uppercase tracking-widest opacity-60 pointer-events-none">
+        @(State.IsPlaying ? "LIVE TELEMETRY" : "STAGE READY")
+    </div>
+</div>
+
+@code {
+    protected override StateScope SubscribedScopes => StateScope.Transport | StateScope.Channels | StateScope.Shell;
+
+    private string Mode => string.IsNullOrEmpty(State.VisualizerMode) ? "spectrum" : State.VisualizerMode;
+    private bool _subscribedToNotes;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (!_subscribedToNotes)
+            {
+                _subscribedToNotes = true;
+                Playback.NoteTriggered += HandleNoteTriggered;
+            }
+            try
+            {
+                await JS.InvokeVoidAsync("studioInterop.initStageVisualizer", "liveStageCanvas", Mode, State.IsPlaying);
+            }
+            catch { }
+        }
+        else
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("studioInterop.setStageVisualizerState", Mode, State.IsPlaying);
+                await JS.InvokeVoidAsync("studioInterop.syncStageChannelLevels", State.ChannelVelocities.Select(v => (int)v).ToArray());
+            }
+            catch { }
+        }
+    }
+
+    private void HandleNoteTriggered(int channel, byte velocity, byte noteNumber)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("studioInterop.pushStageNote", channel, (int)velocity, (int)noteNumber);
+            }
+            catch { }
+        });
+    }
+
+    private async Task SetMode(string mode)
+    {
+        State.Mutate(s => s.VisualizerMode = mode, StateScope.Shell);
+        try
+        {
+            await JS.InvokeVoidAsync("studioInterop.saveVisualizerPreference", mode);
+            await JS.InvokeVoidAsync("studioInterop.setStageVisualizerState", mode, State.IsPlaying);
+        }
+        catch { }
+    }
+
+    protected override void OnDisposing()
+    {
+        if (_subscribedToNotes)
+        {
+            Playback.NoteTriggered -= HandleNoteTriggered;
+            _subscribedToNotes = false;
+        }
+    }
+}

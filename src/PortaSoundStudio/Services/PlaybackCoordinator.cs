@@ -37,6 +37,11 @@ namespace PSS790Player.Services
         private readonly object _meterLock = new();
         private readonly System.Threading.Timer _meterTimer;
 
+        /// <summary>
+        /// High-frequency note flash hook for the 60fps Canvas visualizer (channel, velocity, noteNumber).
+        /// </summary>
+        public event Action<int, byte, byte>? NoteTriggered;
+
         private CancellationTokenSource? _loadCts;
         private long _loadSequence;
         private volatile bool _userRequestedStop;
@@ -869,6 +874,10 @@ namespace PSS790Player.Services
             {
                 _pendingChannelActive[e.Channel] = e.IsActive;
                 _pendingChannelVel[e.Channel] = e.Velocity;
+            }
+            if (e.IsActive && e.Velocity > 0)
+            {
+                NoteTriggered?.Invoke(e.Channel, e.Velocity, e.NoteNumber);
             }
         }
 

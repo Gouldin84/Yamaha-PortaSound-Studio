@@ -1,0 +1,503 @@
+/* ==========================================================================
+   Yamaha PortaSound Studio — Option 1A Neo-Vintage Hardware Design System
+   Dual Surface Architecture: Obsidian Studio (Dark) & Anodized Silver (Light)
+   Model-Reactive Ambient Accents: PSS-790 (Cyan/Vector) vs PSS-680 (Amber/FM)
+   ========================================================================== */
+
+:root,
+body:not(.theme-light) {
+    --acc: #06b6d4;
+    --acc-hi: #22d3ee;
+    --acc-2: #6366f1;
+    --acc-glow: rgba(6, 182, 212, 0.42);
+    --acc-soft: rgba(6, 182, 212, 0.14);
+
+    --chassis-bg: #070b14;
+    --panel-bg: linear-gradient(165deg, rgba(19, 28, 48, 0.94) 0%, rgba(10, 15, 28, 0.97) 100%);
+    --panel-solid: #10182b;
+    --panel-border: rgba(148, 163, 184, 0.16);
+    --panel-highlight: rgba(255, 255, 255, 0.08);
+    --panel-shadow: 0 12px 32px -10px rgba(0, 0, 0, 0.6);
+
+    --bay-bg: #050811;
+    --bay-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.78);
+    --strip-bg: linear-gradient(180deg, rgba(22, 33, 56, 0.88) 0%, rgba(11, 17, 32, 0.96) 100%);
+    --groove-bg: #03060d;
+
+    --vfd-bg: radial-gradient(circle at 50% 25%, #0b222b 0%, #040d14 100%);
+    --vfd-text: #22d3ee;
+    --vfd-border: rgba(34, 211, 238, 0.22);
+
+    --text-hi: #f8fafc;
+    --text-mid: #94a3b8;
+    --text-lo: #64748b;
+
+    --card-radius: 14px;
+}
+
+/* PSS-680 Warm Amber / Copper FM Accent Profile */
+body[data-model="pss680"],
+body:not(.theme-light)[data-model="pss680"] {
+    --acc: #f59e0b;
+    --acc-hi: #fbbf24;
+    --acc-2: #ea580c;
+    --acc-glow: rgba(245, 158, 11, 0.44);
+    --acc-soft: rgba(245, 158, 11, 0.14);
+    --vfd-text: #fbbf24;
+    --vfd-border: rgba(251, 191, 36, 0.24);
+}
+
+/* Option 1A Daylight Finish: Anodized Brushed Silver Aluminum Hardware */
+body.theme-light {
+    --acc: #0284c7;
+    --acc-hi: #0ea5e9;
+    --acc-2: #4f46e5;
+    --acc-glow: rgba(2, 132, 199, 0.32);
+    --acc-soft: rgba(2, 132, 199, 0.12);
+
+    --chassis-bg: #d9e0ea;
+    --panel-bg: linear-gradient(175deg, #f8fafd 0%, #eaeef5 100%);
+    --panel-solid: #eef2f8;
+    --panel-border: rgba(100, 116, 139, 0.26);
+    --panel-highlight: rgba(255, 255, 255, 0.95);
+    --panel-shadow: 0 10px 24px -8px rgba(15, 23, 42, 0.12), 0 2px 6px -1px rgba(15, 23, 42, 0.05);
+
+    --bay-bg: #cfd8e4;
+    --bay-shadow: inset 0 2px 6px rgba(15, 23, 42, 0.14);
+    --strip-bg: linear-gradient(180deg, #ffffff 0%, #edf2f8 100%);
+    --groove-bg: #cbd5e1;
+
+    /* Crisp dark recessed OLED/VFD displays remain legible & authentic in daylight */
+    --vfd-bg: radial-gradient(circle at 50% 25%, #0f1c2e 0%, #070e18 100%);
+    --vfd-text: #38bdf8;
+    --vfd-border: rgba(15, 23, 42, 0.35);
+
+    --text-hi: #0f172a;
+    --text-mid: #475569;
+    --text-lo: #64748b;
+}
+
+body.theme-light[data-model="pss680"] {
+    --acc: #d97706;
+    --acc-hi: #f59e0b;
+    --acc-2: #c2410c;
+    --acc-glow: rgba(217, 119, 6, 0.32);
+    --acc-soft: rgba(217, 119, 6, 0.12);
+    --vfd-text: #fbbf24;
+}
+
+/* Base Chassis Background */
+body {
+    background-color: var(--chassis-bg) !important;
+    color: var(--text-hi);
+    transition: background-color 0.45s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+}
+
+/* Sculpted Hardware Panels & Recessed Bays */
+.hw-panel {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--card-radius);
+    box-shadow: inset 0 1px 0 var(--panel-highlight), var(--panel-shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: border-color 0.3s ease, box-shadow 0.35s ease, background 0.4s ease;
+}
+
+.hw-bay {
+    background: var(--bay-bg);
+    border: 1px solid var(--panel-border);
+    box-shadow: var(--bay-shadow);
+    transition: background-color 0.35s ease, border-color 0.3s ease;
+}
+
+.hw-vfd {
+    background: var(--vfd-bg) !important;
+    color: var(--vfd-text) !important;
+    border: 1px solid var(--vfd-border) !important;
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.85), 0 0 14px -4px var(--acc-glow) !important;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    position: relative;
+    overflow: hidden;
+}
+
+.hw-vfd::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(255, 255, 255, 0.025) 0px,
+        rgba(255, 255, 255, 0.025) 1px,
+        transparent 1px,
+        transparent 3px
+    );
+    pointer-events: none;
+}
+
+/* Override generic glass classes cleanly onto hardware token surfaces */
+.glass-panel {
+    background: var(--panel-bg) !important;
+    border-color: var(--panel-border) !important;
+    box-shadow: inset 0 1px 0 var(--panel-highlight), var(--panel-shadow) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.glass-card {
+    background: var(--strip-bg) !important;
+    border-color: var(--panel-border) !important;
+    box-shadow: inset 0 1px 0 var(--panel-highlight), 0 4px 14px -4px rgba(0, 0, 0, 0.32) !important;
+}
+
+body.theme-light .glass-card {
+    box-shadow: inset 0 1px 0 #ffffff, 0 4px 12px -4px rgba(15, 23, 42, 0.1) !important;
+}
+
+.glass-card:hover {
+    border-color: var(--acc) !important;
+}
+
+/* Ambient Dynamic Glow Orbs */
+.ambient-orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(75px);
+    pointer-events: none;
+    z-index: 0;
+    transition: background 0.6s ease, opacity 0.6s ease;
+}
+
+body:not(.theme-light) .ambient-orb-primary {
+    background: var(--acc-glow);
+    opacity: 0.22;
+}
+body:not(.theme-light) .ambient-orb-secondary {
+    background: var(--acc-2);
+    opacity: 0.12;
+}
+body.theme-light .ambient-orb-primary {
+    background: var(--acc-glow);
+    opacity: 0.12;
+}
+body.theme-light .ambient-orb-secondary {
+    background: var(--acc-2);
+    opacity: 0.07;
+}
+
+/* Primary Accent Action Gradient Pill */
+.hw-accent-btn {
+    background: linear-gradient(135deg, var(--acc) 0%, var(--acc-2) 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 16px -2px var(--acc-glow), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+    transition: transform 0.15s cubic-bezier(0.22, 1, 0.36, 1), filter 0.2s ease, box-shadow 0.25s ease !important;
+}
+.hw-accent-btn:hover:not(:disabled) {
+    filter: brightness(1.1);
+    box-shadow: 0 6px 20px -2px var(--acc-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
+}
+.hw-accent-btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.97);
+}
+
+/* Tactile Hardware Button */
+.hw-btn {
+    background: var(--bay-bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text-mid);
+    box-shadow: inset 0 1px 0 var(--panel-highlight), 0 2px 5px rgba(0, 0, 0, 0.22);
+    transition: all 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hw-btn:hover:not(:disabled) {
+    color: var(--text-hi);
+    border-color: var(--acc);
+}
+.hw-btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.96);
+}
+
+/* Segmented Navigation Active State */
+.hw-tab-btn {
+    color: var(--text-mid);
+    transition: all 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hw-tab-btn:hover:not(.active) {
+    color: var(--text-hi);
+    background: rgba(148, 163, 184, 0.1);
+}
+.hw-tab-btn.active {
+    background: linear-gradient(135deg, var(--acc) 0%, var(--acc-2) 100%) !important;
+    color: #ffffff !important;
+    box-shadow: 0 2px 12px -1px var(--acc-glow), inset 0 1px 0 rgba(255, 255, 255, 0.28) !important;
+}
+
+/* View & Panel Choreography */
+@keyframes workspaceEnter {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.994);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+.workspace-enter {
+    animation: workspaceEnter 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes cardStaggerIn {
+    0% {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.stagger-card {
+    animation: cardStaggerIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--idx, 0) * 14ms);
+}
+
+@keyframes springReveal {
+    0% {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.96);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+.dropdown-spring {
+    transform-origin: top center;
+    animation: springReveal 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes modalPopIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.94) translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+.modal-reveal {
+    animation: modalPopIn 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes toastSlideIn {
+    0% {
+        opacity: 0;
+        transform: translateX(24px) scale(0.95);
+    }
+    100% {
+        opacity: 1;
+        transform: translateX(0) scale(1);
+    }
+}
+.toast-slide-in {
+    animation: toastSlideIn 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes playAuraPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 var(--acc-glow), 0 4px 18px var(--acc-glow);
+    }
+    50% {
+        box-shadow: 0 0 0 7px rgba(6, 182, 212, 0), 0 4px 24px var(--acc-glow);
+    }
+}
+.play-core-active {
+    animation: playAuraPulse 1.6s ease-in-out infinite;
+}
+
+/* Vertical Console Faders & Live Meters */
+.v-fader-track {
+    background: var(--groove-bg);
+    box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    position: relative;
+}
+
+.v-fader-input {
+    -webkit-appearance: slider-vertical;
+    writing-mode: vertical-lr;
+    direction: rtl;
+    width: 24px;
+    height: 100%;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0;
+    cursor: ns-resize;
+    position: relative;
+    z-index: 2;
+}
+.v-fader-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 11px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #f8fafc 0%, #94a3b8 46%, #334155 52%, #cbd5e1 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.75) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55), inset 0 1px 0 #ffffff !important;
+    cursor: ns-resize;
+}
+.v-fader-input::-webkit-slider-thumb:hover {
+    transform: scale(1.06);
+    box-shadow: 0 0 10px var(--acc-glow), 0 2px 6px rgba(0, 0, 0, 0.65) !important;
+}
+
+.v-fader-fill {
+    background: linear-gradient(180deg, var(--acc-hi) 0%, var(--acc) 55%, var(--acc-2) 100%);
+    box-shadow: 0 0 10px var(--acc-glow);
+    transition: height 0.06s ease-out;
+}
+
+.v-meter-groove {
+    background: var(--groove-bg);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.75);
+    border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.v-meter-fill {
+    background: linear-gradient(180deg, #22d3ee 0%, #10b981 65%, #059669 100%);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+    transition: height 0.07s ease-out;
+}
+.v-meter-fill.drum {
+    background: linear-gradient(180deg, #fb7185 0%, #f59e0b 55%, #d97706 100%);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.55);
+}
+
+.channel-strip-card.is-live-glow {
+    border-color: var(--acc) !important;
+    box-shadow: inset 0 1px 0 var(--panel-highlight), 0 0 16px -4px var(--acc-glow) !important;
+}
+
+/* MPC-Style Backlit Drum Pads */
+.mpc-pad {
+    background: linear-gradient(180deg, rgba(30, 41, 59, 0.92) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1px solid var(--panel-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 10px rgba(0, 0, 0, 0.38);
+    transition: all 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+    overflow: hidden;
+}
+body.theme-light .mpc-pad {
+    background: linear-gradient(180deg, #ffffff 0%, #e2e8f0 100%);
+    box-shadow: inset 0 1px 0 #ffffff, 0 3px 8px rgba(15, 23, 42, 0.1);
+}
+.mpc-pad:hover {
+    border-color: var(--acc);
+    transform: translateY(-1px);
+}
+.mpc-pad.mpc-hit {
+    border-color: var(--acc-hi) !important;
+    box-shadow: 0 0 20px var(--acc-glow), inset 0 0 16px var(--acc-soft) !important;
+    transform: scale(0.96);
+}
+
+/* Timeline Illuminated Progress Track */
+#timeScrubber {
+    background: linear-gradient(
+        90deg,
+        var(--acc) 0%,
+        var(--acc-2) var(--seek-pct, 0%),
+        var(--groove-bg) var(--seek-pct, 0%),
+        var(--groove-bg) 100%
+    ) !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 10px -3px var(--acc-glow);
+}
+
+/* Handheld Touch Mode overrides for vertical faders */
+body.handheld-touch-mode .v-fader-input {
+    width: 30px;
+}
+body.handheld-touch-mode .v-fader-input::-webkit-slider-thumb {
+    width: 28px;
+    height: 15px;
+}
+
+/* ASUS ROG Ally / Compact 720p DIP Viewport Optimization (1080p @ 150% = 1280x720) */
+.v-fader-stage {
+    height: 76px;
+}
+
+.stage-viz-canvas {
+    height: 64px;
+}
+
+.compact-fm-scope {
+    height: 56px;
+}
+
+.compact-env-svg {
+    height: 112px;
+}
+
+.fm-arch-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+}
+@media (min-width: 1280px) {
+    .fm-arch-row {
+        grid-template-columns: 5fr 7fr;
+    }
+}
+
+.ambient-orb-1 {
+    width: 34rem;
+    height: 34rem;
+    top: -12rem;
+    left: 25%;
+}
+
+.ambient-orb-2 {
+    width: 28rem;
+    height: 28rem;
+    bottom: -8rem;
+    right: -4rem;
+}
+
+.strip-ms-btn {
+    width: 19px;
+    height: 19px;
+    font-size: 8px;
+}
+
+.strip-drum-pill {
+    font-size: 7.5px;
+    line-height: 1;
+    padding: 2px 4px;
+}
+
+.hw-header-bar {
+    border-radius: 0 !important;
+    border-left-width: 0 !important;
+    border-right-width: 0 !important;
+    border-top-width: 0 !important;
+}
+
+@media (max-height: 760px) {
+    .v-fader-stage {
+        height: 68px;
+    }
+    .stage-viz-canvas {
+        height: 54px !important;
+    }
+    .compact-fm-scope {
+        height: 52px !important;
+    }
+    .compact-env-svg {
+        height: 88px !important;
+    }
+}

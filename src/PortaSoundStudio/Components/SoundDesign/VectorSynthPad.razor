@@ -85,21 +85,27 @@
             </button>
         </div>
 
-        <canvas id="vecCanvas" width="240" height="240" class="rounded-full shadow-2xl cursor-crosshair touch-none"></canvas>
+        <div class="hw-vfd rounded-full p-1">
+            <canvas id="vecCanvas" width="240" height="240" class="rounded-full shadow-2xl cursor-crosshair touch-none"></canvas>
+        </div>
 
-        <!-- 4 Cardinal Blend Mix Bars -->
+        <!-- 4 Cardinal Blend Mix Bars with Live Level Fills -->
         <div class="w-full grid grid-cols-4 gap-2 text-center font-mono text-[10px]">
-            <div class="p-1.5 rounded-lg bg-slate-900 border border-cyan-500/30">
-                <div class="text-cyan-300 font-bold">A: @((int)Math.Round(wA * 100))%</div>
+            <div class="hw-bay p-1.5 rounded-lg border-cyan-500/40 space-y-1">
+                <div class="text-cyan-400 font-bold">A: @((int)Math.Round(wA * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-cyan-400 transition-all duration-75" style="width: @($"{wA * 100:0}%");"></div></div>
             </div>
-            <div class="p-1.5 rounded-lg bg-slate-900 border border-emerald-500/30">
-                <div class="text-emerald-300 font-bold">B: @((int)Math.Round(wB * 100))%</div>
+            <div class="hw-bay p-1.5 rounded-lg border-emerald-500/40 space-y-1">
+                <div class="text-emerald-400 font-bold">B: @((int)Math.Round(wB * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-emerald-400 transition-all duration-75" style="width: @($"{wB * 100:0}%");"></div></div>
             </div>
-            <div class="p-1.5 rounded-lg bg-slate-900 border border-amber-500/30">
-                <div class="text-amber-300 font-bold">C: @((int)Math.Round(wC * 100))%</div>
+            <div class="hw-bay p-1.5 rounded-lg border-amber-500/40 space-y-1">
+                <div class="text-amber-400 font-bold">C: @((int)Math.Round(wC * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-amber-400 transition-all duration-75" style="width: @($"{wC * 100:0}%");"></div></div>
             </div>
-            <div class="p-1.5 rounded-lg bg-slate-900 border border-rose-500/30">
-                <div class="text-rose-300 font-bold">D: @((int)Math.Round(wD * 100))%</div>
+            <div class="hw-bay p-1.5 rounded-lg border-rose-500/40 space-y-1">
+                <div class="text-rose-400 font-bold">D: @((int)Math.Round(wD * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-rose-400 transition-all duration-75" style="width: @($"{wD * 100:0}%");"></div></div>
             </div>
         </div>
 

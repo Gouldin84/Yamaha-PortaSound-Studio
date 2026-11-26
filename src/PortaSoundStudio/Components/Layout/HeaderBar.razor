@@ -4,34 +4,39 @@
 @inject PlaybackCoordinator Playback
 @inject IJSRuntime JS
 
-<header class="glass-panel shrink-0 z-40 px-2 sm:px-3 py-1.5 border-b border-slate-800/80 flex items-center justify-between gap-1 sm:gap-2 max-w-full overflow-visible">
-    <!-- Left: Model Selector & Workspace Tabs -->
-    <div class="flex items-center space-x-1.5 sm:space-x-2.5 min-w-0">
+<header class="hw-panel hw-header-bar shrink-0 z-40 px-2.5 sm:px-3 py-1.5 flex items-center justify-between gap-2 max-w-full overflow-visible">
+    <!-- Left: Hardware Model Switcher & Segmented Workspace Navigation -->
+    <div class="flex items-center space-x-2 sm:space-x-3 min-w-0">
         <!-- Synthesizer Model Switcher -->
         <div class="relative shrink-0" id="modelSelectorContainer">
             <button id="modelSelectorBtn"
                     type="button"
                     @onclick="ToggleModelMenu"
                     title="Switch Synthesizer Model: Select Yamaha PSS-790 (AWM) or PSS-680 (FM)"
-                    class="flex items-center space-x-1.5 sm:space-x-2 px-1.5 sm:px-2 py-1 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-700/60 hover:border-cyan-500/50 shadow-md transition-all duration-200 group cursor-pointer">
-                <img id="activeModelIcon"
-                     src="@(IsPss680 ? "images/pss680_icon.png" : "images/app_icon.png")"
-                     alt="Model Icon"
-                     class="w-6 h-6 sm:w-7 sm:h-7 rounded-lg shadow-md shadow-cyan-500/20 shrink-0 border border-slate-700/60 object-cover transition-transform group-hover:scale-105" />
-                <div class="text-left">
-                    <div class="flex items-center space-x-1">
-                        <span id="activeModelTitle" class="text-xs sm:text-sm font-bold tracking-tight text-white whitespace-nowrap">
+                    class="hw-bay flex items-center space-x-2 px-2 py-1 rounded-xl hover:brightness-110 transition-all duration-200 group cursor-pointer">
+                <div class="relative shrink-0">
+                    <img id="activeModelIcon"
+                         src="@(IsPss680 ? "images/pss680_icon.png" : "images/app_icon.png")"
+                         alt="Model Icon"
+                         class="w-7 h-7 rounded-lg shadow-md object-cover border transition-transform group-hover:scale-105"
+                         style="border-color: var(--acc-glow); box-shadow: 0 0 12px -2px var(--acc-glow);" />
+                </div>
+                <div class="text-left leading-tight">
+                    <div class="flex items-center space-x-1.5">
+                        <span id="activeModelTitle" class="text-xs sm:text-sm font-bold tracking-tight whitespace-nowrap" style="color: var(--text-hi);">
                             @(IsPss680 ? "PSS-680 Studio" : "PSS-790 Studio")
                         </span>
                         <span id="activeModelBadge"
-                              class="px-1.5 py-0.2 text-[9px] font-semibold uppercase tracking-wider rounded-full @(IsPss680 ? "bg-amber-950 text-amber-400 border-amber-800/60" : "bg-cyan-950 text-cyan-400 border-cyan-800/60") border hidden 2xl:inline-block">
-                            @(IsPss680 ? "2-Op FM Engine" : "AWM Engine")
+                              class="px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider rounded-full hidden sm:inline-block"
+                              style="background: var(--acc-soft); color: var(--acc-hi); border: 1px solid var(--acc-glow);">
+                            @(IsPss680 ? "2-Op FM" : "AWM Vector")
                         </span>
                     </div>
-                    <p id="activeModelSubtitle" class="hidden 2xl:block text-[10px] text-slate-400">Yamaha PortaSound Studio v3.0.2</p>
+                    <p id="activeModelSubtitle" class="hidden xl:block text-[9px] font-mono" style="color: var(--text-lo);">PortaSound Workstation v3.0.3</p>
                 </div>
                 <svg id="modelDropdownChevron"
-                     class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-transform duration-200 ml-0.5 sm:ml-1 shrink-0 @(ShowModelMenu ? "rotate-180" : "")"
+                     class="w-3.5 h-3.5 transition-transform duration-200 ml-0.5 shrink-0 @(ShowModelMenu ? "rotate-180" : "")"
+                     style="color: var(--text-mid);"
                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
@@ -40,17 +45,17 @@
             @if (ShowModelMenu)
             {
                 <div id="modelDropdownMenu"
-                     class="absolute left-0 top-full mt-1.5 w-80 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl shadow-cyan-950/30 p-2 z-50 transition-all duration-150"
+                     class="dropdown-spring hw-panel absolute left-0 top-full mt-2 w-80 rounded-2xl p-2 z-50"
                      role="menu">
-                    <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1.5">
+                    <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border-b mb-1.5" style="color: var(--text-lo); border-color: var(--panel-border);">
                         Target Synthesizer Hardware
                     </div>
 
                     <button type="button"
                             @onclick='() => SelectModel("pss790")'
-                            class="model-option-btn w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-900 border border-transparent text-left transition mb-1 cursor-pointer @(!IsPss680 ? "bg-slate-900/90 border-cyan-500/40" : "")">
+                            class="model-option-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition mb-1.5 cursor-pointer @(!IsPss680 ? "bg-slate-900/80 border-cyan-500/50" : "border-transparent hover:bg-slate-900/40")">
                         <div class="flex items-center space-x-2.5 min-w-0">
-                            <img src="images/app_icon.png" alt="PSS-790" class="w-8 h-8 rounded-lg border border-slate-700/60 shrink-0" />
+                            <img src="images/app_icon.png" alt="PSS-790" class="w-8 h-8 rounded-lg border border-cyan-500/40 shrink-0" />
                             <div class="min-w-0">
                                 <div class="text-xs font-bold text-white flex items-center space-x-1.5">
                                     <span>Yamaha PSS-790</span>
@@ -61,40 +66,40 @@
                         </div>
                         @if (!IsPss680)
                         {
-                            <span class="text-cyan-400 font-bold ml-1">✓</span>
+                            <StudioIcon Name="check" Class="w-4 h-4 text-cyan-400 shrink-0 ml-1" />
                         }
                     </button>
 
                     <button type="button"
                             @onclick='() => SelectModel("pss680")'
-                            class="model-option-btn w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-900 border border-transparent text-left transition cursor-pointer @(IsPss680 ? "bg-slate-900/90 border-amber-500/40" : "")">
+                            class="model-option-btn w-full flex items-center justify-between p-2.5 rounded-xl border text-left transition cursor-pointer @(IsPss680 ? "bg-slate-900/80 border-amber-500/50" : "border-transparent hover:bg-slate-900/40")">
                         <div class="flex items-center space-x-2.5 min-w-0">
-                            <img src="images/pss680_icon.png" alt="PSS-680" class="w-8 h-8 rounded-lg border border-slate-700/60 shrink-0" />
+                            <img src="images/pss680_icon.png" alt="PSS-680" class="w-8 h-8 rounded-lg border border-amber-500/40 shrink-0" />
                             <div class="min-w-0">
                                 <div class="text-xs font-bold text-white flex items-center space-x-1.5">
                                     <span>Yamaha PSS-680 / 480 / 780</span>
                                     <span class="px-1.5 py-0.2 text-[8px] font-bold rounded bg-amber-950 text-amber-300 border border-amber-800">12-Voice FM</span>
                                 </div>
-                                <div class="text-[10px] text-slate-400 truncate">2-Op FM Synth • Custom Drummer • SysEx</div>
+                                <div class="text-[10px] text-slate-400 truncate">2-Op FM Synth &bull; Custom Drummer &bull; SysEx</div>
                             </div>
                         </div>
                         @if (IsPss680)
                         {
-                            <span class="text-amber-400 font-bold ml-1">✓</span>
+                            <StudioIcon Name="check" Class="w-4 h-4 text-amber-400 shrink-0 ml-1" />
                         }
                     </button>
                 </div>
             }
         </div>
 
-        <!-- Navigation Tab Pills -->
-        <nav class="flex items-center bg-slate-900/80 rounded-lg p-0.5 border border-slate-800/80 space-x-0.5 shrink-0">
+        <!-- Hardware Segmented Navigation Rail -->
+        <nav class="hw-bay rounded-xl p-1 flex items-center space-x-1 shrink-0">
             <button id="tabBtnPlayer"
                     type="button"
                     @onclick="() => SetTab(StudioTab.Player)"
                     title="Player Workspace (1): Load, preview, and play back MIDI files with real-time remapping"
-                    class="tab-btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold transition-all @(State.ActiveTab == StudioTab.Player ? "active" : "text-slate-400 hover:text-white")">
-                <span>🎹</span>
+                    class="hw-tab-btn tab-btn flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold @(State.ActiveTab == StudioTab.Player ? "active" : "")">
+                <StudioIcon Name="player" Class="w-3.5 h-3.5 shrink-0" />
                 <span class="hidden sm:inline">Player</span>
             </button>
 
@@ -102,12 +107,12 @@
                     type="button"
                     @onclick="() => SetTab(StudioTab.Recorder)"
                     title="Studio Recorder Workspace (2): Record live MIDI keyboard performances with metronome"
-                    class="tab-btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold transition-all @(State.ActiveTab == StudioTab.Recorder ? "active" : "text-slate-400 hover:text-white")">
-                <span>⏺</span>
+                    class="hw-tab-btn tab-btn flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold @(State.ActiveTab == StudioTab.Recorder ? "active" : "")">
+                <span class="w-2 h-2 rounded-full @(State.RecorderState is RecorderState.Recording or RecorderState.CountIn ? "bg-white animate-ping" : "bg-rose-500")"></span>
                 <span class="hidden sm:inline">Recorder</span>
                 @if (State.RecorderState is RecorderState.Recording or RecorderState.CountIn)
                 {
-                    <span id="recordingPill" class="px-1.5 py-0.2 bg-rose-500/20 text-rose-400 text-[9px] font-bold rounded-full border border-rose-500/30 animate-pulse">REC</span>
+                    <span id="recordingPill" class="px-1.5 py-0.2 bg-rose-500/25 text-rose-200 text-[9px] font-bold rounded-full border border-rose-400/50 animate-pulse">REC</span>
                 }
             </button>
 
@@ -115,28 +120,30 @@
                     type="button"
                     @onclick="() => SetTab(StudioTab.SysEx)"
                     title="Sound Designer & SysEx Vault (3): FM Designer, Vector Synth, Drum Pads & Bulk Backups"
-                    class="tab-btn flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-md text-xs font-semibold transition-all @(State.ActiveTab == StudioTab.SysEx ? "active" : "text-slate-400 hover:text-white")">
-                <span>🎛️</span>
+                    class="hw-tab-btn tab-btn flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-xs font-bold @(State.ActiveTab == StudioTab.SysEx ? "active" : "")">
+                <StudioIcon Name="synth" Class="w-3.5 h-3.5 shrink-0" />
                 <span class="hidden sm:inline">@(IsPss680 ? "FM & SysEx" : "Vector & SysEx")</span>
             </button>
         </nav>
     </div>
 
-    <!-- Right: MIDI Output Selector & Global Utilities -->
-    <div class="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
-        <!-- Output MIDI Port Selector -->
-        <div class="flex items-center space-x-1.5 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800">
+    <!-- Right: MIDI Output Bay & Hardware Utilities -->
+    <div class="flex items-center space-x-1.5 shrink-0">
+        <!-- Output MIDI Port Bay -->
+        <div class="hw-bay flex items-center space-x-1.5 px-2.5 py-1 rounded-xl">
             <span id="outputStatusDot"
                   title="Output Status"
-                  class="w-2 h-2 rounded-full @(string.IsNullOrEmpty(State.SelectedOutputDevice) ? "bg-rose-500" : "bg-emerald-500 animate-pulse-slow") shrink-0"></span>
+                  class="w-2 h-2 rounded-full shrink-0 @(string.IsNullOrEmpty(State.SelectedOutputDevice) ? "bg-rose-500" : "bg-emerald-400 animate-pulse-slow")"
+                  style="@(string.IsNullOrEmpty(State.SelectedOutputDevice) ? "" : "box-shadow: 0 0 8px #10b981;")"></span>
             <select id="deviceSelect"
                     value="@(State.SelectedOutputDevice ?? "")"
                     @onchange="OnOutputDeviceChanged"
                     title="MIDI Output Device: Select hardware interface or MS GS Wavetable Synth"
-                    class="bg-transparent text-[11px] font-semibold text-white focus:outline-none cursor-pointer max-w-[95px] sm:max-w-[130px] 2xl:max-w-[180px] truncate">
+                    class="bg-transparent text-[11px] font-semibold focus:outline-none cursor-pointer max-w-[95px] sm:max-w-[130px] 2xl:max-w-[180px] truncate"
+                    style="color: var(--text-hi);">
                 @if (State.OutputDevices.Count == 0)
                 {
-                    <option value="">No MIDI outputs detected</option>
+                    <option value="">No MIDI outputs</option>
                 }
                 else
                 {
@@ -151,7 +158,8 @@
                     type="button"
                     @onclick="() => Devices.TriggerRescan(0)"
                     title="Rescan MIDI Devices (Hot-Swap)"
-                    class="text-slate-400 hover:text-cyan-400 transition p-0.5 active:scale-90">
+                    class="transition p-0.5 active:scale-90 hover:brightness-125"
+                    style="color: var(--acc-hi);">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
@@ -164,8 +172,8 @@
                     type="button"
                     @onclick="() => State.Mutate(s => s.IsSidebarCollapsed = !s.IsSidebarCollapsed)"
                     title="Toggle Library Sidebar (Ctrl+B)"
-                    class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
-                <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="hw-btn flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0">
+                <svg class="w-3.5 h-3.5 shrink-0" style="color: var(--acc-hi);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" />
                 </svg>
                 <span class="hidden 2xl:inline">Library</span>
@@ -176,11 +184,11 @@
                 type="button"
                 @onclick="() => Playback.BrowseAndLoadMidiWithDialog()"
                 title="Load MIDI File: Open Windows file picker"
-                class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-200 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
-            <svg class="w-3.5 h-3.5 text-cyan-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                class="hw-btn flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0">
+            <svg class="w-3.5 h-3.5 shrink-0" style="color: var(--acc-hi);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
             </svg>
-            <span class="hidden 2xl:inline">Load</span>
+            <span class="hidden xl:inline">Load</span>
         </button>
 
         <button id="btnSaveRemapped"
@@ -188,51 +196,53 @@
                 @onclick="() => Playback.SaveRemappedWithDialog()"
                 disabled="@(State.LoadedSong == null || !State.LoadedSong.CanSaveRemapped)"
                 title="Export Remapped MIDI for target hardware"
-                class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-white shadow-md shadow-cyan-600/30 transition active:scale-95 shrink-0">
-            <svg class="w-3.5 h-3.5 text-white shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                class="hw-accent-btn flex items-center space-x-1.5 px-2.5 py-1 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold shrink-0">
+            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
             </svg>
-            <span class="hidden 2xl:inline">Export</span>
+            <span class="hidden sm:inline">Export</span>
         </button>
 
         <button id="btnToggleHandheldMode"
                 type="button"
                 @onclick="ToggleHandheldMode"
                 title="Toggle Handheld Touch Mode (T)"
-                class="flex items-center space-x-1 px-2 py-1 rounded-lg @(State.HandheldMode ? "bg-cyan-600 text-white border-cyan-400" : "bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border-slate-700/60") text-xs font-medium border transition active:scale-95 shrink-0">
-            <span class="text-xs">🖐️</span>
+                class="flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0 transition @(State.HandheldMode ? "hw-accent-btn" : "hw-btn")">
+            <StudioIcon Name="touch" Class="w-3.5 h-3.5" />
             <span id="handheldModeText" class="hidden 2xl:inline text-[11px]">Touch</span>
         </button>
 
         <button id="btnThemeToggle"
                 type="button"
                 @onclick="ToggleTheme"
-                title="Toggle Dark / Light Studio Theme"
-                class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0">
-            <span id="themeToggleIcon" class="text-xs">@(State.IsDarkTheme ? "☀️" : "🌙")</span>
-            <span id="themeToggleText" class="hidden 2xl:inline text-[11px]">@(State.IsDarkTheme ? "Light" : "Dark")</span>
+                title="Toggle Obsidian Dark / Anodized Silver Light"
+                class="hw-btn flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0">
+            <span id="themeToggleIcon" class="flex items-center">
+                <StudioIcon Name="@(State.IsDarkTheme ? "sun" : "moon")" Class="w-3.5 h-3.5" />
+            </span>
+            <span id="themeToggleText" class="hidden 2xl:inline text-[11px]">@(State.IsDarkTheme ? "Silver" : "Obsidian")</span>
         </button>
 
         <!-- Wide Desktop Utilities -->
         <button id="btnOpenFolder" type="button" @onclick="() => Library.OpenExplorer()"
-                class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" title="Open MIDI Folder">
-            <span class="text-amber-400">📁</span><span>Folder</span>
+                class="hw-btn hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0" title="Open MIDI Folder">
+            <StudioIcon Name="folder" Class="w-3.5 h-3.5 text-amber-400" /><span>Folder</span>
         </button>
         <button id="btnOpenBatch" type="button" @onclick="() => State.Mutate(s => s.ShowBatchModal = true)"
-                class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" title="Batch Remapper">
-            <span class="text-amber-400">⚡</span><span>Batch</span>
+                class="hw-btn hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0" title="Batch Remapper">
+            <StudioIcon Name="bolt" Class="w-3.5 h-3.5 text-amber-400" /><span>Batch</span>
         </button>
         <button id="btnShortcuts" type="button" @onclick="() => State.Mutate(s => s.ShowShortcutsModal = true)"
-                class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" title="Keyboard Shortcuts (? / F1)">
-            <span>⌨️</span><span>Hotkeys</span>
+                class="hw-btn hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0" title="Keyboard Shortcuts (? / F1)">
+            <StudioIcon Name="keyboard" Class="w-3.5 h-3.5" /><span>Hotkeys</span>
         </button>
         <button id="btnAbout" type="button" @onclick="() => State.Mutate(s => s.ShowAboutModal = true)"
-                class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" title="About & Legal Notices">
-            <span class="text-cyan-400">ℹ️</span><span>About</span>
+                class="hw-btn hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0" title="About & Legal Notices">
+            <StudioIcon Name="info" Class="w-3.5 h-3.5 text-cyan-400" /><span>About</span>
         </button>
         <button id="btnSettings" type="button" @onclick="() => State.Mutate(s => s.ShowSettingsModal = true)"
-                class="hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 shrink-0" title="Studio Settings">
-            <span>⚙️</span><span>Settings</span>
+                class="hw-btn hidden 2xl:flex items-center space-x-1 px-2 py-1 rounded-xl text-xs font-semibold shrink-0" title="Studio Settings">
+            <StudioIcon Name="settings" Class="w-3.5 h-3.5" /><span>Settings</span>
         </button>
 
         <!-- Compact More Tools Dropdown -->
@@ -241,8 +251,8 @@
                     type="button"
                     @onclick="ToggleMoreMenu"
                     title="More Studio Tools & Options"
-                    class="flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 transition active:scale-95 cursor-pointer">
-                <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    class="hw-btn flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl cursor-pointer">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
                 </svg>
             </button>
@@ -250,29 +260,29 @@
             @if (ShowMoreMenu)
             {
                 <div id="moreToolsDropdownMenu"
-                     class="absolute right-0 top-full mt-1.5 w-60 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl p-1.5 z-50"
+                     class="dropdown-spring hw-panel absolute right-0 top-full mt-1.5 w-60 rounded-2xl p-1.5 z-50"
                      role="menu">
-                    <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1 flex items-center justify-between">
+                    <div class="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider border-b mb-1 flex items-center justify-between" style="color: var(--text-lo); border-color: var(--panel-border);">
                         <span>Studio Tools</span>
-                        <span class="text-cyan-400 font-mono text-[9px]">Options</span>
+                        <span class="font-mono text-[9px]" style="color: var(--acc);">Options</span>
                     </div>
-                    <button type="button" @onclick="() => { CloseMenus(); Library.OpenExplorer(); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>📁</span><span>Open Music Folder</span>
+                    <button type="button" @onclick="() => { CloseMenus(); Library.OpenExplorer(); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="folder" Class="w-3.5 h-3.5 text-amber-400" /><span>Open Music Folder</span>
                     </button>
-                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowBatchModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>⚡</span><span>Batch Remapper</span>
+                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowBatchModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="bolt" Class="w-3.5 h-3.5 text-amber-400" /><span>Batch Remapper</span>
                     </button>
-                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowShortcutsModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>⌨️</span><span>Hotkeys &amp; Controller (? / F1)</span>
+                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowShortcutsModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="keyboard" Class="w-3.5 h-3.5 text-cyan-400" /><span>Hotkeys &amp; Controller (? / F1)</span>
                     </button>
-                    <button type="button" @onclick="() => { CloseMenus(); OpenHardwareGuide(); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>🎹</span><span>Hardware Capture Guide</span>
+                    <button type="button" @onclick="() => { CloseMenus(); OpenHardwareGuide(); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="book" Class="w-3.5 h-3.5 text-emerald-400" /><span>Hardware Capture Guide</span>
                     </button>
-                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowAboutModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>ℹ️</span><span>About &amp; Legal Notices</span>
+                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowAboutModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="info" Class="w-3.5 h-3.5 text-cyan-400" /><span>About &amp; Legal Notices</span>
                     </button>
-                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowSettingsModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/80 text-xs font-medium text-slate-200 hover:text-white transition text-left cursor-pointer">
-                        <span>⚙️</span><span>Library Storage Settings</span>
+                    <button type="button" @onclick="() => { CloseMenus(); State.Mutate(s => s.ShowSettingsModal = true); }" class="w-full flex items-center space-x-2.5 px-2.5 py-1.5 rounded-xl hover:bg-slate-800/40 text-xs font-medium transition text-left cursor-pointer">
+                        <StudioIcon Name="settings" Class="w-3.5 h-3.5 text-slate-400" /><span>Library Storage Settings</span>
                     </button>
                 </div>
             }

@@ -16,24 +16,50 @@ window.studioInterop = (() => {
     let vectorStateX = 0;
     let vectorStateY = 0;
     let lastOrbitDispatchTime = 0;
+    const vectorTrail = [];
+
+    // 60fps Stage Visualizer state
+    const stageChannelLevels = new Float32Array(16);
+    const stageChannelPeaks = new Float32Array(16);
+    const stageChannelHold = new Int32Array(16);
+    const stageNotes = [];
+    const stagePalette = [
+        "#22d3ee", "#34d399", "#a78bfa", "#fbbf24",
+        "#38bdf8", "#f472b6", "#818cf8", "#2dd4bf",
+        "#60a5fa", "#a3e635", "#c084fc", "#facc15",
+        "#fb7185", "#4ade80", "#e879f9", "#fb923c"
+    ];
+    let stageVizMode = "spectrum";
+    let stageIsPlaying = false;
+    let stageLoopRunning = false;
+    let stageCanvasId = null;
+    let stageLastTime = performance.now();
+    let stagePhase = 0;
 
     function loadInitialPreferences() {
         return {
             isDark: localStorage.getItem("yamaha_studio_theme") !== "light",
             handheld: localStorage.getItem("yamaha_studio_handheld") === "true",
             model: localStorage.getItem("yamaha_studio_model") || "pss790",
-            guideOpen: localStorage.getItem("yamaha_studio_guide_open") === "true"
+            guideOpen: localStorage.getItem("yamaha_studio_guide_open") === "true",
+            vizMode: localStorage.getItem("yamaha_studio_viz_mode") || "spectrum"
         };
     }
 
     function applyBodyPreferences(isDark, handheld, model) {
         document.body.classList.toggle("theme-light", !isDark);
         document.body.classList.toggle("handheld-touch-mode", !!handheld);
+        document.body.dataset.model = model || "pss790";
         localStorage.setItem("yamaha_studio_theme", isDark ? "dark" : "light");
         localStorage.setItem("yamaha_studio_handheld", handheld ? "true" : "false");
         if (model) {
             localStorage.setItem("yamaha_studio_model", model);
         }
+    }
+
+    function saveVisualizerPreference(mode) {
+        stageVizMode = mode || "spectrum";
+        localStorage.setItem("yamaha_studio_viz_mode", stageVizMode);
     }
 
     function saveGuidePreference(open) {
@@ -267,13 +293,26 @@ window.studioInterop = (() => {
         const puckX = cx + vectorStateX * rActive;
         const puckY = cy - vectorStateY * rActive;
 
+        vectorTrail.push({ x: puckX, y: puckY });
+        if (vectorTrail.length > 26) vectorTrail.shift();
+
+        // Phosphor persistence trail
+        for (let i = 0; i < vectorTrail.length - 1; i++) {
+            const pt = vectorTrail[i];
+            const ratio = (i + 1) / vectorTrail.length;
+            ctx.beginPath();
+            ctx.arc(pt.x, pt.y, 1.5 + ratio * 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(99, 102, 241, ${(ratio * 0.45).toFixed(3)})`;
+            ctx.fill();
+        }
+
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(puckX, puckY);
-        ctx.strokeStyle = "rgba(99, 102, 241, 0.7)";
+        ctx.strokeStyle = "rgba(99, 102, 241, 0.75)";
         ctx.lineWidth = 2;
         ctx.shadowColor = "#6366f1";
-        ctx.shadowBlur = 6;
+        ctx.shadowBlur = 8;
         ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -535,6 +574,232 @@ window.studioInterop = (() => {
         });
     }
 
+    function initStageVisualizer(canvasId, mode, playing) {
+        stageCanvasId = canvasId;
+        stageVizMode = mode || "spectrum";
+        stageIsPlaying = !!playing;
+        if (stageLoopRunning) return;
+        stageLoopRunning = true;
+
+        function renderStage(now) {
+            const dt = Math.min((now - stageLastTime) / 1000.0, 0.1);
+            stageLastTime = now;
+            stagePhase += dt * (stageIsPlaying ? 5.2 : 1.6);
+
+            const canvas = stageCanvasId ? document.getElementById(stageCanvasId) : null;
+            if (canvas && canvas.offsetParent !== null) {
+                const dpr = window.devicePixelRatio || 1;
+                const w = Math.max(120, canvas.clientWidth);
+                const h = Math.max(40, canvas.clientHeight);
+                if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+                    canvas.width = Math.round(w * dpr);
+                    canvas.height = Math.round(h * dpr);
+                }
+
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                    ctx.save();
+                    ctx.scale(dpr, dpr);
+                    ctx.clearRect(0, 0, w, h);
+
+                    const bodyStyles = getComputedStyle(document.body);
+                    const acc = bodyStyles.getPropertyValue("--acc").trim() || "#06b6d4";
+                    const acc2 = bodyStyles.getPropertyValue("--acc-2").trim() || "#6366f1";
+
+                    // Background horizon grid
+                    ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
+                    ctx.lineWidth = 1;
+                    for (let gy = Math.round(h * 0.28); gy < h; gy += Math.round(h * 0.28)) {
+                        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+                    }
+
+                    // Decay channels smoothly at 60fps
+                    let energySum = 0;
+                    for (let i = 0; i < 16; i++) {
+                        stageChannelLevels[i] = Math.max(0.02, stageChannelLevels[i] - dt * 2.1);
+                        energySum += stageChannelLevels[i];
+                        if (stageChannelLevels[i] >= stageChannelPeaks[i]) {
+                            stageChannelPeaks[i] = stageChannelLevels[i];
+                            stageChannelHold[i] = 22;
+                        } else if (stageChannelHold[i] > 0) {
+                            stageChannelHold[i]--;
+                        } else {
+                            stageChannelPeaks[i] = Math.max(stageChannelLevels[i], stageChannelPeaks[i] - dt * 1.1);
+                        }
+                    }
+
+                    if (stageVizMode === "waterfall") {
+                        for (let i = stageNotes.length - 1; i >= 0; i--) {
+                            const n = stageNotes[i];
+                            n.x -= dt * (stageIsPlaying ? 0.28 : 0.08);
+                            const px = n.x * w;
+                            const pw = Math.max(8, n.len * w);
+                            const py = 4 + (1 - (Math.max(24, Math.min(108, n.note)) - 24) / 84.0) * (h - 12);
+                            ctx.fillStyle = n.color;
+                            ctx.shadowColor = n.color;
+                            ctx.shadowBlur = 9;
+                            ctx.beginPath();
+                            ctx.roundRect(px, py, pw, 4.5, 2.2);
+                            ctx.fill();
+                            if (n.x + n.len < -0.05) stageNotes.splice(i, 1);
+                        }
+                        if (stageNotes.length === 0) {
+                            ctx.fillStyle = "rgba(148, 163, 184, 0.35)";
+                            ctx.font = "600 10px ui-monospace, monospace";
+                            ctx.textAlign = "center";
+                            ctx.fillText(stageIsPlaying ? "WAITING FOR MIDI NOTES..." : "PRESS PLAY TO STREAM NOTE MATRIX", w / 2, h / 2 + 3);
+                        }
+                        ctx.shadowBlur = 0;
+                    } else if (stageVizMode === "scope") {
+                        const ampScale = Math.min(1.0, 0.14 + (energySum / 5.5));
+                        ctx.beginPath();
+                        for (let x = 0; x <= w; x += 2.5) {
+                            const nx = x / w;
+                            const env = Math.sin(nx * Math.PI);
+                            const wave = Math.sin(nx * 24 + stagePhase * 2.2) * 0.55
+                                       + Math.sin(nx * 53 - stagePhase * 3.1) * 0.28
+                                       + Math.cos(nx * 11 + stagePhase) * 0.17;
+                            const y = h / 2 + wave * (h * 0.38) * ampScale * env;
+                            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                        }
+                        ctx.strokeStyle = acc;
+                        ctx.shadowColor = acc;
+                        ctx.shadowBlur = 11;
+                        ctx.lineWidth = 2.1;
+                        ctx.stroke();
+                        ctx.shadowBlur = 0;
+                    } else {
+                        // Default: 16-Channel Velocity Spectrum
+                        const padX = 10;
+                        const slotW = (w - padX * 2) / 16.0;
+                        const barW = Math.max(4, slotW - 5);
+                        for (let i = 0; i < 16; i++) {
+                            const idleRipple = stageIsPlaying ? 0 : (0.04 + 0.03 * Math.sin(stagePhase + i * 0.45));
+                            const val = Math.max(idleRipple, stageChannelLevels[i]);
+                            const bh = Math.max(3, val * (h - 14));
+                            const bx = padX + i * slotW + (slotW - barW) / 2;
+                            const by = h - bh - 5;
+
+                            const grad = ctx.createLinearGradient(0, by, 0, h - 5);
+                            grad.addColorStop(0, i === 15 ? "#fbbf24" : acc);
+                            grad.addColorStop(1, acc2);
+                            ctx.fillStyle = grad;
+                            ctx.shadowColor = i === 15 ? "#f59e0b" : acc;
+                            ctx.shadowBlur = val > 0.25 ? 8 : 0;
+                            ctx.beginPath();
+                            ctx.roundRect(bx, by, barW, bh, 2.5);
+                            ctx.fill();
+
+                            // Floating Peak Cap
+                            const pY = h - Math.max(4, stageChannelPeaks[i] * (h - 14)) - 7;
+                            if (stageChannelPeaks[i] > 0.08) {
+                                ctx.shadowBlur = 0;
+                                ctx.fillStyle = "#f8fafc";
+                                ctx.fillRect(bx, pY, barW, 1.8);
+                            }
+
+                            // Tiny channel index base tick
+                            ctx.shadowBlur = 0;
+                            ctx.fillStyle = "rgba(148, 163, 184, 0.45)";
+                            ctx.font = "700 8px ui-monospace, monospace";
+                            ctx.textAlign = "center";
+                            ctx.fillText(String(i + 1), bx + barW / 2, h - 0.5);
+                        }
+                        ctx.shadowBlur = 0;
+                    }
+                    ctx.restore();
+                }
+            }
+
+            requestAnimationFrame(renderStage);
+        }
+
+        requestAnimationFrame(renderStage);
+    }
+
+    function setStageVisualizerState(mode, playing) {
+        if (mode) saveVisualizerPreference(mode);
+        stageIsPlaying = !!playing;
+    }
+
+    function syncStageChannelLevels(velocities) {
+        if (!Array.isArray(velocities)) return;
+        for (let i = 0; i < Math.min(16, velocities.length); i++) {
+            const v = Math.min(1.0, (velocities[i] || 0) / 127.0);
+            if (v > stageChannelLevels[i]) {
+                stageChannelLevels[i] = v;
+            }
+        }
+    }
+
+    function pushStageNote(channel, velocity, noteNumber) {
+        if (channel < 0 || channel >= 16 || velocity <= 0) return;
+        const norm = Math.min(1.0, velocity / 127.0);
+        stageChannelLevels[channel] = Math.max(stageChannelLevels[channel], norm);
+        stageNotes.push({
+            x: 1.0,
+            note: noteNumber || 60,
+            len: 0.06 + norm * 0.09,
+            color: stagePalette[channel]
+        });
+        if (stageNotes.length > 96) stageNotes.shift();
+    }
+
+    function drawFmScope(canvasId, modWave, modMult, modLevel, carWave, carMult, feedback) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || canvas.offsetParent === null) return;
+        const dpr = window.devicePixelRatio || 1;
+        const w = Math.max(120, canvas.clientWidth);
+        const h = Math.max(40, canvas.clientHeight);
+        if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+            canvas.width = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
+        }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const bodyStyles = getComputedStyle(document.body);
+        const acc = bodyStyles.getPropertyValue("--acc").trim() || "#f59e0b";
+
+        function shapeWave(waveType, phase) {
+            const s = Math.sin(phase);
+            if (waveType === 1) return Math.sin(phase % (Math.PI * 2)) >= 0 ? s : 0;
+            if (waveType === 2) return Math.abs(s);
+            if (waveType === 3) return (Math.sin(phase) >= 0 && Math.cos(phase) >= 0) ? Math.abs(s) : 0;
+            return s;
+        }
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.strokeStyle = "rgba(148, 163, 184, 0.14)";
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+
+        const modIdx = (modLevel / 63.0) * 4.2;
+        const fbAmt = (feedback / 7.0) * 1.4;
+        const mRatio = Math.max(0.5, modMult === 0 ? 0.5 : modMult);
+        const cRatio = Math.max(0.5, carMult === 0 ? 0.5 : carMult);
+
+        let prevMod = 0;
+        ctx.beginPath();
+        for (let x = 0; x <= w; x += 2) {
+            const basePhase = (x / w) * Math.PI * 4.0;
+            const modOut = shapeWave(modWave, basePhase * mRatio + prevMod * fbAmt) * modIdx;
+            prevMod = modOut * 0.45;
+            const carOut = shapeWave(carWave, basePhase * cRatio + modOut);
+            const y = h / 2 - carOut * (h * 0.38);
+            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = acc;
+        ctx.shadowColor = acc;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+        ctx.restore();
+    }
+
     async function copyToClipboard(text) {
         try {
             await navigator.clipboard.writeText(text || "");
@@ -548,6 +813,12 @@ window.studioInterop = (() => {
         loadInitialPreferences,
         applyBodyPreferences,
         saveGuidePreference,
+        saveVisualizerPreference,
+        initStageVisualizer,
+        setStageVisualizerState,
+        syncStageChannelLevels,
+        pushStageNote,
+        drawFmScope,
         playMetronomeClick,
         feedVuMeter,
         drawVectorCanvas,

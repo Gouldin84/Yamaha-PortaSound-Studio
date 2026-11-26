@@ -8,25 +8,25 @@
 }
 
 <aside id="quickPickSidebar"
-       class="shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden @(State.IsSidebarCollapsed ? "sidebar-collapsed" : "")"
-       style="width: @(State.SidebarWidth)px; min-width: 260px; max-width: 720px;">
+       class="hw-panel shrink-0 rounded-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden @(State.IsSidebarCollapsed ? "sidebar-collapsed" : "")"
+       style="width: @(State.SidebarWidth)px; min-width: 245px; max-width: 720px;">
 
     <!-- Header -->
-    <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
+    <div class="flex items-center justify-between border-b pb-1.5 shrink-0" style="border-color: var(--panel-border);">
         <div class="flex items-center space-x-1.5">
-            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4" style="color: var(--acc-hi);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Library</h3>
+            <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-hi);">Library</h3>
         </div>
         <div class="flex items-center space-x-1">
-            <button id="btnAutoFitSidebar" type="button" @onclick="AutoFitWidth" title="Auto-Fit Width" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">↔</button>
-            <button id="btnToggleSelectMode" type="button" @onclick="ToggleSelectMode" title="Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs @(State.IsSelectMode ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800") transition rounded-lg">☑</button>
-            <button id="btnCollapseAll" type="button" @onclick="ToggleCollapseAll" title="Collapse / Expand All Folders" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
-            <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">
+            <button id="btnAutoFitSidebar" type="button" @onclick="AutoFitWidth" title="Auto-Fit Width" class="hw-btn w-6 h-6 flex items-center justify-center text-xs rounded-lg font-mono">↔</button>
+            <button id="btnToggleSelectMode" type="button" @onclick="ToggleSelectMode" title="Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs rounded-lg @(State.IsSelectMode ? "hw-accent-btn" : "hw-btn")">☑</button>
+            <button id="btnCollapseAll" type="button" @onclick="ToggleCollapseAll" title="Collapse / Expand All Folders" class="hw-btn w-6 h-6 flex items-center justify-center text-xs rounded-lg font-mono">⊟</button>
+            <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold font-mono rounded-full" style="background: var(--acc-soft); color: var(--acc-hi); border: 1px solid var(--acc-glow);">
                 @VisibleFiles.Count() songs
             </span>
-            <button id="btnCloseSidebar" type="button" @onclick="() => State.Mutate(s => s.IsSidebarCollapsed = true)" title="Collapse Sidebar (Ctrl+B)" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
+            <button id="btnCloseSidebar" type="button" @onclick="() => State.Mutate(s => s.IsSidebarCollapsed = true)" title="Collapse Sidebar (Ctrl+B)" class="hw-btn w-6 h-6 flex items-center justify-center rounded-lg">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
@@ -206,22 +206,23 @@
         if (categoryKey == "fav" && count == 0) return;
 
         <div class="tree-category-group space-y-0.5">
-            <div class="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-800/80 cursor-pointer hover:border-cyan-700/50 transition"
+            <div class="hw-bay flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer hover:brightness-110 transition"
                  @onclick="() => ToggleCategory(key)">
                 <div class="flex items-center space-x-1.5 min-w-0">
-                    <span class="text-[10px] text-cyan-400 transition-transform @(expanded ? "rotate-90" : "")">▶</span>
-                    <span class="text-[11px] font-bold text-slate-200 truncate">@title</span>
+                    <span class="text-[10px] transition-transform @(expanded ? "rotate-90" : "")" style="color: var(--acc-hi);">▶</span>
+                    <span class="text-[11px] font-bold truncate" style="color: var(--text-hi);">@title</span>
                 </div>
                 <div class="flex items-center space-x-1">
                     @if (!string.IsNullOrEmpty(categoryRootPath))
                     {
                         <button type="button"
-                                class="text-[10px] text-slate-400 hover:text-cyan-300 px-1"
+                                class="text-[10px] hover:brightness-125 px-1 font-bold"
+                                style="color: var(--text-mid);"
                                 title="New Subfolder"
                                 @onclick:stopPropagation="true"
                                 @onclick='() => State.Mutate(s => s.PendingFileAction = new FileActionRequest { Mode = "new_folder", Category = categoryKey })'>+</button>
                     }
-                    <span class="text-[10px] font-mono text-cyan-400 px-1.5 py-0.2 rounded bg-slate-950/70">@count</span>
+                    <span class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded" style="background: var(--acc-soft); color: var(--acc-hi);">@count</span>
                 </div>
             </div>
 

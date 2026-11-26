@@ -592,13 +592,13 @@ body.theme-light .bg-slate-950\/70 {
 
 /* Modal Dimming Backdrop (Translucent overlay, never solid) */
 body.theme-light .fixed.inset-0 {
-    background-color: rgba(15, 23, 42, 0.55) !important;
+    background-color: rgba(15, 23, 42, 0.45) !important;
 }
 
 /* Tab button hover in light mode */
 body.theme-light .tab-btn:not(.active):hover {
     color: #0f172a !important;
-    background-color: #f1f5f9 !important;
+    background-color: rgba(15, 23, 42, 0.06) !important;
 }
 
 body.theme-light .bg-slate-900,
@@ -606,24 +606,24 @@ body.theme-light .bg-slate-900\/90,
 body.theme-light .bg-slate-900\/80,
 body.theme-light .bg-slate-900\/60,
 body.theme-light .bg-slate-900\/50 {
-    background-color: #ffffff !important;
+    background-color: #e4eaf3 !important;
 }
 
 body.theme-light .bg-slate-800,
 body.theme-light .bg-slate-800\/90,
 body.theme-light .bg-slate-800\/80,
 body.theme-light .bg-slate-800\/60 {
-    background-color: #f8fafc !important;
-    border-color: #e2e8f0 !important;
+    background-color: #f3f6fb !important;
+    border-color: #cbd5e1 !important;
 }
 
 body.theme-light .bg-slate-700 {
-    background-color: #f1f5f9 !important;
+    background-color: #e2e8f0 !important;
 }
 
 body.theme-light .hover\:bg-slate-700:hover,
 body.theme-light .hover\:bg-slate-800:hover {
-    background-color: #e2e8f0 !important;
+    background-color: #dbe3ef !important;
 }
 
 /* Border Overrides */
@@ -632,7 +632,7 @@ body.theme-light .border-slate-800\/80,
 body.theme-light .border-slate-700,
 body.theme-light .border-slate-700\/80,
 body.theme-light .border-slate-700\/60 {
-    border-color: #e2e8f0 !important;
+    border-color: #cbd5e1 !important;
 }
 
 /* Typography Hierarchy */

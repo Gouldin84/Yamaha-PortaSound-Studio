@@ -5,25 +5,26 @@
     {
         string style = toast.Severity switch
         {
-            ToastSeverity.Success => "border-emerald-500/60 text-emerald-200 bg-slate-900/95",
-            ToastSeverity.Warning => "border-amber-500/60 text-amber-200 bg-slate-900/95",
-            ToastSeverity.Error => "border-rose-500/60 text-rose-200 bg-slate-900/95",
-            _ => "border-cyan-500/50 text-slate-100 bg-slate-900/95"
+            ToastSeverity.Success => "border-emerald-500/60 text-emerald-300",
+            ToastSeverity.Warning => "border-amber-500/60 text-amber-300",
+            ToastSeverity.Error => "border-rose-500/60 text-rose-300",
+            _ => "border-cyan-500/50"
         };
-        string icon = toast.Severity switch
+        string iconName = toast.Severity switch
         {
-            ToastSeverity.Success => "✅",
-            ToastSeverity.Warning => "⚠️",
-            ToastSeverity.Error => "❌",
-            _ => "ℹ️"
+            ToastSeverity.Success => "check",
+            ToastSeverity.Warning => "warning",
+            ToastSeverity.Error => "error",
+            _ => "info"
         };
         <div id="notificationToast"
-             class="pointer-events-auto glass-panel px-3.5 py-2.5 rounded-xl border shadow-2xl flex items-start space-x-2.5 text-xs @style">
-            <span class="shrink-0 text-sm">@icon</span>
-            <span class="flex-1 leading-snug">@toast.Message</span>
+             @key="toast.Id"
+             class="toast-slide-in hw-panel pointer-events-auto px-3.5 py-2.5 rounded-xl border shadow-2xl flex items-center space-x-2.5 text-xs @style">
+            <StudioIcon Name="@iconName" Class="w-4 h-4 shrink-0" />
+            <span class="flex-1 leading-snug font-medium" style="color: var(--text-hi);">@toast.Message</span>
             <button type="button"
                     @onclick="() => State.RemoveToast(toast.Id)"
-                    class="text-slate-400 hover:text-white shrink-0 ml-1">✕</button>
+                    class="opacity-70 hover:opacity-100 shrink-0 ml-1 cursor-pointer" style="color: var(--text-mid);">✕</button>
         </div>
     }
 </div>
