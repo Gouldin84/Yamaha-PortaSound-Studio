@@ -361,16 +361,23 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void WebUI_AppJs_HasBalancedTokensAndNoSyntaxErrors()
+        public void StudioInteropJs_HasBalancedTokensAndNoSyntaxErrors()
         {
-            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
-            if (!File.Exists(appJsPath))
+            string? appJsPath = null;
+            var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null)
             {
-                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
+                var candidate = Path.Combine(dir.FullName, "src", "PSS790Player", "wwwroot", "js", "studioInterop.js");
+                if (File.Exists(candidate))
+                {
+                    appJsPath = candidate;
+                    break;
+                }
+                dir = dir.Parent;
             }
 
-            Assert.True(File.Exists(appJsPath), $"app.js should exist at {appJsPath}");
-            var code = File.ReadAllText(appJsPath);
+            Assert.True(!string.IsNullOrEmpty(appJsPath) && File.Exists(appJsPath), "studioInterop.js should exist in wwwroot/js.");
+            var code = File.ReadAllText(appJsPath!);
 
             var stack = new System.Collections.Generic.Stack<(char Char, int Line, int Col)>();
             bool inStr = false;

@@ -20,6 +20,12 @@ namespace PSS790Player.Services
         private readonly PlaybackCoordinator _playback;
         private readonly LibraryService _library;
         private volatile bool _isDisposed;
+        private int _lastCountInBeat = -1;
+        private int _lastTickBar = -1;
+        private int _lastTickBeat = -1;
+
+        public event Action<byte, int>? InboundNoteVelocity;
+        public event Action<bool>? MetronomeBeatTriggered;
 
         public RecorderService(
             AppStateStore state,
@@ -384,6 +390,11 @@ namespace PSS790Player.Services
                     }
                 }
             });
+
+            if (e.IsActive && e.Velocity > 0)
+            {
+                InboundNoteVelocity?.Invoke(e.Velocity, e.Channel);
+            }
         }
 
         private void OnRecorderStateChanged(object? sender, RecorderStateEventArgs e)
@@ -396,6 +407,9 @@ namespace PSS790Player.Services
                 if (e.Bpm > 0) s.RecorderBpm = e.Bpm;
                 if (e.State == RecorderState.Idle || e.State == RecorderState.Stopped)
                 {
+                    _lastCountInBeat = -1;
+                    _lastTickBar = -1;
+                    _lastTickBeat = -1;
                     Array.Clear(s.RecorderChannelActive);
                     lock (s.ActiveInboundNotes)
                     {
@@ -403,11 +417,27 @@ namespace PSS790Player.Services
                     }
                 }
             });
+
+            if (e.State == RecorderState.CountIn && e.CountInBeat > 0 && e.CountInBeat != _lastCountInBeat)
+            {
+                _lastCountInBeat = e.CountInBeat;
+                if (_state.RecorderMetronomeEnabled)
+                {
+                    MetronomeBeatTriggered?.Invoke(e.CountInBeat == 1);
+                }
+            }
         }
 
         private void OnRecorderTick(object? sender, RecorderTickEventArgs e)
         {
             if (_isDisposed) return;
+            bool beatChanged = e.CurrentBar != _lastTickBar || e.CurrentBeat != _lastTickBeat;
+            if (beatChanged)
+            {
+                _lastTickBar = e.CurrentBar;
+                _lastTickBeat = e.CurrentBeat;
+            }
+
             _state.Mutate(s =>
             {
                 s.RecorderElapsedSeconds = e.ElapsedSeconds;
@@ -416,6 +446,11 @@ namespace PSS790Player.Services
                 s.RecorderBar = e.CurrentBar;
                 s.RecorderBeat = e.CurrentBeat;
             });
+
+            if (beatChanged && _state.RecorderState == RecorderState.Recording && _state.RecorderMetronomeEnabled)
+            {
+                MetronomeBeatTriggered?.Invoke(e.CurrentBeat == 1);
+            }
         }
 
         private void OnInputDeviceDisconnected(object? sender, string deviceName)

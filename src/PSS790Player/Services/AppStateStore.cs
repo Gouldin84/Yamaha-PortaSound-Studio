@@ -157,6 +157,11 @@ namespace PSS790Player.Services
         public string ModalGuideModel { get; set; } = "pss790";
         public string ModalGuideMethod { get; set; } = "midi";
         public bool ShowAboutModal { get; set; }
+        public FileActionRequest? PendingFileAction { get; set; }
+        public ContextMenuState? LibraryContextMenu { get; set; }
+        public HashSet<string> ExpandedFolders { get; } = new(StringComparer.OrdinalIgnoreCase) { "cat:gm", "cat:pss790", "cat:pss680" };
+        public HashSet<string> SelectedBatchPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool IsSelectMode { get; set; }
 
         public void Mutate(Action<AppStateStore> updater)
         {

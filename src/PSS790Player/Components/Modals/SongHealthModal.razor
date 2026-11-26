@@ -1,0 +1,61 @@
+@inject AppStateStore State
+
+@{
+    var song = State.LoadedSong;
+    var h = song?.Health;
+}
+
+<div id="songHealthModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
+    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+            <div>
+                <h3 class="text-sm font-bold text-white">🩺 Song Health &amp; Hardware Audit</h3>
+                <p class="text-[11px] text-slate-400 truncate">@(song?.FileName ?? "No song loaded")</p>
+            </div>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white transition text-lg">✕</button>
+        </div>
+
+        @if (h != null)
+        {
+            <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-3 pr-1 text-xs">
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><span class="text-[10px] text-slate-400 block">Status</span><strong class="text-cyan-300">@h.BadgeLabel</strong></div>
+                    <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><span class="text-[10px] text-slate-400 block">Peak Polyphony</span><strong class="font-mono text-white">@h.PeakPolyphony v (@h.VoiceStressRating)</strong></div>
+                    <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><span class="text-[10px] text-slate-400 block">Active Channels</span><strong class="font-mono text-white">@h.ActiveChannelCount</strong></div>
+                    <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><span class="text-[10px] text-slate-400 block">Total Notes</span><strong class="font-mono text-white">@h.TotalNoteCount</strong></div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-slate-800 space-y-1.5 text-[11px]">
+                    <div class="font-bold text-slate-300">MIDI Integrity Metrics</div>
+                    <div class="grid grid-cols-2 gap-1 text-slate-400 font-mono">
+                        <span>Stuck Sustain Spans: <strong class="text-slate-200">@h.StuckPedalIntervalsCount</strong></span>
+                        <span>Dangling Pitch Bends: <strong class="text-slate-200">@h.DanglingPitchBendsCount</strong></span>
+                        <span>Micro-Bends Cleaned: <strong class="text-slate-200">@h.AcousticMicroBendsNeutralized</strong></span>
+                        <span>Out-of-Bounds Notes: <strong class="text-slate-200">@h.OutOfBoundsNotesCount</strong></span>
+                    </div>
+                </div>
+
+                @if (h.AppliedAutoFixes.Count > 0)
+                {
+                    <div class="p-3 rounded-xl bg-cyan-950/30 border border-cyan-700/40 space-y-1 text-[11px]">
+                        <div class="font-bold text-cyan-300">Auto-Applied Engine Safeguards:</div>
+                        <ul class="list-disc list-inside text-slate-300 space-y-0.5">
+                            @foreach (var fix in h.AppliedAutoFixes)
+                            {
+                                <li>@fix</li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        }
+
+        <div class="flex justify-end border-t border-slate-800 pt-3 shrink-0">
+            <button type="button" @onclick="Close" class="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white">Done</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private void Close() => State.Mutate(s => s.ShowHealthModal = false);
+}

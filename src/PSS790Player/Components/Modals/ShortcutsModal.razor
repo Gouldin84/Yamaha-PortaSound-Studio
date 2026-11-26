@@ -1,0 +1,42 @@
+@inject AppStateStore State
+
+<div id="shortcutsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
+    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-lg w-full mx-auto shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="text-sm font-bold text-white">⌨️ Keyboard Shortcuts &amp; Handheld Hotkeys</h3>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+            @foreach (var item in new[]
+            {
+                ("Space", "Play / Pause"),
+                ("Esc", "Stop & Panic All Notes Off"),
+                ("← / →", "Seek -5s / +5s"),
+                ("N / P", "Next / Previous Song"),
+                ("L", "Toggle Song Loop"),
+                ("F", "Toggle Current Song Favorite"),
+                ("T", "Toggle Handheld Touch Mode"),
+                ("1 / 2 / 3", "Switch Workspaces"),
+                ("Ctrl + B", "Toggle Library Sidebar"),
+                ("Ctrl + S", "Smart Library Sync"),
+                ("[ / ]", "Transpose -1 / +1"),
+                ("? / F1", "Open Hotkeys Reference")
+            })
+            {
+                <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800">
+                    <span class="text-slate-300">@item.Item2</span>
+                    <kbd class="px-2 py-0.5 rounded bg-slate-950 border border-slate-700 font-mono font-bold text-cyan-300 text-[11px]">@item.Item1</kbd>
+                </div>
+            }
+        </div>
+
+        <div class="flex justify-end border-t border-slate-800 pt-3">
+            <button type="button" @onclick="Close" class="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white">Done</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private void Close() => State.Mutate(s => s.ShowShortcutsModal = false);
+}

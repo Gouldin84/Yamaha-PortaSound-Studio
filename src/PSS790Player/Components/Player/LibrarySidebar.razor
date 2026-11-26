@@ -1,0 +1,368 @@
+@inject AppStateStore State
+@inject PlaybackCoordinator Playback
+@inject LibraryService Library
+@inject IJSRuntime JS
+@implements IDisposable
+
+<aside id="quickPickSidebar"
+       class="shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden @(State.IsSidebarCollapsed ? "sidebar-collapsed" : "")"
+       style="width: @(State.SidebarWidth)px; min-width: 260px; max-width: 720px;">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between border-b border-slate-800/80 pb-1.5 shrink-0">
+        <div class="flex items-center space-x-1.5">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300">Library</h3>
+        </div>
+        <div class="flex items-center space-x-1">
+            <button id="btnAutoFitSidebar" type="button" @onclick="AutoFitWidth" title="Auto-Fit Width" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">↔</button>
+            <button id="btnToggleSelectMode" type="button" @onclick="ToggleSelectMode" title="Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs @(State.IsSelectMode ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800") transition rounded-lg">☑</button>
+            <button id="btnCollapseAll" type="button" @onclick="ToggleCollapseAll" title="Collapse / Expand All Folders" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
+            <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">
+                @State.Library.AllFiles.Count songs
+            </span>
+            <button id="btnCloseSidebar" type="button" @onclick="() => State.Mutate(s => s.IsSidebarCollapsed = true)" title="Collapse Sidebar (Ctrl+B)" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Search Input -->
+    <div class="relative shrink-0">
+        <input type="text"
+               id="sidebarSearchInput"
+               value="@State.SearchQuery"
+               @oninput="(e) => State.Mutate(s => s.SearchQuery = e.Value?.ToString() ?? string.Empty)"
+               placeholder="Search songs, folders..."
+               class="w-full bg-slate-900/90 text-xs text-white placeholder-slate-500 rounded-lg px-2.5 py-1.5 pl-7 pr-7 border border-slate-700/60 focus:outline-none focus:border-cyan-500/80 transition" />
+        <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        @if (!string.IsNullOrEmpty(State.SearchQuery))
+        {
+            <button id="btnClearSearch" type="button" @onclick="() => State.Mutate(s => s.SearchQuery = string.Empty)" class="absolute right-2 top-1.5 text-slate-400 hover:text-white text-xs font-bold">×</button>
+        }
+    </div>
+
+    <!-- Tree Scroll Container -->
+    <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
+        @RenderCategorySection("cat:fav", "⭐ Favourites", "fav", FavoriteSongs, null)
+        @RenderCategorySection("cat:gm", "🎼 General MIDI", "gm", State.Library.Gm.Files, State.Library.Gm.SubFolders, State.Library.Gm.Count, State.Library.Gm.FullPath)
+        @RenderCategorySection("cat:pss790", "🎹 Yamaha PSS-790", "pss790", State.Library.Pss790.Files, State.Library.Pss790.SubFolders, State.Library.Pss790.Count, State.Library.Pss790.FullPath)
+        @RenderCategorySection("cat:pss680", "⚡ Yamaha PSS-680", "pss680", State.Library.Pss680.Files, State.Library.Pss680.SubFolders, State.Library.Pss680.Count, State.Library.Pss680.FullPath)
+    </div>
+
+    <!-- Batch Selection Action Bar -->
+    @if (State.IsSelectMode && State.SelectedBatchPaths.Count > 0)
+    {
+        <div id="sidebarBatchBar" class="shrink-0 p-2 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-1.5 select-none">
+            <div class="flex items-center justify-between text-xs">
+                <span class="font-bold text-cyan-400 text-[11px]">@State.SelectedBatchPaths.Count selected</span>
+                <div class="space-x-2">
+                    <button type="button" @onclick="SelectAllVisible" class="text-[10px] text-slate-400 hover:text-cyan-300">All</button>
+                    <span class="text-slate-600 text-[10px]">•</span>
+                    <button type="button" @onclick="() => State.Mutate(s => s.SelectedBatchPaths.Clear())" class="text-[10px] text-slate-400 hover:text-rose-400">Clear</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+                <button id="btnBatchMove" type="button" @onclick="OpenBatchMove" class="px-2 py-1.5 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold text-xs flex items-center justify-center space-x-1 transition">
+                    <span>📦</span><span>Move</span>
+                </button>
+                <button id="btnBatchDelete" type="button" @onclick="OpenBatchDelete" class="px-2 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs flex items-center justify-center space-x-1 transition">
+                    <span>🗑️</span><span>Delete</span>
+                </button>
+            </div>
+        </div>
+    }
+
+    <!-- Bottom Quick Utility Bar -->
+    <div class="pt-1.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
+        <div class="flex items-center space-x-1.5">
+            <button id="btnSidebarRefresh" type="button" @onclick="() => Library.RefreshLibrary()" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Refresh Library">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                <span>Refresh</span>
+            </button>
+            <span class="text-slate-600">|</span>
+            <button id="btnSidebarSync" type="button" @onclick="OpenSyncModal" class="hover:text-cyan-400 transition flex items-center space-x-1 p-0.5" title="Sync & Align Folders (Ctrl+S)">
+                <span class="font-semibold text-cyan-300">Sync</span>
+            </button>
+        </div>
+        <span class="text-slate-500 text-[10px]">Click: Load • ▶: Play</span>
+    </div>
+</aside>
+
+<!-- Drag Resizer Splitter Handle -->
+@if (!State.IsSidebarCollapsed)
+{
+    <div id="sidebarResizer" class="w-2.5 -mx-1 h-full cursor-col-resize flex items-center justify-center group shrink-0 z-20 select-none" title="Drag to resize • Double-click to reset">
+        <div class="w-1 h-8 rounded-full bg-slate-700/60 group-hover:bg-cyan-400 group-hover:h-16 transition-all duration-200"></div>
+    </div>
+}
+
+<!-- Context Menu Popup -->
+@if (State.LibraryContextMenu is { } ctx)
+{
+    <div class="fixed inset-0 z-40" @onclick="() => State.Mutate(s => s.LibraryContextMenu = null)"></div>
+    <div id="libraryContextMenu"
+         style="left: @(Math.Round(ctx.ClientX))px; top: @(Math.Round(ctx.ClientY))px;"
+         class="fixed z-50 min-w-[190px] bg-slate-900/95 backdrop-blur-md rounded-xl border border-slate-700/80 shadow-2xl py-1 text-xs text-slate-200 select-none">
+        <div @onclick="() => TriggerActionFromContext(ctx, CtxNewFolder)" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer">
+            <span class="text-amber-400">📁</span><span>New Folder...</span>
+        </div>
+        <div @onclick="() => TriggerActionFromContext(ctx, CtxMove)" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer">
+            <span class="text-cyan-400">📦</span><span>Move to Folder...</span>
+        </div>
+        <div @onclick="() => TriggerActionFromContext(ctx, CtxRename)" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer">
+            <span class="text-sky-400">✏️</span><span>Rename...</span>
+        </div>
+        <div @onclick="() => { State.Mutate(s => s.LibraryContextMenu = null); Library.RevealInExplorer(ctx.FullPath); }" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer">
+            <span>↗️</span><span>Reveal in Explorer</span>
+        </div>
+        @if (!ctx.IsFolder)
+        {
+            <div @onclick="() => { State.Mutate(s => s.LibraryContextMenu = null); Library.ToggleFavorite(ctx.FullPath); }" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-800 cursor-pointer">
+                <span class="text-amber-400">⭐</span><span>@(ctx.IsFavorite ? "Remove Favourite" : "Add Favourite")</span>
+            </div>
+        }
+        <div class="my-1 border-t border-slate-800"></div>
+        <div @onclick="() => TriggerActionFromContext(ctx, CtxDelete)" class="ctx-menu-item flex items-center space-x-2 px-3 py-1.5 hover:bg-rose-950/70 text-rose-300 cursor-pointer">
+            <span>🗑️</span><span>Delete...</span>
+        </div>
+    </div>
+}
+
+@code {
+    private const string CtxNewFolder = "new_folder";
+    private const string CtxMove = "move";
+    private const string CtxRename = "rename";
+    private const string CtxDelete = "delete";
+
+    private DotNetObjectReference<LibrarySidebar>? _dotNetRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("studioInterop.initSidebarResizer", "sidebarResizer", "quickPickSidebar", _dotNetRef);
+            }
+            catch { }
+        }
+    }
+
+    [JSInvokable]
+    public void OnSidebarWidthChanged(int width) =>
+        State.Mutate(s => s.SidebarWidth = Math.Clamp(width, 260, 650));
+
+    private List<MidiFileItem> FavoriteSongs =>
+        State.Library.AllFiles.Where(f => f.IsFavorite || State.Favorites.Contains(f.FullPath)).ToList();
+
+    private RenderFragment RenderCategorySection(
+        string key,
+        string title,
+        string categoryKey,
+        List<MidiFileItem> directFiles,
+        List<FolderNode>? subFolders,
+        int? explicitCount = null,
+        string? categoryRootPath = null) => __builder =>
+    {
+        bool expanded = !string.IsNullOrWhiteSpace(State.SearchQuery) || State.ExpandedFolders.Contains(key);
+        string q = State.SearchQuery.Trim();
+        var matchingDirect = string.IsNullOrEmpty(q)
+            ? directFiles
+            : directFiles.Where(f => f.FileName.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
+        var matchingFolders = (subFolders ?? new List<FolderNode>())
+            .Where(sf => string.IsNullOrEmpty(q) || FolderMatches(sf, q))
+            .ToList();
+        int count = explicitCount ?? matchingDirect.Count;
+        if (categoryKey == "fav" && count == 0) return;
+
+        <div class="tree-category-group space-y-0.5">
+            <div class="flex items-center justify-between px-2 py-1 rounded-lg bg-slate-900/70 border border-slate-800/80 cursor-pointer hover:border-cyan-700/50 transition"
+                 @onclick="() => ToggleCategory(key)">
+                <div class="flex items-center space-x-1.5 min-w-0">
+                    <span class="text-[10px] text-cyan-400 transition-transform @(expanded ? "rotate-90" : "")">▶</span>
+                    <span class="text-[11px] font-bold text-slate-200 truncate">@title</span>
+                </div>
+                <div class="flex items-center space-x-1">
+                    @if (!string.IsNullOrEmpty(categoryRootPath))
+                    {
+                        <button type="button"
+                                class="text-[10px] text-slate-400 hover:text-cyan-300 px-1"
+                                title="New Subfolder"
+                                @onclick:stopPropagation="true"
+                                @onclick='() => State.Mutate(s => s.PendingFileAction = new FileActionRequest { Mode = "new_folder", Category = categoryKey })'>+</button>
+                    }
+                    <span class="text-[10px] font-mono text-cyan-400 px-1.5 py-0.2 rounded bg-slate-950/70">@count</span>
+                </div>
+            </div>
+
+            @if (expanded)
+            {
+                <div class="pl-1 space-y-0.5">
+                    @foreach (var sf in matchingFolders)
+                    {
+                        <LibraryTreeNode Node="sf" />
+                    }
+                    @foreach (var song in matchingDirect)
+                    {
+                        bool isSel = string.Equals(State.SelectedSongPath, song.FullPath, StringComparison.OrdinalIgnoreCase);
+                        bool isPlay = string.Equals(State.PlayingSongPath, song.FullPath, StringComparison.OrdinalIgnoreCase);
+                        bool isChk = State.SelectedBatchPaths.Contains(song.FullPath);
+                        bool isFav = song.IsFavorite || State.Favorites.Contains(song.FullPath);
+
+                        <div class="tree-song-item flex items-center justify-between px-1.5 py-1 rounded-lg border border-transparent cursor-pointer group @(isPlay ? "playing" : isSel ? "selected" : "")"
+                             @onclick="() => _ = Playback.LoadFileAsync(song.FullPath, autoPlay: false)"
+                             @ondblclick="() => _ = Playback.LoadFileAsync(song.FullPath, autoPlay: true)"
+                             @oncontextmenu="(e) => State.Mutate(s => s.LibraryContextMenu = new ContextMenuState { ClientX = e.ClientX, ClientY = e.ClientY, FullPath = song.FullPath, Name = song.FileName, Category = song.Format, SubFolder = song.SubFolder, IsFavorite = isFav })"
+                             @oncontextmenu:preventDefault="true">
+                            <div class="flex items-center space-x-1.5 min-w-0 flex-1 pr-1">
+                                @if (State.IsSelectMode)
+                                {
+                                    <input type="checkbox" checked="@isChk" @onclick:stopPropagation="true"
+                                           @onchange="(e) => ToggleBatchItem(song.FullPath, (bool?)e.Value == true)"
+                                           class="song-checkbox w-3.5 h-3.5 rounded accent-cyan-500 shrink-0 cursor-pointer" />
+                                }
+                                <span class="text-[10px] text-amber-400 shrink-0 @(isFav ? "opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100")"
+                                      @onclick:stopPropagation="true"
+                                      @onclick="() => Library.ToggleFavorite(song.FullPath)">@(isFav ? "★" : "☆")</span>
+                                <span class="song-title truncate text-[11px]" title="@song.RelativePath">@Path.GetFileNameWithoutExtension(song.FileName)</span>
+                            </div>
+                            <button type="button" class="btn-song-play text-slate-400 opacity-75 group-hover:opacity-100 shrink-0"
+                                    @onclick:stopPropagation="true"
+                                    @onclick="() => _ = Playback.LoadFileAsync(song.FullPath, autoPlay: true)">▶</button>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    };
+
+    private static bool FolderMatches(FolderNode node, string q) =>
+        node.Name.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+        node.Files.Any(f => f.FileName.Contains(q, StringComparison.OrdinalIgnoreCase)) ||
+        node.SubFolders.Any(sf => FolderMatches(sf, q));
+
+    private void ToggleCategory(string key) => State.Mutate(s =>
+    {
+        if (!s.ExpandedFolders.Add(key)) s.ExpandedFolders.Remove(key);
+    });
+
+    private void ToggleSelectMode() => State.Mutate(s =>
+    {
+        s.IsSelectMode = !s.IsSelectMode;
+        if (!s.IsSelectMode) s.SelectedBatchPaths.Clear();
+    });
+
+    private void ToggleCollapseAll() => State.Mutate(s =>
+    {
+        if (s.ExpandedFolders.Count > 3)
+        {
+            s.ExpandedFolders.Clear();
+            s.ExpandedFolders.Add("cat:gm");
+            s.ExpandedFolders.Add("cat:pss790");
+            s.ExpandedFolders.Add("cat:pss680");
+        }
+        else
+        {
+            foreach (var f in FlattenFolders(s.Library.Gm.SubFolders).Concat(FlattenFolders(s.Library.Pss790.SubFolders)).Concat(FlattenFolders(s.Library.Pss680.SubFolders)))
+            {
+                s.ExpandedFolders.Add($"dir:{f.FullPath}");
+            }
+        }
+    });
+
+    private static IEnumerable<FolderNode> FlattenFolders(IEnumerable<FolderNode> nodes)
+    {
+        foreach (var n in nodes)
+        {
+            yield return n;
+            foreach (var c in FlattenFolders(n.SubFolders)) yield return c;
+        }
+    }
+
+    private void AutoFitWidth()
+    {
+        int maxLen = State.Library.AllFiles.Count == 0 ? 22 : State.Library.AllFiles.Max(f => f.FileName.Length);
+        State.Mutate(s => s.SidebarWidth = Math.Clamp(160 + (maxLen * 6), 280, 560));
+    }
+
+    private void ToggleBatchItem(string path, bool chk) => State.Mutate(s =>
+    {
+        if (chk) s.SelectedBatchPaths.Add(path);
+        else s.SelectedBatchPaths.Remove(path);
+    });
+
+    private void SelectAllVisible() => State.Mutate(s =>
+    {
+        foreach (var song in Playback.GetFilteredSongList())
+            s.SelectedBatchPaths.Add(song.FullPath);
+    });
+
+    private void OpenBatchMove()
+    {
+        var list = State.SelectedBatchPaths.ToList();
+        if (list.Count == 0) return;
+        var linked = Library.CheckBatchLinkedFiles(list);
+        State.Mutate(s => s.PendingFileAction = new FileActionRequest
+        {
+            Mode = "batch_move",
+            BatchPaths = list,
+            HasLinked = linked.HasLinked,
+            LinkedCount = linked.LinkedCount,
+            Category = State.ActiveModel
+        });
+    }
+
+    private void OpenBatchDelete()
+    {
+        var list = State.SelectedBatchPaths.ToList();
+        if (list.Count == 0) return;
+        var linked = Library.CheckBatchLinkedFiles(list);
+        State.Mutate(s => s.PendingFileAction = new FileActionRequest
+        {
+            Mode = "batch_delete",
+            BatchPaths = list,
+            HasLinked = linked.HasLinked,
+            LinkedCount = linked.LinkedCount
+        });
+    }
+
+    private void OpenSyncModal()
+    {
+        Library.AnalyzeLibrarySync();
+        State.Mutate(s => s.ShowSyncModal = true);
+    }
+
+    private void TriggerActionFromContext(ContextMenuState ctx, string mode)
+    {
+        var linked = (mode is CtxMove or CtxDelete)
+            ? Library.CheckLinkedItem(ctx.FullPath, ctx.IsFolder)
+            : new LinkedCheckResult();
+
+        State.Mutate(s =>
+        {
+            s.LibraryContextMenu = null;
+            s.PendingFileAction = new FileActionRequest
+            {
+                Mode = mode,
+                TargetPath = ctx.FullPath,
+                CurrentName = mode == CtxRename && !ctx.IsFolder ? Path.GetFileNameWithoutExtension(ctx.Name) : ctx.Name,
+                Category = ctx.Category,
+                SubFolder = ctx.SubFolder,
+                IsFolder = ctx.IsFolder,
+                HasLinked = linked.HasLinked,
+                LinkedPath = linked.LinkedPath,
+                LinkedName = linked.LinkedName
+            };
+        });
+    }
+
+    public void Dispose() => _dotNetRef?.Dispose();
+}

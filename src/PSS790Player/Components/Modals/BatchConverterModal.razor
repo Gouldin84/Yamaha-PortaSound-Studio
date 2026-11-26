@@ -1,0 +1,138 @@
+@inject AppStateStore State
+@inject LibraryService Library
+
+@{
+    var p = State.BatchProgress;
+    var audit = State.HealthAudit;
+    bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+    int pct = p.Total > 0 ? (int)Math.Round((p.Processed * 100.0) / p.Total) : 0;
+}
+
+<div id="batchModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
+    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-3xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm">⚡</div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Dual Hardware Batch Remapper &amp; Library Audit</h3>
+                    <p class="text-[11px] text-slate-400">Mirror GM MIDI trees into PSS-790 AWM &amp; PSS-680 2-Op FM hardware folders</p>
+                </div>
+            </div>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white transition text-lg">✕</button>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4 pr-1">
+            <!-- Targets -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 space-y-2">
+                    <label class="flex items-center space-x-2 font-bold text-cyan-300 cursor-pointer">
+                        <input type="checkbox" checked="@_req.Convert790" @onchange="(e) => _req.Convert790 = e.Value is bool b && b" class="accent-cyan-500" />
+                        <span>Convert to PSS-790 (AWM 28-Voice)</span>
+                    </label>
+                    <div class="grid grid-cols-2 gap-1.5 text-[11px] text-slate-300 pl-1">
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.PolyphonyGuard790" @onchange="(e) => _req.PolyphonyGuard790 = e.Value is bool b && b" /><span>28-Voice Guard</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.ReverbBoost790" @onchange="(e) => _req.ReverbBoost790 = e.Value is bool b && b" /><span>Chorus/Reverb DSP</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.VelocityNorm790" @onchange="(e) => _req.VelocityNorm790 = e.Value is bool b && b" /><span>Velocity Norm</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.Sustain790" @onchange="(e) => _req.Sustain790 = e.Value is bool b && b" /><span>Sustain Fold</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.ExpressionFold790" @onchange="(e) => _req.ExpressionFold790 = e.Value is bool b && b" /><span>CC11 Fold</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.PitchTune790" @onchange="(e) => _req.PitchTune790 = e.Value is bool b && b" /><span>Pitch Calibration</span></label>
+                    </div>
+                </div>
+
+                <div class="p-3 rounded-xl bg-slate-900/90 border border-amber-500/30 space-y-2">
+                    <label class="flex items-center space-x-2 font-bold text-amber-300 cursor-pointer">
+                        <input type="checkbox" checked="@_req.Convert680" @onchange="(e) => _req.Convert680 = e.Value is bool b && b" class="accent-amber-500" />
+                        <span>Convert to PSS-680 (2-Op FM 12-Voice)</span>
+                    </label>
+                    <div class="grid grid-cols-2 gap-1.5 text-[11px] text-slate-300 pl-1">
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.PolyphonyGuard680" @onchange="(e) => _req.PolyphonyGuard680 = e.Value is bool b && b" /><span>12-Voice Guard</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.CleanControllers680" @onchange="(e) => _req.CleanControllers680 = e.Value is bool b && b" /><span>Strip Unsupported CC</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.FmVelocity680" @onchange="(e) => _req.FmVelocity680 = e.Value is bool b && b" /><span>FM Curve Boost</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.Drums680" @onchange="(e) => _req.Drums680 = e.Value is bool b && b" /><span>32-Pad Drums</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.Sustain680" @onchange="(e) => _req.Sustain680 = e.Value is bool b && b" /><span>Sustain Expand</span></label>
+                        <label class="flex items-center space-x-1"><input type="checkbox" checked="@_req.ExpressionFold680" @onchange="(e) => _req.ExpressionFold680 = e.Value is bool b && b" /><span>CC11 Fold</span></label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Batch Progress -->
+            @if (p.IsRunning || p.Total > 0)
+            {
+                <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-white truncate">@p.Status @(string.IsNullOrEmpty(p.CurrentFile) ? "" : $"— {p.CurrentFile}")</span>
+                        <span class="font-mono text-cyan-400 font-bold">@p.Processed / @p.Total (@pct%)</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-cyan-500 to-amber-500 transition-all duration-150" style="width: @(pct)%;"></div>
+                    </div>
+                    <div class="flex items-center space-x-4 text-[10px] font-mono text-slate-400">
+                        <span>Converted: <strong class="text-emerald-300">@p.ConvertedCount</strong></span>
+                        <span>PSS-790: @p.Converted790Count</span>
+                        <span>PSS-680: @p.Converted680Count</span>
+                        <span>Skipped: @p.SkippedCount</span>
+                        <span>Errors: <strong class="text-rose-400">@p.ErrorCount</strong></span>
+                    </div>
+                </div>
+            }
+
+            <!-- Deep Health Audit Section -->
+            <div class="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 space-y-2.5">
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <div>
+                        <div class="text-xs font-bold text-white">🩺 GM Library Diagnostic Audit</div>
+                        <div class="text-[10px] text-slate-400">Scan source `.mid` files for polyphony bursts, dangling bends &amp; program coverage</div>
+                    </div>
+                    <button type="button" disabled="@audit.IsRunning" @onclick="() => Library.RunHealthAudit()"
+                            class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-bold text-white">
+                        @(audit.IsRunning ? $"Scanning {audit.ScannedCount}/{audit.TotalCount}..." : "Run Library Health Audit")
+                    </button>
+                </div>
+
+                @if (audit.TotalCount > 0)
+                {
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs">
+                        <div class="p-2 rounded-lg bg-slate-950 border border-emerald-700/40"><div class="text-[10px] text-slate-400">Optimal</div><div class="font-mono font-bold text-emerald-300">@audit.OptimalCount</div></div>
+                        <div class="p-2 rounded-lg bg-slate-950 border border-cyan-700/40"><div class="text-[10px] text-slate-400">Auto-Fixed</div><div class="font-mono font-bold text-cyan-300">@audit.AutoFixedCount</div></div>
+                        <div id="auditPolyphonyCard" title="@(is680 ? "Songs exceeding 12 voices" : "Songs exceeding 28 voices")" class="p-2 rounded-lg bg-slate-950 border border-amber-700/40">
+                            <div id="auditPolyphonyLabel" class="text-[10px] text-slate-400">@(is680 ? ">12 Voices" : ">28 Voices")</div>
+                            <div class="font-mono font-bold text-amber-300">@audit.HighPolyCount</div>
+                        </div>
+                        <div class="p-2 rounded-lg bg-slate-950 border border-rose-700/40"><div class="text-[10px] text-slate-400">Corrupt</div><div class="font-mono font-bold text-rose-300">@audit.CorruptCount</div></div>
+                    </div>
+
+                    <div class="max-h-40 overflow-y-auto custom-scrollbar divide-y divide-slate-800/80 bg-slate-950 rounded-xl border border-slate-800 p-2 text-[11px]">
+                        @foreach (var item in audit.Items.Take(80))
+                        {
+                            <div class="py-1 flex items-center justify-between gap-2">
+                                <span class="font-mono text-slate-200 truncate">@item.RelativePath</span>
+                                <span class="text-[10px] font-semibold shrink-0 @(item.BadgeType == "warning" ? "text-amber-300" : item.BadgeType == "autofixed" ? "text-cyan-300" : "text-emerald-400")">
+                                    @item.BadgeLabel (@item.PeakPolyphony v)
+                                </span>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="flex items-center justify-end space-x-2 border-t border-slate-800 pt-3 shrink-0">
+            @if (p.IsRunning)
+            {
+                <button type="button" @onclick="() => Library.CancelBatchConversion()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white">Cancel Batch</button>
+            }
+            else
+            {
+                <button type="button" @onclick="Close" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Close</button>
+                <button type="button" @onclick="() => Library.StartBatchConversion(_req)" class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-lg">⚡ Start Batch Convert</button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly BatchConversionRequest _req = new();
+    private void Close() => State.Mutate(s => s.ShowBatchModal = false);
+}

@@ -464,4 +464,31 @@ namespace PSS790Player.Models
         public bool IsTriplet { get; set; }
         public List<DrummerTrackState> Rows { get; set; } = new();
     }
+
+    public sealed class FileActionRequest
+    {
+        public string Mode { get; set; } = "new_folder"; // new_folder, rename, move, batch_move, delete, batch_delete
+        public string TargetPath { get; set; } = string.Empty;
+        public List<string> BatchPaths { get; set; } = new();
+        public string CurrentName { get; set; } = string.Empty;
+        public string Category { get; set; } = "gm";
+        public string SubFolder { get; set; } = string.Empty;
+        public bool IsFolder { get; set; }
+        public bool HasLinked { get; set; }
+        public string? LinkedPath { get; set; }
+        public string? LinkedName { get; set; }
+        public int LinkedCount { get; set; }
+    }
+
+    public sealed class ContextMenuState
+    {
+        public double ClientX { get; set; }
+        public double ClientY { get; set; }
+        public string FullPath { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Category { get; set; } = "gm";
+        public string SubFolder { get; set; } = string.Empty;
+        public bool IsFolder { get; set; }
+        public bool IsFavorite { get; set; }
+    }
 }

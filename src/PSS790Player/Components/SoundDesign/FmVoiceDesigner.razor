@@ -1,0 +1,427 @@
+@using System.Globalization
+@implements IDisposable
+@inject AppStateStore State
+@inject SoundDesignService SoundDesign
+@inject IJSRuntime JS
+
+@{
+    var fm = State.FmVoice;
+    var filteredPatches = string.IsNullOrWhiteSpace(State.FmSearchQuery)
+        ? State.FmVoiceLibrary
+        : State.FmVoiceLibrary.Where(p => p.VoiceName.Contains(State.FmSearchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    var modGeom = ComputeEnvelopeGeometry(fm.Modulator);
+    var carGeom = ComputeEnvelopeGeometry(fm.Carrier);
+}
+
+<div id="deckFmSoundDesigner" class="w-full h-full flex flex-col lg:flex-row gap-3 min-h-0 overflow-hidden">
+    <!-- Left Sidebar: Categorized FM Patch Vault -->
+    <aside id="fmLibrarySidebar" class="shrink-0 flex flex-col glass-panel rounded-2xl p-2.5 space-y-2 h-64 lg:h-full z-10 select-none w-full lg:w-72 overflow-hidden">
+        <div class="flex items-center justify-between pb-1 border-b border-slate-800/80 shrink-0">
+            <div class="flex items-center space-x-1.5">
+                <span class="text-xs font-bold uppercase tracking-wider text-amber-400">🎛️ FM Patches</span>
+                <span class="text-[10px] font-mono px-1.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">@filteredPatches.Count</span>
+            </div>
+            <div class="flex items-center space-x-1">
+                <button type="button" @onclick="() => SoundDesign.ApplyInitFmPreset()" title="Initialize Clean 2-Op Sine"
+                        class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-bold text-slate-200 border border-slate-700">Init</button>
+                <button id="btnFmRandomize" type="button" @onclick="() => SoundDesign.RandomizeFmVoice()" title="Generate Random Musical 2-Op FM Voice"
+                        class="px-2 py-0.5 rounded bg-amber-600/80 hover:bg-amber-500 text-[10px] font-bold text-white">🎲 Rand</button>
+            </div>
+        </div>
+
+        <input id="fmSearchInput"
+               type="text"
+               value="@State.FmSearchQuery"
+               @oninput="(e) => State.Mutate(s => s.FmSearchQuery = e.Value?.ToString() ?? string.Empty)"
+               placeholder="Search FM patches..."
+               class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" />
+
+        <div id="fmPatchList" class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+            @foreach (var cat in FactoryPresets.FmCategoryOrder)
+            {
+                var items = filteredPatches.Where(p => string.Equals(FactoryPresets.GetFmCategory(p.VoiceName), cat, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (items.Count == 0) continue;
+                bool isOpen = !_collapsedCats.Contains(cat);
+                <div class="space-y-1">
+                    <button type="button"
+                            @onclick="() => ToggleCategory(cat)"
+                            class="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                        <span class="truncate">@cat</span>
+                        <span class="font-mono text-amber-400">@(isOpen ? "▾" : "▸") @items.Count</span>
+                    </button>
+                    @if (isOpen)
+                    {
+                        <div class="space-y-1 pl-1">
+                            @foreach (var patch in items)
+                            {
+                                bool isSelected = string.Equals(patch.VoiceName, fm.Name, StringComparison.OrdinalIgnoreCase);
+                                <div class="p-2 rounded-xl bg-slate-900/70 hover:bg-slate-800/90 border @(isSelected ? "border-amber-500/60" : "border-slate-800") flex items-center justify-between gap-1.5">
+                                    <button type="button" @onclick="() => SoundDesign.LoadFmVoicePatch(patch.FilePath)" class="flex-1 min-w-0 text-left">
+                                        <div class="text-[11px] font-semibold text-white truncate">@patch.VoiceName</div>
+                                        <div class="text-[9px] font-mono text-slate-500">Bank @patch.BankDisplay &bull; @patch.FileSize</div>
+                                    </button>
+                                    <button type="button" @onclick="() => SoundDesign.DeleteFmVoicePatch(patch.FilePath)" title="Delete Patch"
+                                            class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-700 text-rose-400 hover:text-white text-[10px]">✕</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </aside>
+
+    <!-- Main Right Column: FM Voice Architecture & Interactive SVG ADSR -->
+    <div class="flex-1 min-w-0 h-full overflow-y-auto custom-scrollbar space-y-3 pr-1">
+        <!-- Patch Toolbar + Bank + Audition Strip -->
+        <div class="glass-panel p-3 rounded-xl border border-slate-800/80 space-y-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                    <input type="text"
+                           value="@fm.Name"
+                           @oninput="(e) => UpdateFm(v => v.Name = e.Value?.ToString() ?? string.Empty, liveSync: false)"
+                           placeholder="Voice Patch Name"
+                           class="w-44 sm:w-56 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-amber-500" />
+
+                    <!-- Bank 1-5 Selector -->
+                    <div class="flex items-center space-x-0.5 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+                        @for (int b = 0; b < 5; b++)
+                        {
+                            int bankIdx = b;
+                            <button type="button"
+                                    @onclick="() => SoundDesign.SelectFmBank(bankIdx)"
+                                    class="px-2 py-0.5 rounded text-[10px] font-bold transition @(State.SelectedFmBank == bankIdx ? "bg-amber-500 text-slate-950" : "text-slate-400 hover:text-white")">
+                                B@(bankIdx + 1)
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-1.5">
+                    <label class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[10px] text-slate-300 cursor-pointer">
+                        <input type="checkbox" checked="@State.FmLiveSyncEnabled"
+                               @onchange="(e) => State.Mutate(s => s.FmLiveSyncEnabled = e.Value is bool b && b)"
+                               class="accent-amber-500" />
+                        <span>Live Sync</span>
+                        <span class="font-mono text-amber-400">(@State.FmLiveStatus)</span>
+                    </label>
+                    <button id="btnFmTransmit" type="button" @onclick="() => SoundDesign.TransmitFmVoice(false)"
+                            class="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-md transition active:scale-95">
+                        📤 Transmit B@(State.SelectedFmBank + 1)
+                    </button>
+                    <button id="btnFmSave" type="button" @onclick="() => SoundDesign.SaveFmVoicePatch()"
+                            class="px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition active:scale-95">
+                        💾 Save
+                    </button>
+                    <select value="0" @onchange="SendToMixerChannel"
+                            class="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1.5 text-[11px] font-semibold text-slate-200 cursor-pointer">
+                        <option value="0">Apply to Ch...</option>
+                        @for (int ch = 0; ch < 15; ch++)
+                        {
+                            <option value="@(ch + 1)">Send to Ch @(ch + 1)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            <!-- Piano / Chord Audition Strip -->
+            <div id="fmAuditionStrip" class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80">
+                <div class="flex items-center flex-wrap gap-1">
+                    <span class="text-[10px] font-bold uppercase text-slate-400 mr-1">🎹 Audition:</span>
+                    @foreach (var key in new[] { (48, "C3"), (55, "G3"), (60, "C4"), (64, "E4"), (67, "G4"), (72, "C5") })
+                    {
+                        <button type="button" @onclick="() => SoundDesign.AuditionFmNote(key.Item1, false)"
+                                class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-amber-500 hover:text-slate-950 text-slate-200 border border-slate-700 text-[11px] font-mono font-bold transition active:scale-95">
+                            @key.Item2
+                        </button>
+                    }
+                    <button type="button" @onclick="() => SoundDesign.AuditionFmNote(60, true)"
+                            class="px-2.5 py-1 rounded-lg bg-indigo-900/60 hover:bg-indigo-600 text-indigo-200 border border-indigo-700/60 text-[11px] font-bold transition active:scale-95">
+                        ♫ C Maj Chord
+                    </button>
+                </div>
+                <button type="button" @onclick="() => _showExpertParams = !_showExpertParams"
+                        class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-[10px] font-semibold text-amber-300 border border-slate-700">
+                    @(_showExpertParams ? "▾ Hide Hidden Params" : "▸ Show 18 Hidden FM Params")
+                </button>
+            </div>
+        </div>
+
+        <!-- Dual Interactive ADSR Envelopes -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <!-- Modulator ADSR -->
+            <div class="glass-panel p-3 rounded-xl border border-cyan-500/30 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-cyan-300">Modulator (Harmonic Contour) Envelope</span>
+                    <span class="text-[10px] font-mono text-slate-400">Drag A / D1 / S / R nodes</span>
+                </div>
+                <svg id="svgFmModEnv" viewBox="0 0 500 130" class="w-full h-32 rounded-xl bg-slate-950/90 border border-slate-800 touch-none select-none">
+                    <path d="@modGeom.FillPath" fill="rgba(34,211,238,0.16)" />
+                    <path d="@modGeom.LinePath" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round" />
+                    <circle class="env-handle cursor-grab" data-node="1" cx="@F(modGeom.X1)" cy="@F(modGeom.Y1)" r="6.5" fill="#22d3ee" stroke="#083344" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="2" cx="@F(modGeom.X2)" cy="@F(modGeom.Y2)" r="6.5" fill="#22d3ee" stroke="#083344" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="3" cx="@F(modGeom.X3)" cy="@F(modGeom.Y3)" r="6.5" fill="#22d3ee" stroke="#083344" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="4" cx="@F(modGeom.X4)" cy="@F(modGeom.Y4)" r="6.5" fill="#22d3ee" stroke="#083344" stroke-width="2" />
+                </svg>
+            </div>
+
+            <!-- Carrier ADSR -->
+            <div class="glass-panel p-3 rounded-xl border border-emerald-500/30 space-y-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-emerald-300">Carrier (Volume Contour) Envelope</span>
+                    <span class="text-[10px] font-mono text-slate-400">Drag A / D1 / S / R nodes</span>
+                </div>
+                <svg id="svgFmCarEnv" viewBox="0 0 500 130" class="w-full h-32 rounded-xl bg-slate-950/90 border border-slate-800 touch-none select-none">
+                    <path d="@carGeom.FillPath" fill="rgba(52,211,153,0.16)" />
+                    <path d="@carGeom.LinePath" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" />
+                    <circle class="env-handle cursor-grab" data-node="1" cx="@F(carGeom.X1)" cy="@F(carGeom.Y1)" r="6.5" fill="#34d399" stroke="#022c22" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="2" cx="@F(carGeom.X2)" cy="@F(carGeom.Y2)" r="6.5" fill="#34d399" stroke="#022c22" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="3" cx="@F(carGeom.X3)" cy="@F(carGeom.Y3)" r="6.5" fill="#34d399" stroke="#022c22" stroke-width="2" />
+                    <circle class="env-handle cursor-grab" data-node="4" cx="@F(carGeom.X4)" cy="@F(carGeom.Y4)" r="6.5" fill="#34d399" stroke="#022c22" stroke-width="2" />
+                </svg>
+            </div>
+        </div>
+
+        <!-- Two Operator Cards -->
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            @RenderOperatorCard(fm.Modulator, isMod: true)
+            @RenderOperatorCard(fm.Carrier, isMod: false)
+        </div>
+
+        <!-- Global / LFO Parameters -->
+        <div class="glass-panel p-3.5 rounded-xl border border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div>
+                <div class="flex justify-between mb-1"><span class="text-slate-400 font-semibold">Feedback</span><span class="font-mono text-amber-300">@fm.Feedback</span></div>
+                <input type="range" min="0" max="7" value="@fm.Feedback"
+                       @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateFm(f => f.Feedback = v); }" class="w-full" />
+            </div>
+            <div>
+                <div class="flex justify-between mb-1"><span class="text-slate-400 font-semibold">Pitch Mod Sens</span><span class="font-mono text-amber-300">@fm.PitchModulationSensitivity</span></div>
+                <input type="range" min="0" max="7" value="@fm.PitchModulationSensitivity"
+                       @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateFm(f => f.PitchModulationSensitivity = v); }" class="w-full" />
+            </div>
+            <div>
+                <div class="flex justify-between mb-1"><span class="text-slate-400 font-semibold">Amp Mod Sens</span><span class="font-mono text-amber-300">@fm.AmplitudeModulationSensitivity</span></div>
+                <input type="range" min="0" max="3" value="@fm.AmplitudeModulationSensitivity"
+                       @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateFm(f => f.AmplitudeModulationSensitivity = v); }" class="w-full" />
+            </div>
+            <div class="flex items-center justify-between gap-2">
+                <label class="flex items-center space-x-1.5 text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked="@fm.Vibrato" @onchange="(e) => UpdateFm(f => f.Vibrato = e.Value is bool b && b)" class="accent-amber-500" />
+                    <span>Vibrato</span>
+                </label>
+                <label class="flex items-center space-x-1.5 text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked="@fm.Sustain" @onchange="(e) => UpdateFm(f => f.Sustain = e.Value is bool b && b)" class="accent-amber-500" />
+                    <span>Sustain</span>
+                </label>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DotNetObjectReference<FmVoiceDesigner>? _dotNetRef;
+    private readonly HashSet<string> _collapsedCats = new(StringComparer.OrdinalIgnoreCase);
+    private bool _showExpertParams;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("studioInterop.initFmEnvelopeDrag", "svgFmModEnv", true, _dotNetRef);
+            await JS.InvokeVoidAsync("studioInterop.initFmEnvelopeDrag", "svgFmCarEnv", false, _dotNetRef);
+        }
+    }
+
+    private RenderFragment RenderOperatorCard(FmOperatorState op, bool isMod) => __builder =>
+    {
+        string border = isMod ? "border-cyan-500/30" : "border-emerald-500/30";
+        string accent = isMod ? "text-cyan-300" : "text-emerald-300";
+        string waveBg = isMod ? "bg-cyan-600 text-white border-cyan-400" : "bg-emerald-600 text-white border-emerald-400";
+
+        <div class="glass-panel p-3.5 rounded-xl border @border space-y-2.5 text-xs">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                <span class="font-bold @accent">@(isMod ? "Operator 1: Modulator" : "Operator 2: Carrier")</span>
+                <div class="grid grid-cols-4 gap-1">
+                    @for (int w = 0; w < 4; w++)
+                    {
+                        int wave = w;
+                        string label = w switch { 0 => "Sine", 1 => "Half", 2 => "Abs", _ => "Pulse" };
+                        <button type="button"
+                                @onclick="() => UpdateOp(isMod, o => o.Waveform = wave)"
+                                class="px-2 py-0.5 rounded text-[10px] font-bold border @(op.Waveform == wave ? waveBg : "bg-slate-800 text-slate-300 border-slate-700")">
+                            @label
+                        </button>
+                    }
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-x-4 gap-y-2">
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Multiplier</span><span class="font-mono @accent">@(op.Multiplier == 0 ? "0.5x" : $"{op.Multiplier}.0x")</span></div>
+                    <input type="range" min="0" max="15" value="@op.Multiplier"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.Multiplier = v); }" class="w-full" />
+                </div>
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Output Level</span><span class="font-mono @accent">@op.PanelLevel</span></div>
+                    <input type="range" min="0" max="99" value="@op.PanelLevel"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.PanelLevel = v); }" class="w-full" />
+                </div>
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Attack Rate (AR)</span><span class="font-mono @accent">@op.AttackRate</span></div>
+                    <input type="range" min="0" max="63" value="@op.AttackRate"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.AttackRate = v); }" class="w-full" />
+                </div>
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Decay 1 Rate (D1R)</span><span class="font-mono @accent">@op.Decay1Rate</span></div>
+                    <input type="range" min="0" max="63" value="@op.Decay1Rate"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.Decay1Rate = v); }" class="w-full" />
+                </div>
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Release Rate (RR)</span><span class="font-mono @accent">@op.ReleaseRate</span></div>
+                    <input type="range" min="0" max="15" value="@op.ReleaseRate"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.ReleaseRate = v); }" class="w-full" />
+                </div>
+                <div>
+                    <div class="flex justify-between"><span class="text-slate-400">Decay 1 Level (D1L)</span><span class="font-mono @accent">@op.Decay1Level</span></div>
+                    <input type="range" min="0" max="15" value="@op.Decay1Level"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.Decay1Level = v); }" class="w-full" />
+                </div>
+            </div>
+
+            @if (_showExpertParams)
+            {
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 pt-2 border-t border-slate-800/80 text-[11px]">
+                    <div>
+                        <div class="flex justify-between"><span class="text-slate-400">Fine Detune</span><span class="font-mono @accent">@op.FineDetune</span></div>
+                        <input type="range" min="-3" max="3" value="@op.FineDetune"
+                               @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.FineDetune = v); }" class="w-full" />
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="text-slate-400">Decay 2 Rate (D2R)</span><span class="font-mono @accent">@op.Decay2Rate</span></div>
+                        <input type="range" min="0" max="63" value="@op.Decay2Rate"
+                               @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.Decay2Rate = v); }" class="w-full" />
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="text-slate-400">Sustain Release (SRR)</span><span class="font-mono @accent">@op.SustainReleaseRate</span></div>
+                        <input type="range" min="0" max="15" value="@op.SustainReleaseRate"
+                               @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.SustainReleaseRate = v); }" class="w-full" />
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="text-slate-400">Rate Key Scale (RKS)</span><span class="font-mono @accent">@op.RateKeyScaling</span></div>
+                        <input type="range" min="0" max="3" value="@op.RateKeyScaling"
+                               @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.RateKeyScaling = v); }" class="w-full" />
+                    </div>
+                    <div>
+                        <div class="flex justify-between"><span class="text-slate-400">LKS High</span><span class="font-mono @accent">@op.LevelKeyScalingHigh</span></div>
+                        <input type="range" min="0" max="15" value="@op.LevelKeyScalingHigh"
+                               @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) UpdateOp(isMod, o => o.LevelKeyScalingHigh = v); }" class="w-full" />
+                    </div>
+                    <div class="flex items-center space-x-3 pt-2">
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" checked="@op.CoarseDetune" @onchange="(e) => UpdateOp(isMod, o => o.CoarseDetune = e.Value is bool b && b)" />
+                            <span>Coarse</span>
+                        </label>
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" checked="@op.AmplitudeModulationEnable" @onchange="(e) => UpdateOp(isMod, o => o.AmplitudeModulationEnable = e.Value is bool b && b)" />
+                            <span>AM Enable</span>
+                        </label>
+                    </div>
+                </div>
+            }
+        </div>
+    };
+
+    private void ToggleCategory(string cat)
+    {
+        if (!_collapsedCats.Add(cat)) _collapsedCats.Remove(cat);
+    }
+
+    private void UpdateFm(Action<FmVoiceState> updater, bool liveSync = true)
+    {
+        State.Mutate(s => updater(s.FmVoice));
+        if (liveSync) SoundDesign.ScheduleFmLiveSync();
+    }
+
+    private void UpdateOp(bool isModulator, Action<FmOperatorState> updater)
+    {
+        State.Mutate(s => updater(isModulator ? s.FmVoice.Modulator : s.FmVoice.Carrier));
+        SoundDesign.ScheduleFmLiveSync();
+    }
+
+    private void SendToMixerChannel(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int ch) && ch is >= 1 and <= 15)
+        {
+            SoundDesign.SendCurrentFmVoiceToChannel(ch - 1);
+        }
+    }
+
+    [JSInvokable]
+    public void OnEnvelopeNodeDrag(bool isModulator, int node, double x, double y)
+    {
+        const double padL = 22, padR = 478, padT = 18, padB = 116;
+        double h = padB - padT;
+        var op = isModulator ? State.FmVoice.Modulator : State.FmVoice.Carrier;
+
+        if (node == 1)
+        {
+            double cx = Math.Clamp(x, padL, padL + 115);
+            double cy = Math.Clamp(y, padT, padB - 10);
+            int ar = (int)Math.Clamp(Math.Round((1.0 - (cx - padL) / 115.0) * 63.0), 0, 63);
+            int tl = (int)Math.Clamp(Math.Round(((padB - cy) / h) * 99.0), 0, 99);
+            UpdateOp(isModulator, o => { o.AttackRate = ar; o.PanelLevel = tl; });
+        }
+        else if (node == 2)
+        {
+            double x1 = padL + (1.0 - Math.Clamp(op.AttackRate, 0, 63) / 63.0) * 115.0;
+            double cx = Math.Clamp(x, x1 + 8, Math.Min(padR - 140, x1 + 145));
+            double cy = Math.Clamp(y, padT + 4, padB - 4);
+            int d1r = (int)Math.Clamp(Math.Round((1.0 - (cx - x1 - 8.0) / 137.0) * 63.0), 0, 63);
+            int d1l = (int)Math.Clamp(Math.Round(((cy - padT) / h) * 15.0), 0, 15);
+            UpdateOp(isModulator, o => { o.Decay1Rate = d1r; o.Decay1Level = d1l; });
+        }
+        else if (node == 3)
+        {
+            double y1 = padB - (Math.Clamp(op.PanelLevel, 0, 99) / 99.0) * h;
+            double y2 = Math.Max(y1 + 2, padT + (Math.Clamp(op.Decay1Level, 0, 15) / 15.0) * h);
+            double cy = Math.Clamp(y, y2, padB);
+            int d2r = (int)Math.Clamp(Math.Round(((cy - y2) / Math.Max(1.0, padB - y2)) * 63.0), 0, 63);
+            UpdateOp(isModulator, o => o.Decay2Rate = d2r);
+        }
+        else if (node == 4)
+        {
+            double x3 = Math.Min(padR - 80, padL + 290);
+            double cx = Math.Clamp(x, x3 + 8, padR);
+            int rr = (int)Math.Clamp(Math.Round((1.0 - (cx - x3 - 8.0) / Math.Max(1.0, padR - x3 - 8.0)) * 15.0), 0, 15);
+            UpdateOp(isModulator, o => o.ReleaseRate = rr);
+        }
+    }
+
+    private sealed record EnvGeom(string LinePath, string FillPath, double X1, double Y1, double X2, double Y2, double X3, double Y3, double X4, double Y4);
+
+    private static EnvGeom ComputeEnvelopeGeometry(FmOperatorState op)
+    {
+        const double padL = 22, padR = 478, padT = 18, padB = 116;
+        double h = padB - padT;
+
+        double yPeak = padB - (Math.Clamp(op.PanelLevel, 0, 99) / 99.0) * h;
+        double x1 = padL + (1.0 - Math.Clamp(op.AttackRate, 0, 63) / 63.0) * 115.0;
+        double x2 = x1 + 8.0 + (1.0 - Math.Clamp(op.Decay1Rate, 0, 63) / 63.0) * 120.0;
+        double y2 = Math.Max(yPeak, padT + (Math.Clamp(op.Decay1Level, 0, 15) / 15.0) * h);
+        double x3 = Math.Min(padR - 80.0, x2 + 95.0);
+        double y3 = Math.Min(padB, y2 + (Math.Clamp(op.Decay2Rate, 0, 63) / 63.0) * (padB - y2));
+        double x4 = Math.Min(padR, x3 + 8.0 + (1.0 - Math.Clamp(op.ReleaseRate, 0, 15) / 15.0) * (padR - x3 - 8.0));
+        double y4 = padB;
+
+        string line = $"M {F(padL)} {F(padB)} L {F(x1)} {F(yPeak)} L {F(x2)} {F(y2)} L {F(x3)} {F(y3)} L {F(x4)} {F(y4)}";
+        string fill = $"{line} L {F(padL)} {F(padB)} Z";
+        return new EnvGeom(line, fill, x1, yPeak, x2, y2, x3, y3, x4, y4);
+    }
+
+    private static string F(double v) => v.ToString("0.0", CultureInfo.InvariantCulture);
+
+    public void Dispose() => _dotNetRef?.Dispose();
+}

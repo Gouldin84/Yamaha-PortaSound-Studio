@@ -1,0 +1,22 @@
+@inject AppStateStore State
+
+<div class="h-screen w-screen flex flex-col overflow-hidden">
+    <HeaderBar />
+
+    <main class="flex-1 min-h-0 flex p-2 sm:p-2.5 w-full overflow-hidden">
+        @switch (State.ActiveTab)
+        {
+            case StudioTab.Player:
+                <PlayerWorkspace />
+                break;
+            case StudioTab.Recorder:
+                <RecorderWorkspace />
+                break;
+            case StudioTab.SysEx:
+                <SoundDesignWorkspace />
+                break;
+        }
+    </main>
+
+    <ModalsContainer />
+</div>

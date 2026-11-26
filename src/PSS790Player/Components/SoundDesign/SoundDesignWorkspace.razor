@@ -1,0 +1,86 @@
+@inject AppStateStore State
+@inject SoundDesignService SoundDesign
+
+@{
+    bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+    string mode = State.SysExViewMode;
+    if (mode != "drums" && mode != "vault")
+    {
+        mode = is680 ? "fm" : "vector";
+    }
+}
+
+<section class="w-full h-full flex flex-col space-y-2.5 min-h-0 overflow-hidden">
+    <!-- Top Sub-Header Pill Bar -->
+    <div class="glass-panel px-3 py-2 rounded-xl border border-slate-800/80 shadow-lg flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div class="min-w-0">
+            <h2 id="sysexVaultHeaderTitle" class="text-xs sm:text-sm font-bold text-white truncate">
+                @(is680 ? "Yamaha PSS-680 FM Sound Designer & SysEx Vault" : "Yamaha PSS-790 Vector Synthesizer & SysEx Vault")
+            </h2>
+            <p id="sysexVaultHeaderSubtitle" class="text-[10px] text-slate-400 truncate">
+                @(is680
+                    ? "Design 2-op FM voices, access 18 hidden parameters, build 03H drum patterns & manage memory backups"
+                    : "Real-time 2D 4-voice vector synthesis, LFO orbit automation, Chart 1 percussion & memory backups")
+            </p>
+        </div>
+
+        <div class="flex items-center flex-wrap gap-2 shrink-0">
+            <div class="flex items-center bg-slate-900 rounded-xl p-0.5 border border-slate-800 space-x-1">
+                <button id="btnSysexViewDesigner"
+                        type="button"
+                        @onclick='() => SetViewMode(is680 ? "fm" : "vector")'
+                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode is "fm" or "vector" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
+                    <span id="sysexDesignerPillIcon">@(is680 ? "🎛️" : "🕹️")</span>
+                    <span id="sysexDesignerPillLabel">@(is680 ? "FM Sound Designer" : "Vector Synthesizer")</span>
+                </button>
+                <button id="btnSysexViewDrums"
+                        type="button"
+                        @onclick='() => SetViewMode("drums")'
+                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode == "drums" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
+                    <span>🥁</span>
+                    <span>@(is680 ? "Drummer & Pads" : "Drum Pads")</span>
+                </button>
+                <button id="btnSysexViewDumps"
+                        type="button"
+                        @onclick='() => SetViewMode("vault")'
+                        class="px-2.5 sm:px-3 py-1 rounded-lg text-xs transition active:scale-95 flex items-center space-x-1.5 @(mode == "vault" ? "font-bold text-white bg-indigo-600 shadow-md" : "font-semibold text-slate-400 hover:text-white")">
+                    <span>🗄️</span>
+                    <span>SysEx Bulk Vault</span>
+                </button>
+            </div>
+
+            <button type="button" @onclick='() => SoundDesign.SendQuickSysEx("all_reset")' title="Send All Notes Off & Reset Controllers across 16 channels"
+                    class="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-800 text-rose-300 hover:text-white border border-rose-800/50 text-xs font-bold transition active:scale-95">
+                ⚡ Panic Reset
+            </button>
+            <button type="button" @onclick="() => SoundDesign.OpenSysExFolder()" title="Open SysEx Vault Folder"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 text-xs font-semibold transition active:scale-95">
+                📁 Vault
+            </button>
+        </div>
+    </div>
+
+    <!-- Active Sub-Deck -->
+    <div class="flex-1 min-h-0 overflow-hidden">
+        @if (mode == "drums")
+        {
+            <DrumPadsDeck />
+        }
+        else if (mode == "vault")
+        {
+            <SysExVaultPanel />
+        }
+        else if (is680)
+        {
+            <FmVoiceDesigner />
+        }
+        else
+        {
+            <VectorSynthPad />
+        }
+    </div>
+</section>
+
+@code {
+    private void SetViewMode(string mode) => State.Mutate(s => s.SysExViewMode = mode);
+}

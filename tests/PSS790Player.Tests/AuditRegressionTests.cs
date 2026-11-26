@@ -314,44 +314,44 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void WebUI_AuditHardeningSignatures_ArePresentAndConsistent()
+        public void BlazorHybrid_AuditHardeningSignatures_ArePresentAndConsistent()
         {
-            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
-            if (!File.Exists(appJsPath))
-                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
+            var root = FindRepoSrcDir();
+            Assert.NotNull(root);
 
-            var htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "index.html");
-            if (!File.Exists(htmlPath))
-                htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "index.html");
+            var interopPath = Path.Combine(root!, "wwwroot", "js", "studioInterop.js");
+            Assert.True(File.Exists(interopPath), $"Expected {interopPath}");
+            var js = File.ReadAllText(interopPath);
+            Assert.Contains("calculateVectorWeights", js);
+            Assert.Contains("initFmEnvelopeDrag", js);
+            Assert.Contains("playMetronomeClick", js);
+            Assert.Contains("feedVuMeter", js);
+            Assert.Contains("registerGlobalShortcuts", js);
 
-            if (File.Exists(appJsPath))
+            var fmRazor = Path.Combine(root!, "Components", "SoundDesign", "FmVoiceDesigner.razor");
+            Assert.True(File.Exists(fmRazor), $"Expected {fmRazor}");
+            var fmContent = File.ReadAllText(fmRazor);
+            Assert.Contains("ComputeEnvelopeGeometry", fmContent);
+            Assert.Contains("Decay1Level", fmContent);
+
+            var aboutRazor = Path.Combine(root!, "Components", "Modals", "AboutModal.razor");
+            Assert.True(File.Exists(aboutRazor), $"Expected {aboutRazor}");
+            var aboutContent = File.ReadAllText(aboutRazor);
+            Assert.Contains("v3.0.0", aboutContent);
+            Assert.Contains("Transport Actor", aboutContent);
+            Assert.True(File.Exists(Path.Combine(root!, "Core", "TransportActor.cs")), "TransportActor.cs must exist.");
+        }
+
+        private static string? FindRepoSrcDir()
+        {
+            var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null)
             {
-                var js = File.ReadAllText(appJsPath);
-                int cancelIdx = js.IndexOf("if (data.isCancelled)", StringComparison.Ordinal);
-                int completedIdx = js.IndexOf("else if (data.isCompleted)", StringComparison.Ordinal);
-                Assert.True(cancelIdx > 0 && completedIdx > cancelIdx, "Cancelled SysEx progress must be evaluated before isCompleted.");
-
-                Assert.Contains("const d1LevelFraction = 1 - (normD1l / 15);", js);
-                Assert.Contains("const newD1l = Math.round((1 - levelFrac) * 15);", js);
-                Assert.Contains("sendToHost(\"clear_all_solo\")", js);
-                Assert.Contains("if (state.isLoadingSong)", js);
-                Assert.Contains("mixerLastVoicesSig", js);
-                Assert.Contains("hasPopulatedSelectOptions", js);
-                Assert.Contains("state.lastAcceptedLoadGen", js);
-                Assert.Contains("confirmedFilePath", js);
-                Assert.Contains("function requestStopPlayback()", js);
-                Assert.Contains("state.selectedSongPath !== state.confirmedFilePath", js);
-                Assert.Contains("state.lastStatusBadgeKey = willPlay ? \"loading\" : \"\"", js);
-                Assert.DoesNotContain("text-${colAccents[ch]}", js);
+                var candidate = Path.Combine(dir.FullName, "src", "PSS790Player");
+                if (Directory.Exists(candidate)) return candidate;
+                dir = dir.Parent;
             }
-
-            if (File.Exists(htmlPath))
-            {
-                var html = File.ReadAllText(htmlPath);
-                Assert.Contains("id=\"aboutVersionText\"", html);
-                Assert.Contains("Cap Voices", html);
-                Assert.DoesNotContain("Req Voices", html);
-            }
+            return null;
         }
     }
 }

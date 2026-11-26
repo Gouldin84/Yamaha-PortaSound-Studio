@@ -1,0 +1,176 @@
+@inject AppStateStore State
+@inject PlaybackCoordinator Playback
+@inject LibraryService Library
+@inject IJSRuntime JS
+@implements IDisposable
+
+<MainLayout />
+<ToastContainer />
+
+@code {
+    private DotNetObjectReference<App>? _dotNetRef;
+    private bool _jsInitialized;
+
+    protected override void OnInitialized()
+    {
+        State.Changed += OnStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_jsInitialized)
+        {
+            _jsInitialized = true;
+            _dotNetRef = DotNetObjectReference.Create(this);
+
+            try
+            {
+                var prefs = await JS.InvokeAsync<InitialPrefs>("studioInterop.loadInitialPreferences");
+                bool modelChanged = !string.Equals(prefs.Model, State.ActiveModel, StringComparison.OrdinalIgnoreCase);
+
+                State.Mutate(s =>
+                {
+                    s.IsDarkTheme = prefs.IsDark;
+                    s.HandheldMode = prefs.Handheld;
+                    s.ShowStudioHardwareGuide = prefs.GuideOpen;
+                });
+
+                if (modelChanged && !string.IsNullOrEmpty(prefs.Model))
+                {
+                    Playback.SetActiveModel(prefs.Model);
+                }
+
+                await JS.InvokeVoidAsync("studioInterop.applyBodyPreferences", State.IsDarkTheme, State.HandheldMode, State.ActiveModel);
+                await JS.InvokeVoidAsync("studioInterop.registerGlobalShortcuts", _dotNetRef);
+            }
+            catch { }
+        }
+    }
+
+    private void OnStateChanged() => _ = InvokeAsync(StateHasChanged);
+
+    [JSInvokable]
+    public async Task HandleGlobalShortcut(string key)
+    {
+        switch (key)
+        {
+            case "Space":
+                if (State.ActiveTab == StudioTab.Player) Playback.TogglePlayPause();
+                break;
+            case "Escape":
+                if (State.ShowAboutModal || State.ShowBatchModal || State.ShowSyncModal ||
+                    State.ShowHealthModal || State.ShowSettingsModal || State.ShowShortcutsModal ||
+                    State.ShowHardwareGuideModal || State.InspectedSysEx != null || State.PendingFileAction != null || State.LibraryContextMenu != null)
+                {
+                    State.Mutate(s =>
+                    {
+                        s.ShowAboutModal = false;
+                        s.ShowBatchModal = false;
+                        s.ShowSyncModal = false;
+                        s.ShowHealthModal = false;
+                        s.ShowSettingsModal = false;
+                        s.ShowShortcutsModal = false;
+                        s.ShowHardwareGuideModal = false;
+                        s.InspectedSysEx = null;
+                        s.PendingFileAction = null;
+                        s.LibraryContextMenu = null;
+                    });
+                }
+                else
+                {
+                    Playback.PanicStop();
+                }
+                break;
+            case "1":
+                State.Mutate(s => s.ActiveTab = StudioTab.Player);
+                break;
+            case "2":
+                State.Mutate(s => s.ActiveTab = StudioTab.Recorder);
+                break;
+            case "3":
+                State.Mutate(s => s.ActiveTab = StudioTab.SysEx);
+                break;
+            case "Ctrl+B":
+                State.Mutate(s => s.IsSidebarCollapsed = !s.IsSidebarCollapsed);
+                break;
+            case "Ctrl+S":
+                Library.AnalyzeLibrarySync();
+                State.Mutate(s => s.ShowSyncModal = true);
+                break;
+            case "?":
+                State.Mutate(s => s.ShowShortcutsModal = !s.ShowShortcutsModal);
+                break;
+            case "n":
+            case "N":
+                _ = Playback.PlayNextSongAsync();
+                break;
+            case "p":
+            case "P":
+                _ = Playback.PlayPreviousSongAsync();
+                break;
+            case "[":
+                if (State.LoadedSong != null) Playback.SetMasterTranspose(State.LoadedSong.MasterTranspose - 1);
+                break;
+            case "]":
+                if (State.LoadedSong != null) Playback.SetMasterTranspose(State.LoadedSong.MasterTranspose + 1);
+                break;
+            case "l":
+            case "L":
+                Playback.SetLoop(!State.LoopEnabled);
+                break;
+            case "t":
+            case "T":
+                State.Mutate(s => s.HandheldMode = !s.HandheldMode);
+                await JS.InvokeVoidAsync("studioInterop.applyBodyPreferences", State.IsDarkTheme, State.HandheldMode, State.ActiveModel);
+                break;
+            case "f":
+            case "F":
+                var target = State.LoadedSong?.FilePath ?? State.SelectedSongPath;
+                if (!string.IsNullOrEmpty(target)) Library.ToggleFavorite(target);
+                break;
+            case "ArrowLeft":
+                if (State.IsPlaying) Playback.Seek(Math.Max(0, State.CurrentSeconds - 5));
+                break;
+            case "ArrowRight":
+                if (State.IsPlaying) Playback.Seek(Math.Min(State.DurationSeconds, State.CurrentSeconds + 5));
+                break;
+            case "Enter":
+                if (!string.IsNullOrEmpty(State.SelectedSongPath))
+                    _ = Playback.LoadFileAsync(State.SelectedSongPath, autoPlay: true);
+                break;
+            case "ArrowDown":
+            case "j":
+            case "J":
+                MoveSongSelection(1);
+                break;
+            case "ArrowUp":
+            case "k":
+            case "K":
+                MoveSongSelection(-1);
+                break;
+        }
+    }
+
+    private void MoveSongSelection(int delta)
+    {
+        var songs = Playback.GetFilteredSongList();
+        if (songs.Count == 0) return;
+        int cur = songs.FindIndex(f => string.Equals(f.FullPath, State.SelectedSongPath, StringComparison.OrdinalIgnoreCase));
+        int next = cur < 0 ? 0 : Math.Clamp(cur + delta, 0, songs.Count - 1);
+        _ = Playback.LoadFileAsync(songs[next].FullPath, autoPlay: false);
+    }
+
+    public void Dispose()
+    {
+        State.Changed -= OnStateChanged;
+        _dotNetRef?.Dispose();
+    }
+
+    private sealed class InitialPrefs
+    {
+        public bool IsDark { get; set; } = true;
+        public bool Handheld { get; set; }
+        public string Model { get; set; } = "pss790";
+        public bool GuideOpen { get; set; }
+    }
+}

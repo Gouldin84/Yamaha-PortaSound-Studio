@@ -1,0 +1,200 @@
+@inject AppStateStore State
+@inject PlaybackCoordinator Playback
+@inject SoundDesignService SoundDesign
+
+@{
+    bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+    var channels = State.LoadedSong?.Channels ?? DefaultEmptyChannels();
+    var voices = State.ActiveVoices;
+}
+
+<section class="space-y-1.5">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">16-Channel Mixer &amp; Voice Selector</h3>
+            <p id="mixerSubtitle" class="text-[10px] text-slate-500">
+                @(is680 ? "Live FM & PCM Voice Overrides • Channel 16 Hand Percussion" : "Live Voice Overrides (Chart 2) • Channel 16 Fixed Rhythm")
+            </p>
+        </div>
+
+        <div class="flex items-center flex-wrap gap-1.5">
+            @if (!is680)
+            {
+                <div id="vectorQuadControls" class="flex items-center space-x-1.5 bg-slate-900/90 border border-indigo-800/50 rounded-lg px-2 py-0.5 shadow-sm">
+                    <span class="text-[10px] font-bold text-indigo-400">🕹️ Vector Quad (Ch 1-4):</span>
+                    <button id="btnToggleVectorQuad"
+                            type="button"
+                            @onclick="ToggleVectorQuad"
+                            class="px-2 py-0.5 rounded text-[10px] font-bold border transition @(State.VectorQuadPlaybackEnabled ? "bg-indigo-600 text-white border-indigo-400" : "bg-slate-800 text-slate-400 hover:text-white border-slate-700")">
+                        @(State.VectorQuadPlaybackEnabled ? "ON" : "OFF")
+                    </button>
+                    @if (State.VectorQuadPlaybackEnabled)
+                    {
+                        <select id="selMixerVectorPreset"
+                                value="@State.SelectedMixerVectorPreset"
+                                @onchange="OnMixerVectorPresetChanged"
+                                class="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-indigo-200 focus:outline-none cursor-pointer">
+                            <option value="current">Current Channel 1-4 Voices</option>
+                            @foreach (var vp in State.VectorPresetLibrary)
+                            {
+                                <option value="@vp.FilePath">@vp.Name</option>
+                            }
+                        </select>
+                    }
+                </div>
+            }
+
+            <button id="btnSoloDrums" type="button" @onclick="SoloDrums" class="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-amber-600/30 text-[10px] font-semibold text-amber-300 border border-slate-700/60 transition">🥁 Solo Drums</button>
+            <button id="btnMuteMelodic" type="button" @onclick="MuteMelodic" class="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[10px] font-medium text-slate-300 border border-slate-700/60 transition">Mute Melodic</button>
+            <button id="btnUnmuteAll" type="button" @onclick="UnmuteAll" class="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[10px] font-medium text-slate-300 border border-slate-700/60 transition">Unmute All</button>
+            <button id="btnResetAllFaders" type="button" @onclick="ResetFaders" class="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[10px] font-medium text-slate-300 border border-slate-700/60 transition">Reset Faders</button>
+            <button id="btnResetOverrides" type="button" @onclick="() => Playback.ResetAllVoiceOverrides()" class="px-2 py-0.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[10px] font-medium text-slate-300 hover:text-cyan-400 border border-slate-700/60 transition">↺ Reset Voices</button>
+        </div>
+    </div>
+
+    <div id="mixerGrid" class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        @foreach (var ch in channels)
+        {
+            bool active = State.ChannelActive[ch.Channel];
+            string ledCls = active ? (ch.IsDrum ? "drum-active" : "active") : "";
+            <div class="channel-strip-card glass-card p-2 rounded-xl border border-slate-800/80 flex flex-col justify-between space-y-1.5 @(ch.HasNotes ? "" : "opacity-60")">
+                <!-- Strip Header -->
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-1.5 min-w-0">
+                        <span class="meter-led @ledCls w-2.5 h-2.5 rounded-full bg-slate-800 border border-slate-700 shrink-0"></span>
+                        <span class="text-[11px] font-bold text-white truncate">Ch @(ch.Channel + 1)</span>
+                        @if (ch.IsDrum)
+                        {
+                            <span class="px-1 py-0.2 rounded text-[8px] font-bold bg-amber-950 text-amber-300 border border-amber-700/70">DRUM</span>
+                        }
+                    </div>
+                    <div class="flex items-center space-x-1 shrink-0">
+                        <button type="button"
+                                @onclick="() => Playback.SetChannelMute(ch.Channel, !ch.IsMuted)"
+                                class="btn-console-m @(ch.IsMuted ? "muted" : "") w-5 h-5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">M</button>
+                        <button type="button"
+                                @onclick="() => Playback.SetChannelSolo(ch.Channel, !ch.IsSolo)"
+                                class="btn-console-s @(ch.IsSolo ? "soloed" : "") w-5 h-5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">S</button>
+                    </div>
+                </div>
+
+                <!-- Detected Instrument & Inference Badge -->
+                <div class="text-[9px] text-slate-400 truncate" title="@ch.DetectedInstrument">
+                    @(string.IsNullOrEmpty(ch.DetectedInstrument) ? ch.Role : ch.DetectedInstrument)
+                    @if (!string.IsNullOrEmpty(ch.InferredSource))
+                    {
+                        <span class="text-cyan-400 font-semibold"> (@ch.InferredSource)</span>
+                    }
+                </div>
+
+                <!-- Voice Override Dropdown -->
+                <div class="flex items-center space-x-1">
+                    @if (ch.IsDrum)
+                    {
+                        <div class="w-full px-1.5 py-0.5 rounded bg-slate-900/90 border border-amber-800/50 text-[10px] font-semibold text-amber-300 truncate text-center">
+                            @ch.PssVoiceName
+                        </div>
+                    }
+                    else
+                    {
+                        <select value="@ch.PssVoice"
+                                @onchange="(e) => OnVoiceChanged(ch.Channel, e.Value?.ToString())"
+                                class="flex-1 min-w-0 bg-slate-900 border @(ch.IsOverridden ? "border-cyan-500 text-cyan-300 font-bold" : "border-slate-700 text-slate-200") rounded px-1 py-0.5 text-[10px] focus:outline-none focus:border-cyan-500 cursor-pointer truncate">
+                            @foreach (var v in voices)
+                            {
+                                <option value="@v.Number">@($"{v.Number:D2}: {v.Name}")</option>
+                            }
+                        </select>
+                        @if (ch.IsOverridden)
+                        {
+                            <button type="button"
+                                    @onclick="() => Playback.SetChannelVoiceOverride(ch.Channel, null)"
+                                    title="Restore default voice"
+                                    class="px-1 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[9px] text-cyan-400 border border-slate-700 shrink-0">↺</button>
+                        }
+                    }
+                </div>
+
+                <!-- Octave Shift + Volume Fader -->
+                <div class="flex items-center space-x-1.5 pt-0.5">
+                    @if (!ch.IsDrum)
+                    {
+                        <button type="button" @onclick="() => Playback.SetChannelOctave(ch.Channel, ch.OctaveShift - 12)" title="Octave Down" class="text-[9px] px-1 rounded bg-slate-800 text-slate-300 hover:text-white">-</button>
+                        <span class="text-[9px] font-mono text-slate-400 w-4 text-center" title="Octave Semitones">@(ch.OctaveShift / 12)</span>
+                        <button type="button" @onclick="() => Playback.SetChannelOctave(ch.Channel, ch.OctaveShift + 12)" title="Octave Up" class="text-[9px] px-1 rounded bg-slate-800 text-slate-300 hover:text-white">+</button>
+                    }
+                    <input type="range"
+                           min="0" max="100"
+                           value="@ch.Volume"
+                           @oninput="(e) => { if (byte.TryParse(e.Value?.ToString(), out var vol)) Playback.SetChannelVolume(ch.Channel, vol); }"
+                           class="flex-1 h-1.5 cursor-pointer" />
+                    <span class="lcd-display px-1 text-[9px] text-cyan-300 font-mono w-7 text-right shrink-0">@ch.Volume</span>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private static List<ChannelStateDto> DefaultEmptyChannels() =>
+        Enumerable.Range(0, 16).Select(ch => new ChannelStateDto
+        {
+            Channel = ch,
+            Role = $"Channel {ch + 1}",
+            PssVoiceName = ch == 15 ? "Fixed Rhythm (Ch 16)" : "PIANO",
+            IsDrum = ch == 15,
+            Volume = 100
+        }).ToList();
+
+    private void OnVoiceChanged(int channel, string? rawVal)
+    {
+        if (int.TryParse(rawVal, out int voice))
+        {
+            Playback.SetChannelVoiceOverride(channel, voice);
+        }
+    }
+
+    private void ToggleVectorQuad()
+    {
+        bool next = !State.VectorQuadPlaybackEnabled;
+        SoundDesign.ToggleVectorQuadPlayback(next, State.SelectedMixerVectorPreset);
+    }
+
+    private void OnMixerVectorPresetChanged(ChangeEventArgs e)
+    {
+        var key = e.Value?.ToString() ?? "current";
+        State.Mutate(s => s.SelectedMixerVectorPreset = key);
+        if (State.VectorQuadPlaybackEnabled)
+        {
+            SoundDesign.ToggleVectorQuadPlayback(true, key);
+        }
+    }
+
+    private void SoloDrums()
+    {
+        Playback.ClearAllSolo();
+        int drumCh = State.GmPassthrough ? 9 : 15;
+        Playback.SetChannelSolo(drumCh, true);
+    }
+
+    private void MuteMelodic()
+    {
+        Playback.ClearAllSolo();
+        int drumCh = State.GmPassthrough ? 9 : 15;
+        for (int ch = 0; ch < 16; ch++)
+        {
+            Playback.SetChannelMute(ch, ch != drumCh);
+        }
+    }
+
+    private void UnmuteAll()
+    {
+        Playback.ClearAllSolo();
+        for (int ch = 0; ch < 16; ch++) Playback.SetChannelMute(ch, false);
+    }
+
+    private void ResetFaders()
+    {
+        for (int ch = 0; ch < 16; ch++) Playback.SetChannelVolume(ch, 100);
+    }
+}

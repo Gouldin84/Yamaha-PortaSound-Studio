@@ -1,0 +1,182 @@
+@inject AppStateStore State
+@inject PlaybackCoordinator Playback
+@inject LibraryService Library
+
+@{
+    var song = State.LoadedSong;
+    bool hasSong = song != null;
+    bool isFav = hasSong && !string.IsNullOrEmpty(song!.FilePath) &&
+                 (State.Favorites.Contains(song.FilePath) ||
+                  State.Library.AllFiles.Any(f => string.Equals(f.FullPath, song.FilePath, StringComparison.OrdinalIgnoreCase) && f.IsFavorite));
+}
+
+<section class="glass-panel p-2.5 sm:p-3 rounded-xl border border-slate-800/80 shadow-lg space-y-2">
+    <div class="flex flex-wrap items-center justify-between gap-2.5">
+        <!-- Song Info -->
+        <div class="flex items-center space-x-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700/60 shrink-0">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z" />
+                </svg>
+            </div>
+            <div class="min-w-0">
+                <div class="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                    <button id="btnToggleFavoriteCurrent"
+                            type="button"
+                            disabled="@(!hasSong || string.IsNullOrEmpty(song?.FilePath))"
+                            @onclick="ToggleCurrentFavorite"
+                            title="Toggle Favourite (F)"
+                            class="w-6 h-6 rounded-lg bg-slate-800/80 hover:bg-slate-700 disabled:opacity-40 text-amber-400 border border-slate-700/60 flex items-center justify-center text-xs transition active:scale-90 shrink-0">
+                        <span>@(isFav ? "★" : "☆")</span>
+                    </button>
+                    <h2 id="currentSongTitle" title="@(song?.FilePath ?? "No File Loaded")" class="text-sm sm:text-base font-bold text-white tracking-tight truncate max-w-[200px] sm:max-w-[340px]">
+                        @(song?.FileName ?? "No File Loaded")
+                    </h2>
+                    @if (hasSong)
+                    {
+                        <span class="px-2 py-0.5 text-[10px] font-bold rounded-full @(song!.IsGmPassthrough ? "bg-amber-950 text-amber-300 border-amber-800" : song.IsPss680 ? "bg-amber-950 text-amber-300 border-amber-700" : song.IsPss790 ? "bg-cyan-950 text-cyan-300 border-cyan-700" : "bg-indigo-950 text-indigo-300 border-indigo-700") border shrink-0">
+                            @(song.IsGmPassthrough ? "GM Passthrough" : song.FormatTag)
+                        </span>
+                        <button type="button"
+                                @onclick="() => State.Mutate(s => s.ShowHealthModal = true)"
+                                title="@song.Health.BadgeTooltip"
+                                class="px-2 py-0.5 text-[10px] font-bold rounded-full border shrink-0 cursor-pointer transition hover:brightness-110 @(song.Health.BadgeType == "warning" ? "bg-amber-950 text-amber-300 border-amber-700" : song.Health.BadgeType == "autofixed" ? "bg-cyan-950 text-cyan-300 border-cyan-700" : "bg-emerald-950 text-emerald-300 border-emerald-700")">
+                            @song.Health.BadgeLabel
+                        </button>
+                    }
+                </div>
+                <div class="flex items-center space-x-2 text-[11px] text-slate-400">
+                    <span id="fileStatusBadge" class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-medium">
+                        @(State.IsLoadingSong ? "Loading..." : State.IsPlaying ? "Playing" : State.IsPaused ? "Paused" : hasSong ? "Ready" : "Idle")
+                    </span>
+                    <span id="channelSummary">
+                        @(hasSong ? $"{song!.Channels.Count(c => c.HasNotes)} Active Channels" : "16 Channels Ready")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Primary Transport Controls -->
+        <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+            <button id="btnPrevTrack" type="button" @onclick="() => _ = Playback.PlayPreviousSongAsync()" title="Previous Track (P)"
+                    class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/60 transition hover:scale-105 active:scale-95">
+                <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+            </button>
+
+            <button id="btnPlayPause" type="button" @onclick="() => Playback.TogglePlayPause()" title="Play / Pause (Spacebar)"
+                    class="w-9 h-9 rounded-full bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 flex items-center justify-center shadow-md shadow-cyan-500/30 transition hover:scale-105 active:scale-95">
+                @if (State.IsPlaying)
+                {
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+                }
+                else
+                {
+                    <svg class="w-5 h-5 ml-0.5 fill-current" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                }
+            </button>
+
+            <button id="btnStop" type="button" @onclick="() => Playback.Stop()" title="Stop & Hardware Panic (Esc)"
+                    class="w-8 h-8 rounded-full bg-slate-800 hover:bg-rose-600/80 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/60 transition hover:scale-105 active:scale-95">
+                <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 6h12v12H6z" /></svg>
+            </button>
+
+            <button id="btnNextTrack" type="button" @onclick="() => _ = Playback.PlayNextSongAsync()" title="Next Track (N)"
+                    class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/60 transition hover:scale-105 active:scale-95">
+                <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+            </button>
+
+            <!-- Speed -->
+            <div class="flex items-center bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60 space-x-0.5">
+                @foreach (var spd in new[] { 0.75, 1.0, 1.25, 1.5 })
+                {
+                    bool activeSpd = Math.Abs(State.Speed - spd) < 0.01;
+                    <button type="button"
+                            @onclick="() => Playback.SetSpeed(spd)"
+                            class="px-1.5 py-0.5 text-[11px] font-semibold rounded transition @(activeSpd ? "bg-cyan-500 text-slate-950 shadow-sm" : "text-slate-400 hover:text-white")">
+                        @($"{spd:0.##}x")
+                    </button>
+                }
+            </div>
+
+            <!-- Loop -->
+            <button id="btnLoop" type="button" @onclick="() => Playback.SetLoop(!State.LoopEnabled)"
+                    class="px-2 py-1 rounded-lg border text-[11px] font-medium transition @(State.LoopEnabled ? "bg-cyan-500/25 text-cyan-300 border-cyan-500/50" : "bg-slate-800/80 text-slate-400 hover:text-white border-slate-700/60")">
+                🔁 Loop
+            </button>
+
+            <!-- Auto-Advance -->
+            <button id="btnAutoAdvance" type="button" @onclick="() => State.Mutate(s => s.JukeboxContinuous = !s.JukeboxContinuous)"
+                    class="px-2 py-1 rounded-lg border text-[11px] font-semibold transition @(State.JukeboxContinuous ? "bg-cyan-500/25 text-cyan-400 border-cyan-500/50" : "bg-slate-800/80 text-slate-400 hover:text-white border-slate-700/60")">
+                ⏭ Auto-Next
+            </button>
+
+            <!-- Transpose -->
+            <div class="flex items-center bg-slate-800/80 rounded-lg p-0.5 border border-slate-700/60 space-x-1" title="Master Transpose (-12 to +12 semitones)">
+                <span class="text-[9px] font-bold text-slate-400 pl-1 uppercase">Key</span>
+                <button id="btnTransposeDown" type="button" @onclick="() => Playback.SetMasterTranspose((song?.MasterTranspose ?? 0) - 1)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-700/70 hover:bg-cyan-600 text-[11px] font-bold text-slate-200 hover:text-white transition">-</button>
+                <span id="lblMasterTranspose" @onclick="() => Playback.SetMasterTranspose(0)" class="font-mono text-[10px] font-bold text-cyan-400 min-w-[26px] text-center cursor-pointer" title="Click to reset">
+                    @((song?.MasterTranspose ?? 0) > 0 ? $"+{song!.MasterTranspose}" : $"{song?.MasterTranspose ?? 0}")
+                </span>
+                <button id="btnTransposeUp" type="button" @onclick="() => Playback.SetMasterTranspose((song?.MasterTranspose ?? 0) + 1)" class="w-5 h-5 flex items-center justify-center rounded bg-slate-700/70 hover:bg-cyan-600 text-[11px] font-bold text-slate-200 hover:text-white transition">+</button>
+            </div>
+        </div>
+
+        <!-- Polyphony Guard + Passthrough -->
+        <div class="flex items-center space-x-2 shrink-0">
+            <div id="polyphonyGuardContainer" class="flex items-center space-x-1.5 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
+                <input type="checkbox"
+                       id="polyphonyGuardToggle"
+                       checked="@(song?.PolyphonyGuard ?? true)"
+                       @onchange="(e) => Playback.SetPolyphonyGuard((bool?)e.Value == true)"
+                       class="w-3.5 h-3.5 rounded accent-cyan-500 cursor-pointer" />
+                <label for="polyphonyGuardToggle" class="text-[11px] font-medium text-slate-200 cursor-pointer select-none">Polyphony Guard</label>
+                <span class="polyphony-guard-badge text-[9px] font-semibold px-1.5 py-0.5 rounded">@((song?.PolyphonyGuard ?? true) ? "Protected" : "Bypass")</span>
+            </div>
+
+            <button type="button"
+                    @onclick="() => Playback.SetGmPassthrough(!State.GmPassthrough)"
+                    title="GM Passthrough: Bypass remapper rules to audition raw General MIDI"
+                    class="px-2 py-1 rounded-lg text-[10px] font-bold border transition @(State.GmPassthrough ? "bg-amber-600/30 text-amber-300 border-amber-500/60" : "bg-slate-900/90 text-slate-400 border-slate-800 hover:text-white")">
+                Raw GM
+            </button>
+        </div>
+    </div>
+
+    <!-- Timeline Scrubber -->
+    <div class="relative space-y-0.5 pt-0.5">
+        <input type="range"
+               id="timeScrubber"
+               min="0"
+               max="@Math.Max(1, Math.Round(State.DurationSeconds, 1))"
+               step="0.1"
+               value="@Math.Round(State.CurrentSeconds, 1)"
+               @onchange="(e) => { if (double.TryParse(e.Value?.ToString(), out var v)) Playback.Seek(v); }"
+               class="w-full h-1.5 cursor-pointer" />
+        <div class="flex items-center justify-between text-[11px] font-mono">
+            <span id="currentTimeDisplay" class="lcd-display px-2 py-0.5 text-cyan-400 font-semibold">@PlaybackCoordinator.FormatDuration(State.CurrentSeconds)</span>
+            @if (hasSong && song!.IsGmFile)
+            {
+                <select value="@song.PitchBendMode"
+                        @onchange="(e) => Playback.SetPitchBendMode(e.Value?.ToString())"
+                        title="Pitch Bend Scale Mode"
+                        class="bg-slate-900 border border-slate-800 rounded px-2 py-0.5 text-[10px] text-slate-300 focus:outline-none">
+                    <option value="Auto">Pitch Bend: Auto</option>
+                    <option value="DivideBy6">Divide by 6 (±2 st on PSS)</option>
+                    <option value="Preserve1to1">Preserve 1:1</option>
+                    <option value="Disable">Disable Bends</option>
+                </select>
+            }
+            <span id="totalTimeDisplay" class="lcd-display px-2 py-0.5 text-slate-400 font-medium">@PlaybackCoordinator.FormatDuration(State.DurationSeconds)</span>
+        </div>
+    </div>
+</section>
+
+@code {
+    private void ToggleCurrentFavorite()
+    {
+        if (State.LoadedSong != null && !string.IsNullOrEmpty(State.LoadedSong.FilePath))
+        {
+            Library.ToggleFavorite(State.LoadedSong.FilePath);
+        }
+    }
+}

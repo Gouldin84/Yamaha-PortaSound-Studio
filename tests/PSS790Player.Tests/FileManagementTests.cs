@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using PSS790Player.Bridge;
 using PSS790Player.Core;
 using Xunit;
 
@@ -163,50 +162,17 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void ScanLibraryFiles_ProducesValidSerialization()
+        public void LibraryService_BuildSnapshotAndCategoryTree_ProducesValidSerialization()
         {
-            var bridge = (PSS790Player.Bridge.UiBridge)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(PSS790Player.Bridge.UiBridge));
-            var method = typeof(PSS790Player.Bridge.UiBridge).GetMethod("ScanLibraryFiles", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            var result = method!.Invoke(bridge, null);
-            var json = System.Text.Json.JsonSerializer.Serialize(result);
+            var state = new PSS790Player.Services.AppStateStore();
+            using var library = new PSS790Player.Services.LibraryService(state);
+            var snapshot = library.BuildSnapshot();
+            var snapshotJson = System.Text.Json.JsonSerializer.Serialize(snapshot);
 
-            Assert.Contains("\"subFolders\":", json);
-            Assert.Contains("\"folders\":", json);
-            Assert.Contains("\"files\":", json);
+            Assert.Contains("\"SubFolders\":", snapshotJson);
+            Assert.Contains("\"AllFiles\":", snapshotJson);
 
-            // Test serializing the full initial_data envelope
-            var devices = MidiPlayer.GetOutputDeviceNames();
-            var inputDevices = MidiRecorder.GetInputDeviceNames();
-            using var player = new MidiPlayer();
-            using var rec = new MidiRecorder();
-            using var sysex = new SysExManager(player, rec);
-            var envelope = new
-            {
-                type = "initial_data",
-                data = new
-                {
-                    devices,
-                    inputDevices,
-                    voices = new List<object>(),
-                    library = result,
-                    defaultDevice = devices.FirstOrDefault(),
-                    defaultInputDevice = inputDevices.FirstOrDefault(),
-                    defaultBatchSource = AppPaths.GmMidiDir,
-                    defaultBatchTarget = AppPaths.Pss790MidiDir,
-                    midiThru = rec.MidiThruEnabled,
-                    recorderBpm = rec.Bpm,
-                    sysexLibrary = sysex.GetSysExLibrary(),
-                    recordingsLibrary = rec.GetRecordingsLibrary()
-                }
-            };
-            var fullJson = System.Text.Json.JsonSerializer.Serialize(envelope);
-            Assert.Contains("\"type\":\"initial_data\"", fullJson);
-        }
-
-        [Fact]
-        public void BuildCategoryTree_WithTypeSafeDtos_HandlesFilesAndEmptyGracefully()
-        {
-            var flatList = new List<UiBridge.FileItemDto>();
+            var allFiles = new List<PSS790Player.Models.MidiFileItem>();
             var tempDir = Path.Combine(Path.GetTempPath(), "PSS790_DtoTest_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
             try
@@ -214,18 +180,15 @@ namespace PSS790Player.Tests
                 var midFile = Path.Combine(tempDir, "song1.mid");
                 File.WriteAllBytes(midFile, new byte[] { 0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xE0 });
 
-                var method = typeof(UiBridge).GetMethod("BuildCategoryTree", BindingFlags.NonPublic | BindingFlags.Static);
-                Assert.NotNull(method);
-                var tree = method.Invoke(null, new object[] { tempDir, "TestCat", "gm", flatList });
+                var tree = PSS790Player.Services.LibraryService.BuildCategoryTree(tempDir, "TestCat", "gm", allFiles);
                 Assert.NotNull(tree);
+                Assert.Single(allFiles);
+                Assert.Equal("song1.mid", allFiles[0].FileName);
+                Assert.Equal("TestCat", allFiles[0].Category);
+                Assert.Equal("gm", allFiles[0].Format);
 
-                Assert.Single(flatList);
-                Assert.Equal("song1.mid", flatList[0].fileName);
-                Assert.Equal("TestCat", flatList[0].category);
-                Assert.Equal("gm", flatList[0].format);
-
-                var json = System.Text.Json.JsonSerializer.Serialize(tree);
-                Assert.Contains("\"fileName\":\"song1.mid\"", json);
+                var treeJson = System.Text.Json.JsonSerializer.Serialize(tree);
+                Assert.Contains("\"FileName\":\"song1.mid\"", treeJson);
             }
             finally
             {

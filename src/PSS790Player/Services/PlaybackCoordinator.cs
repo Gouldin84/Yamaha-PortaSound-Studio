@@ -572,6 +572,35 @@ namespace PSS790Player.Services
             }
         }
 
+        public void BrowseAndLoadMidiWithDialog()
+        {
+            string? picked = null;
+            var app = Application.Current;
+            void ShowDlg()
+            {
+                var dlg = new OpenFileDialog
+                {
+                    Filter = "MIDI Files (*.mid;*.midi)|*.mid;*.midi|All Files (*.*)|*.*",
+                    InitialDirectory = Directory.Exists(AppPaths.GmMidiDir) ? AppPaths.GmMidiDir : AppPaths.BaseMidiDir,
+                    Title = "Open MIDI Song"
+                };
+                if (dlg.ShowDialog() == true)
+                {
+                    picked = dlg.FileName;
+                }
+            }
+
+            if (app != null && !app.Dispatcher.CheckAccess())
+                app.Dispatcher.Invoke(ShowDlg);
+            else
+                ShowDlg();
+
+            if (!string.IsNullOrEmpty(picked))
+            {
+                _ = LoadFileAsync(picked, autoPlay: true);
+            }
+        }
+
         public void SaveRemappedWithDialog()
         {
             MidiFile? remappedSnap;

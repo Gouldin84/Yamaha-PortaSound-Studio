@@ -13,8 +13,19 @@ namespace PSS790Player;
 /// </summary>
 public partial class App : Application
 {
+    internal static string? SmokeMarkerPath { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        for (int i = 0; i < e.Args.Length - 1; i++)
+        {
+            if (string.Equals(e.Args[i], "--smoke", StringComparison.OrdinalIgnoreCase))
+            {
+                SmokeMarkerPath = e.Args[i + 1];
+                break;
+            }
+        }
+
         base.OnStartup(e);
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;

@@ -1,0 +1,52 @@
+@inject AppStateStore State
+
+<div id="hardwareGuideModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
+    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-2xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+            <h3 class="text-sm font-bold text-white">🎹 Hardware Setup &amp; SysEx Transfer Guide</h3>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white text-lg">✕</button>
+        </div>
+
+        <div class="flex items-center justify-between flex-wrap gap-2 shrink-0">
+            <div class="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 space-x-1">
+                <button type="button" @onclick='() => State.Mutate(s => s.ModalGuideModel = "pss790")'
+                        class="px-3 py-1 rounded-lg text-xs font-bold @(State.ModalGuideModel != "pss680" ? "bg-cyan-600 text-white" : "text-slate-400")">Yamaha PSS-790</button>
+                <button type="button" @onclick='() => State.Mutate(s => s.ModalGuideModel = "pss680")'
+                        class="px-3 py-1 rounded-lg text-xs font-bold @(State.ModalGuideModel == "pss680" ? "bg-amber-600 text-white" : "text-slate-400")">Yamaha PSS-680/480/780</button>
+            </div>
+            <div class="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 space-x-1">
+                <button type="button" @onclick='() => State.Mutate(s => s.ModalGuideMethod = "midi")'
+                        class="px-3 py-1 rounded-lg text-xs font-bold @(State.ModalGuideMethod != "sysex" ? "bg-indigo-600 text-white" : "text-slate-400")">Live MIDI Playback &amp; Record</button>
+                <button type="button" @onclick='() => State.Mutate(s => s.ModalGuideMethod = "sysex")'
+                        class="px-3 py-1 rounded-lg text-xs font-bold @(State.ModalGuideMethod == "sysex" ? "bg-indigo-600 text-white" : "text-slate-400")">SysEx Bulk Dumps</button>
+            </div>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-3 text-xs text-slate-300 leading-relaxed pr-1">
+            @if (State.ModalGuideModel == "pss680")
+            {
+                <div class="p-3.5 rounded-xl bg-slate-900 border border-amber-700/40 space-y-2">
+                    <div class="font-bold text-amber-300">PSS-680 / 480 / 780 Mode Setup</div>
+                    <p>Hold <strong>MIDI</strong> on the keyboard panel or press <strong>MIDI MODE</strong> + <strong>[+]</strong> until display shows <code class="text-amber-300 font-bold">c.99</code> (16-Channel Multi-Timbral Sound Source Mode).</p>
+                    <p><strong>SysEx Transfers:</strong> Hold <strong>MIDI</strong> and press <strong>RECORD</strong> (Format 00H FM Voice), <strong>MELODY 1/2/3</strong> (Format 01H), <strong>CHORD</strong> (Format 02H), or <strong>CUSTOM DRUMMER</strong> (Format 03H) while Studio capture listener is armed.</p>
+                </div>
+            }
+            else
+            {
+                <div class="p-3.5 rounded-xl bg-slate-900 border border-cyan-700/40 space-y-2">
+                    <div class="font-bold text-cyan-300">Yamaha PSS-790 Setup</div>
+                    <p>Connect USB-MIDI OUT &rarr; PSS-790 MIDI IN for Song Playback and Vector Joystick performance, and PSS-790 MIDI OUT &rarr; USB-MIDI IN for Recording and SysEx Capture.</p>
+                    <p><strong>Memory Bulk Dump:</strong> Arm <em>Listen for Bulk Dump</em> in the SysEx Vault, then press <strong>MEMORY BULK DUMP</strong> twice on the keyboard (display flashes <code class="text-amber-300 font-bold">b-8</code>). Keep Transmit Packet Delay at <strong>30 ms</strong> to avoid hardware buffer overflows.</p>
+                </div>
+            }
+        </div>
+
+        <div class="flex justify-end border-t border-slate-800 pt-3 shrink-0">
+            <button type="button" @onclick="Close" class="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white">Done</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private void Close() => State.Mutate(s => s.ShowHardwareGuideModal = false);
+}

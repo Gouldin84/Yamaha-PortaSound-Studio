@@ -1,0 +1,38 @@
+@inject AppStateStore State
+
+@if (State.ShowBatchModal)
+{
+    <BatchConverterModal />
+}
+@if (State.ShowSyncModal)
+{
+    <SyncModal />
+}
+@if (State.ShowHealthModal)
+{
+    <SongHealthModal />
+}
+@if (State.PendingFileAction != null)
+{
+    <FileActionModal />
+}
+@if (State.InspectedSysEx != null)
+{
+    <SysExInspectModal />
+}
+@if (State.ShowSettingsModal)
+{
+    <SettingsModal />
+}
+@if (State.ShowShortcutsModal)
+{
+    <ShortcutsModal />
+}
+@if (State.ShowAboutModal)
+{
+    <AboutModal />
+}
+@if (State.ShowHardwareGuideModal)
+{
+    <HardwareGuideModal />
+}

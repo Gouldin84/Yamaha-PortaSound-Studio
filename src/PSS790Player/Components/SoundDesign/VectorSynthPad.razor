@@ -1,0 +1,265 @@
+@implements IDisposable
+@inject AppStateStore State
+@inject SoundDesignService SoundDesign
+@inject IJSRuntime JS
+
+@{
+    var (wA, wB, wC, wD) = SoundDesignService.CalculateVectorWeights(State.VectorX, State.VectorY);
+    var filtered = string.IsNullOrWhiteSpace(State.VectorSearchQuery)
+        ? State.VectorPresetLibrary
+        : State.VectorPresetLibrary.Where(p => p.Name.Contains(State.VectorSearchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+    string[] revLabels = { "OFF", "RM", "HL", "PL" };
+}
+
+<div id="deckVectorSynthesizer" class="w-full h-full grid grid-cols-1 lg:grid-cols-12 gap-3 min-h-0 overflow-hidden">
+    <!-- Left Column: Categorized Vector Preset Library -->
+    <aside class="lg:col-span-3 glass-panel rounded-2xl p-2.5 flex flex-col space-y-2 h-64 lg:h-full overflow-hidden">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 shrink-0">
+            <span class="text-xs font-bold uppercase tracking-wider text-indigo-300">🕹️ Vector Presets</span>
+            <span class="text-[10px] font-mono px-1.5 rounded-full bg-slate-800 text-indigo-300 border border-slate-700">@filtered.Count</span>
+        </div>
+
+        <input id="vecSearchInput"
+               type="text"
+               value="@State.VectorSearchQuery"
+               @oninput="(e) => State.Mutate(s => s.VectorSearchQuery = e.Value?.ToString() ?? string.Empty)"
+               placeholder="Search vector blends..."
+               class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" />
+
+        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+            @foreach (var cat in FactoryPresets.VectorCategoryOrder)
+            {
+                var items = filtered.Where(p => string.Equals(FactoryPresets.GetVectorCategory(p.Name), cat, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (items.Count == 0) continue;
+                bool open = !_collapsedCats.Contains(cat);
+                <div class="space-y-1">
+                    <button type="button" @onclick="() => ToggleCategory(cat)"
+                            class="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[10px] font-bold uppercase text-slate-300">
+                        <span class="truncate">@cat</span>
+                        <span class="font-mono text-indigo-400">@(open ? "▾" : "▸") @items.Count</span>
+                    </button>
+                    @if (open)
+                    {
+                        <div class="space-y-1 pl-1">
+                            @foreach (var vp in items)
+                            {
+                                bool selected = string.Equals(vp.Name, State.VectorPresetName, StringComparison.OrdinalIgnoreCase);
+                                <div class="p-2 rounded-xl bg-slate-900/70 hover:bg-slate-800/90 border @(selected ? "border-indigo-500/60" : "border-slate-800") flex items-center justify-between gap-1.5">
+                                    <button type="button" @onclick="() => LoadPresetAndRedraw(vp.FilePath)" class="flex-1 min-w-0 text-left">
+                                        <div class="text-[11px] font-semibold text-white truncate">@vp.Name</div>
+                                        <div class="text-[9px] font-mono text-slate-500">V@(vp.VoiceA)/V@(vp.VoiceB)/V@(vp.VoiceC)/V@(vp.VoiceD)</div>
+                                    </button>
+                                    <button type="button" @onclick="() => SoundDesign.DeleteVectorPreset(vp.FilePath)" title="Delete Preset"
+                                            class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-700 text-rose-400 hover:text-white text-[10px]">✕</button>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Save Current Blend -->
+        <div class="pt-1.5 border-t border-slate-800 space-y-1.5 shrink-0">
+            <input type="text"
+                   value="@State.VectorPresetName"
+                   @oninput="(e) => State.Mutate(s => s.VectorPresetName = e.Value?.ToString() ?? string.Empty)"
+                   placeholder="Preset Name"
+                   class="w-full px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white" />
+            <button type="button" @onclick="() => SoundDesign.SaveVectorPreset()"
+                    class="w-full py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition active:scale-95">
+                💾 Save Vector Blend
+            </button>
+        </div>
+    </aside>
+
+    <!-- Center Column: Interactive 2D Vector Joystick + LFO Auto-Orbit -->
+    <div class="lg:col-span-5 glass-panel p-4 rounded-2xl border border-slate-800/80 flex flex-col items-center justify-between space-y-3 overflow-y-auto custom-scrollbar">
+        <div class="w-full flex items-center justify-between">
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-white">2D Quad Vector Gimbal</h3>
+                <div class="text-[10px] font-mono text-slate-400">X: @($"{State.VectorX:+0.00;-0.00;0.00}") &bull; Y: @($"{State.VectorY:+0.00;-0.00;0.00}")</div>
+            </div>
+            <button id="btnVecCenter" type="button" @onclick="CenterVector"
+                    class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-cyan-300 border border-slate-700 transition">
+                Center (0,0)
+            </button>
+        </div>
+
+        <canvas id="vecCanvas" width="240" height="240" class="rounded-full shadow-2xl cursor-crosshair touch-none"></canvas>
+
+        <!-- 4 Cardinal Blend Mix Bars -->
+        <div class="w-full grid grid-cols-4 gap-2 text-center font-mono text-[10px]">
+            <div class="p-1.5 rounded-lg bg-slate-900 border border-cyan-500/30">
+                <div class="text-cyan-300 font-bold">A: @((int)Math.Round(wA * 100))%</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-slate-900 border border-emerald-500/30">
+                <div class="text-emerald-300 font-bold">B: @((int)Math.Round(wB * 100))%</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-slate-900 border border-amber-500/30">
+                <div class="text-amber-300 font-bold">C: @((int)Math.Round(wC * 100))%</div>
+            </div>
+            <div class="p-1.5 rounded-lg bg-slate-900 border border-rose-500/30">
+                <div class="text-rose-300 font-bold">D: @((int)Math.Round(wD * 100))%</div>
+            </div>
+        </div>
+
+        <!-- LFO Orbit + Quad Audition -->
+        <div class="w-full p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2 text-xs">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-bold text-slate-300">Auto-Orbit LFO:</span>
+                <select id="selVecOrbitMode"
+                        value="@State.VectorOrbitMode"
+                        @onchange="OnOrbitModeChanged"
+                        class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white cursor-pointer">
+                    <option value="manual">Manual Hold</option>
+                    <option value="circle">Circle Orbit</option>
+                    <option value="figure8">Figure-8</option>
+                    <option value="spiral">Breathing Spiral</option>
+                    <option value="pingpong">Diagonal Ping-Pong</option>
+                    <option value="wander">Organic Wander</option>
+                </select>
+                <div class="flex items-center space-x-1">
+                    <span class="text-[10px] font-mono text-slate-400">Period</span>
+                    <input id="vecOrbitSpeed" type="range" min="10" max="90" value="@((int)(State.VectorOrbitSpeed * 10))"
+                           @oninput="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) State.Mutate(s => s.VectorOrbitSpeed = v / 10.0); }"
+                           class="w-20" />
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between flex-wrap gap-1 pt-1 border-t border-slate-800">
+                <div class="flex items-center space-x-1">
+                    @foreach (var n in new[] { (48, "C3"), (60, "C4"), (64, "E4"), (67, "G4"), (72, "C5") })
+                    {
+                        <button type="button" @onclick="() => SoundDesign.AuditionVectorChord(n.Item1)"
+                                class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-indigo-600 text-[11px] font-mono font-bold text-white transition active:scale-95">
+                            @n.Item2
+                        </button>
+                    }
+                </div>
+                <button type="button" @onclick="() => SoundDesign.ToggleVectorQuadPlayback(!State.VectorQuadPlaybackEnabled)"
+                        class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition @(State.VectorQuadPlaybackEnabled ? "bg-indigo-600 text-white border-indigo-400" : "bg-slate-800 text-slate-300 border-slate-700")">
+                    @(State.VectorQuadPlaybackEnabled ? "Quad Mixer Sync: ON" : "Sync Quad to Player")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: 4 Corner Voice Slot Assigners & REV/VIB Effects -->
+    <div class="lg:col-span-4 flex flex-col space-y-2.5 h-full overflow-y-auto custom-scrollbar pr-0.5">
+        @RenderVectorSlot("A (North / Ch 1)", "border-cyan-500/40", "text-cyan-300", 0, State.VectorVoiceA, wA, v => SoundDesign.SetVectorVoices(v, State.VectorVoiceB, State.VectorVoiceC, State.VectorVoiceD), revLabels)
+        @RenderVectorSlot("B (East / Ch 2)", "border-emerald-500/40", "text-emerald-300", 1, State.VectorVoiceB, wB, v => SoundDesign.SetVectorVoices(State.VectorVoiceA, v, State.VectorVoiceC, State.VectorVoiceD), revLabels)
+        @RenderVectorSlot("C (South / Ch 3)", "border-amber-500/40", "text-amber-300", 2, State.VectorVoiceC, wC, v => SoundDesign.SetVectorVoices(State.VectorVoiceA, State.VectorVoiceB, v, State.VectorVoiceD), revLabels)
+        @RenderVectorSlot("D (West / Ch 4)", "border-rose-500/40", "text-rose-300", 3, State.VectorVoiceD, wD, v => SoundDesign.SetVectorVoices(State.VectorVoiceA, State.VectorVoiceB, State.VectorVoiceC, v), revLabels)
+    </div>
+</div>
+
+@code {
+    private DotNetObjectReference<VectorSynthPad>? _dotNetRef;
+    private readonly HashSet<string> _collapsedCats = new(StringComparer.OrdinalIgnoreCase);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("studioInterop.setupVectorTouchpad", "vecCanvas", _dotNetRef);
+            await JS.InvokeVoidAsync("studioInterop.drawVectorCanvas", "vecCanvas", State.VectorX, State.VectorY);
+            if (State.VectorOrbitMode != "manual")
+            {
+                await JS.InvokeVoidAsync("studioInterop.startVectorOrbit", "vecCanvas", _dotNetRef, "selVecOrbitMode", "vecOrbitSpeed");
+            }
+        }
+    }
+
+    private RenderFragment RenderVectorSlot(string label, string borderCls, string textCls, int chIdx, int selectedVoice, double weight, Action<int> setVoice, string[] revLabels) => __builder =>
+    {
+        var eff = State.VectorChannelEffects.GetValueOrDefault(chIdx) ?? new VectorChannelEffectState();
+        <div class="glass-panel p-3 rounded-xl border @borderCls space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-xs font-bold @textCls">@label</span>
+                <div class="flex items-center space-x-1.5">
+                    <button type="button" @onclick="() => SoundDesign.CycleVectorReverb(chIdx)"
+                            title="Cycle Reverb (OFF / Room / Hall / Plate)"
+                            class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono font-bold text-cyan-300 border border-slate-700">
+                        REV: @revLabels[Math.Clamp(eff.Rev, 0, 3)]
+                    </button>
+                    <button type="button" @onclick="() => SoundDesign.CycleVectorVibrato(chIdx)"
+                            title="Cycle Vibrato Depth (0-7)"
+                            class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-mono font-bold text-indigo-300 border border-slate-700">
+                        VIB: @eff.Vib
+                    </button>
+                    <span class="text-[11px] font-mono font-bold text-white w-9 text-right">@((int)Math.Round(weight * 100))%</span>
+                </div>
+            </div>
+            <select value="@selectedVoice"
+                    @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) setVoice(v); }"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer">
+                @foreach (var opt in State.Pss790Voices)
+                {
+                    <option value="@opt.Number">@($"{opt.Number:D2}: {opt.Name} ({opt.Category})")</option>
+                }
+            </select>
+        </div>
+    };
+
+    private void ToggleCategory(string cat)
+    {
+        if (!_collapsedCats.Add(cat)) _collapsedCats.Remove(cat);
+    }
+
+    private async Task LoadPresetAndRedraw(string path)
+    {
+        SoundDesign.LoadVectorPreset(path);
+        await JS.InvokeVoidAsync("studioInterop.drawVectorCanvas", "vecCanvas", State.VectorX, State.VectorY);
+        if (State.VectorOrbitMode != "manual" && _dotNetRef != null)
+        {
+            await JS.InvokeVoidAsync("studioInterop.startVectorOrbit", "vecCanvas", _dotNetRef, "selVecOrbitMode", "vecOrbitSpeed");
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("studioInterop.stopVectorOrbit");
+        }
+    }
+
+    private async Task CenterVector()
+    {
+        await JS.InvokeVoidAsync("studioInterop.stopVectorOrbit");
+        State.Mutate(s => { s.VectorOrbitMode = "manual"; s.VectorIsOrbiting = false; });
+        SoundDesign.SetVectorPosition(0, 0, true);
+        await JS.InvokeVoidAsync("studioInterop.drawVectorCanvas", "vecCanvas", 0, 0);
+    }
+
+    private async Task OnOrbitModeChanged(ChangeEventArgs e)
+    {
+        var mode = e.Value?.ToString() ?? "manual";
+        State.Mutate(s => { s.VectorOrbitMode = mode; s.VectorIsOrbiting = mode != "manual"; });
+        if (mode == "manual")
+        {
+            await JS.InvokeVoidAsync("studioInterop.stopVectorOrbit");
+        }
+        else if (_dotNetRef != null)
+        {
+            await JS.InvokeVoidAsync("studioInterop.startVectorOrbit", "vecCanvas", _dotNetRef, "selVecOrbitMode", "vecOrbitSpeed");
+        }
+    }
+
+    [JSInvokable]
+    public void OnVectorPointerPosition(double x, double y)
+    {
+        State.Mutate(s => { s.VectorOrbitMode = "manual"; s.VectorIsOrbiting = false; });
+        SoundDesign.SetVectorPosition(x, y, true);
+    }
+
+    [JSInvokable]
+    public void OnVectorOrbitTick(double x, double y)
+    {
+        SoundDesign.SetVectorPosition(x, y, true);
+    }
+
+    public void Dispose()
+    {
+        _ = JS.InvokeVoidAsync("studioInterop.stopVectorOrbit");
+        _dotNetRef?.Dispose();
+    }
+}

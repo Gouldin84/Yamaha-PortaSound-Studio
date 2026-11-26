@@ -2,11 +2,11 @@
 
 A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for vintage **Yamaha PortaSound** keyboard synthesizers (**PSS-790**, **PSS-680**, **PSS-480**, and **PSS-780**).
 
-[![Release](https://img.shields.io/badge/release-v2.10.6-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
+[![Release](https://img.shields.io/badge/release-v3.0.0-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-276%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-282%20Passing-brightgreen.svg)]()
 
 > [!TIP]
 > ### 🎹 Community & Hardware Testers Wanted!
@@ -162,7 +162,7 @@ Pre-built standalone single-file executables are available on the **[GitHub Rele
 git clone https://github.com/Gouldin84/Yamaha-PortaSound-Studio.git
 cd Yamaha-PortaSound-Studio
 
-# Run automated test suite (260 tests)
+# Run automated test suite (282 tests)
 dotnet test
 
 # Build single-file release executable
@@ -173,9 +173,9 @@ dotnet publish src/PSS790Player/PSS790Player.csproj -c Release -r win-x64 --self
 
 ## Acknowledgements & Trademarks
 
-- **Melanchall.DryWetMidi**: High-performance .NET MIDI playback, parsing, and device I/O.
-- **Microsoft.Web.WebView2**: Embedded Chromium desktop UI runtime.
-- **Tailwind CSS**: Modern utility-first styling.
+- **Melanchall.DryWetMidi**: High-performance .NET MIDI playback, parsing, and device I/O with a Single-Writer `TransportActor`.
+- **WPF Blazor Hybrid (`Microsoft.AspNetCore.Components.WebView.Wpf`)**: Native modular Razor UI with embedded single-file assets and WebView2 rendering.
+- **Tailwind CSS**: Offline-compiled utility styling.
 
 *Yamaha, PortaSound, PSS-790, PSS-680, and AWM are registered trademarks of Yamaha Corporation. This software is an independent open-source preservation project and is not affiliated with or endorsed by Yamaha Corporation.*
 

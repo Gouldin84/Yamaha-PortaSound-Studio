@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Melanchall.DryWetMidi.Core;
-using PSS790Player.Bridge;
 using PSS790Player.Core;
 using Xunit;
 
@@ -154,77 +153,64 @@ namespace PSS790Player.Tests
 
         #endregion
 
-        #region WebUI Channel 16 Layout & Scrubber Token Verification
+        #region Blazor Hybrid Layout & Hardware Guide Verification
 
         [Fact]
-        public void WebUI_Assets_ContainHardenedChannel16AndScrubberSignatures()
+        public void BlazorHybrid_Assets_ContainHardenedChannel16AndOfflineCssSignatures()
         {
-            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
-            if (!File.Exists(appJsPath))
-            {
-                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
-            }
+            var srcDir = FindRepoSrcDir();
+            Assert.NotNull(srcDir);
 
-            if (File.Exists(appJsPath))
-            {
-                var content = File.ReadAllText(appJsPath);
-                Assert.Contains("🥁 DRUMS", content);
-                Assert.Contains("Fixed Map", content);
-                Assert.Contains("window.addEventListener(\"error\"", content);
-                Assert.Contains("window.addEventListener(\"unhandledrejection\"", content);
-                Assert.DoesNotContain("scrubberEl.addEventListener(\"change\", finishScrubbing)", content);
-            }
+            var indexHtml = File.ReadAllText(Path.Combine(srcDir!, "wwwroot", "index.html"));
+            Assert.Contains("_framework/blazor.webview.js", indexHtml);
+            Assert.Contains("css/tailwind.css", indexHtml);
+            Assert.DoesNotContain("cdn.tailwindcss.com", indexHtml);
 
-            var cssPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "styles.css");
-            if (!File.Exists(cssPath))
-            {
-                cssPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "styles.css");
-            }
+            var tailwindPath = Path.Combine(srcDir!, "wwwroot", "css", "tailwind.css");
+            Assert.True(File.Exists(tailwindPath), "Offline compiled tailwind.css must exist.");
+            Assert.True(new FileInfo(tailwindPath).Length > 10_000, "Compiled tailwind.css must be populated.");
 
-            if (File.Exists(cssPath))
-            {
-                var cssContent = File.ReadAllText(cssPath);
-                Assert.Contains(".channel-strip-card", cssContent);
-                Assert.Contains("min-width: 0;", cssContent);
-                Assert.Contains("overflow: hidden;", cssContent);
-            }
+            var cssContent = File.ReadAllText(Path.Combine(srcDir!, "wwwroot", "css", "styles.css"));
+            Assert.Contains(".channel-strip-card", cssContent);
+            Assert.Contains("min-width: 0;", cssContent);
+            Assert.Contains("overflow: hidden;", cssContent);
+
+            var mixerContent = File.ReadAllText(Path.Combine(srcDir!, "Components", "Player", "ChannelMixerRack.razor"));
+            Assert.Contains("DRUM", mixerContent);
+            Assert.Contains("Fixed Rhythm", mixerContent);
         }
 
         [Fact]
-        public void WebUI_Assets_ContainHardwareCaptureGuideSignatures()
+        public void BlazorHybrid_Assets_ContainHardwareCaptureGuideSignatures()
         {
-            var htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "index.html");
-            if (!File.Exists(htmlPath))
-            {
-                htmlPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "index.html");
-            }
+            var srcDir = FindRepoSrcDir();
+            Assert.NotNull(srcDir);
 
-            if (File.Exists(htmlPath))
-            {
-                var content = File.ReadAllText(htmlPath);
-                Assert.Contains("studioHardwareGuidePanel", content);
-                Assert.Contains("hardwareGuideModal", content);
-                Assert.Contains("btnToggleStudioGuide", content);
-                Assert.Contains("MEMORY BULK DUMP", content);
-                Assert.Contains("SONG MEMORY", content);
-                Assert.Contains("Format 01H", content);
-                Assert.Contains("Format 02H", content);
-                Assert.Contains("Format 03H", content);
-            }
+            var recContent = File.ReadAllText(Path.Combine(srcDir!, "Components", "Recorder", "RecorderWorkspace.razor"));
+            Assert.Contains("studioInterop.saveGuidePreference", recContent);
+            Assert.Contains("Loop Guard", recContent);
 
-            var appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "..", "src", "PSS790Player", "WebUI", "app.js");
-            if (!File.Exists(appJsPath))
-            {
-                appJsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WebUI", "app.js");
-            }
+            var guideContent = File.ReadAllText(Path.Combine(srcDir!, "Components", "Modals", "HardwareGuideModal.razor"));
+            Assert.Contains("MEMORY BULK DUMP", guideContent);
+            Assert.Contains("Format 00H", guideContent);
+            Assert.Contains("PSS-790", guideContent);
+            Assert.Contains("PSS-680", guideContent);
 
-            if (File.Exists(appJsPath))
+            var sysexContent = File.ReadAllText(Path.Combine(srcDir!, "Components", "SoundDesign", "SysExVaultPanel.razor"));
+            Assert.Contains("MEMORY BULK DUMP", sysexContent);
+            Assert.Contains("SysExManager", sysexContent);
+        }
+
+        private static string? FindRepoSrcDir()
+        {
+            var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+            while (dir != null)
             {
-                var content = File.ReadAllText(appJsPath);
-                Assert.Contains("initHardwareGuides", content);
-                Assert.Contains("syncHardwareGuidesToModel", content);
-                Assert.Contains("openHardwareGuideModal", content);
+                var candidate = Path.Combine(dir.FullName, "src", "PSS790Player");
+                if (Directory.Exists(candidate)) return candidate;
+                dir = dir.Parent;
             }
+            return null;
         }
 
         #endregion

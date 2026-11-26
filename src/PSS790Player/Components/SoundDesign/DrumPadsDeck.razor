@@ -1,0 +1,161 @@
+@inject AppStateStore State
+@inject SoundDesignService SoundDesign
+
+@{
+    bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+    string[] bankLabels = is680
+        ? new[] { "Bank A", "Bank B", "Bank C", "Bank D" }
+        : new[] { "Core Kit", "Toms", "Latin/Perc", "FX/Vocal" };
+    int bankIdx = Math.Clamp(State.SelectedDrumPadBank, 0, 3);
+    var pads = (is680 ? Pss680PadBanks : Pss790PadBanks)[bankIdx];
+    int beats = Math.Clamp(State.DrummerBeatsLength, 1, 8);
+}
+
+<div id="deckDrumPadsAndGrid" class="w-full h-full flex flex-col space-y-3 overflow-y-auto custom-scrollbar pr-0.5">
+    <!-- Top Deck: Live Hand Percussion Pads -->
+    <div class="glass-panel p-3.5 rounded-xl border border-slate-800/80 space-y-3 shrink-0">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2">
+            <div>
+                <h3 class="text-xs font-bold uppercase tracking-wider text-white">🥁 Live Hand Percussion Pads</h3>
+                <p id="drumPadModelSubtitle" class="text-[10px] text-slate-400">
+                    @(is680 ? "PSS-680 / 780 Hand Percussion (32 PCM Pads • Ch 16)" : "PSS-790 Chart 1 Percussion & Vocals (Ch 16)")
+                </p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <div class="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 space-x-1">
+                    @for (int i = 0; i < 4; i++)
+                    {
+                        int b = i;
+                        <button type="button" @onclick="() => State.Mutate(s => s.SelectedDrumPadBank = b)"
+                                class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition @(bankIdx == b ? "bg-amber-500 text-slate-950" : "text-slate-400 hover:text-white")">
+                            @bankLabels[b]
+                        </button>
+                    }
+                </div>
+                <select value="@_velocity"
+                        @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out int v)) _velocity = v; }"
+                        class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-white cursor-pointer">
+                    <option value="75">Soft (75)</option>
+                    <option value="105">Normal (105)</option>
+                    <option value="127">Max Hit (127)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="drumPadsContainer" class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+            @foreach (var pad in pads)
+            {
+                bool flashed = _lastHitNote == pad.Note;
+                <button type="button"
+                        @onpointerdown="() => HitPad(pad.Note)"
+                        class="min-h-[68px] p-2.5 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 hover:from-amber-900/50 hover:to-slate-900 border @(flashed ? "border-amber-400 ring-2 ring-amber-400" : "border-slate-700") active:scale-95 transition flex flex-col items-start justify-between text-left shadow-md">
+                    <div class="w-full flex items-center justify-between">
+                        <span class="px-1.5 py-0.5 rounded bg-slate-950 text-amber-400 font-mono text-[10px] font-bold">@pad.Pad</span>
+                        <span class="text-[10px] font-mono text-slate-500">N@pad.Note</span>
+                    </div>
+                    <span class="text-xs font-bold text-white leading-tight">@pad.Name</span>
+                </button>
+            }
+        </div>
+    </div>
+
+    <!-- Bottom Deck: PSS-680 Format 03H Custom Drummer Builder -->
+    <div class="glass-panel p-3.5 rounded-xl border border-slate-800/80 space-y-3 flex-1 min-h-0 flex flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2 shrink-0">
+            <div class="flex flex-wrap items-center gap-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-amber-300">Format 03H Custom Drummer Step Grid</h3>
+                <input type="text"
+                       value="@State.DrummerPatternName"
+                       @oninput="(e) => State.Mutate(s => s.DrummerPatternName = e.Value?.ToString() ?? string.Empty)"
+                       placeholder="Pattern Name"
+                       class="w-36 px-2 py-1 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white" />
+                <select value="@State.DrummerBankNumber"
+                        @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out int b)) State.Mutate(s => s.DrummerBankNumber = b); }"
+                        class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white">
+                    @for (int b = 0; b < 5; b++)
+                    {
+                        <option value="@b">Bank @(b + 1)</option>
+                    }
+                </select>
+                <select value="@beats"
+                        @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out int b)) State.Mutate(s => s.DrummerBeatsLength = b); }"
+                        class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white">
+                    @for (int b = 1; b <= 8; b++)
+                    {
+                        <option value="@b">@b Beats</option>
+                    }
+                </select>
+            </div>
+
+            <div class="flex items-center flex-wrap gap-1.5">
+                <button type="button" @onclick="() => SoundDesign.ClearDrummerPattern()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300 border border-slate-700">Clear</button>
+                <button type="button" @onclick='() => SoundDesign.ExecuteDrummerAction("audition")' class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">▶ Audition</button>
+                <button type="button" @onclick='() => SoundDesign.ExecuteDrummerAction("export_midi")' class="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white">Export .mid</button>
+                <button type="button" @onclick='() => SoundDesign.ExecuteDrummerAction("save_sysex")' class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white">Save 03H .syx</button>
+                <button type="button" @onclick='() => SoundDesign.ExecuteDrummerAction("transmit")' class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white">📤 Send 03H</button>
+            </div>
+        </div>
+
+        <div id="drummerGridContainer" class="flex-1 min-h-0 overflow-auto custom-scrollbar space-y-1.5 pr-1">
+            @for (int r = 0; r < State.DrummerRows.Count; r++)
+            {
+                int rowIdx = r;
+                var row = State.DrummerRows[rowIdx];
+                <div class="flex items-center space-x-2 p-1.5 rounded-xl bg-slate-900/70 border border-slate-800/80 min-w-max">
+                    <div class="w-36 shrink-0 flex items-center justify-between pr-1">
+                        <span class="text-[11px] font-semibold text-slate-200 truncate">@row.InstrumentName</span>
+                        <span class="text-[9px] font-mono text-amber-400/80">@row.PadLabel</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        @for (int b = 0; b < beats; b++)
+                        {
+                            byte byteVal = b < row.StepBytes.Length ? row.StepBytes[b] : (byte)0;
+                            for (int sub = 0; sub < 4; sub++)
+                            {
+                                int stepIdx = (b * 4) + sub;
+                                byte bitMask = (byte)(1 << (7 - (sub * 2)));
+                                bool isOn = (byteVal & bitMask) != 0;
+                                <button type="button"
+                                        @onclick="() => SoundDesign.ToggleDrummerStep(rowIdx, stepIdx)"
+                                        class="@(sub == 0 ? "ml-1.5" : "") w-6 h-6 sm:w-7 sm:h-7 rounded border text-[9px] font-mono transition active:scale-90 @(isOn ? "bg-amber-500 border-amber-300 text-slate-950 font-bold" : "bg-slate-900 border-slate-700/80 text-slate-600 hover:border-slate-500")">
+                                    @(isOn ? "●" : "·")
+                                </button>
+                            }
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private int _velocity = 105;
+    private int? _lastHitNote;
+
+    private async Task HitPad(int note)
+    {
+        _lastHitNote = note;
+        SoundDesign.TriggerDrumPad(note, _velocity);
+        await Task.Delay(140);
+        if (_lastHitNote == note) _lastHitNote = null;
+    }
+
+    private sealed record PadSpec(int Note, string Pad, string Name);
+
+    private static readonly PadSpec[][] Pss680PadBanks =
+    {
+        new PadSpec[] { new(51,"A1","Rim Shot"), new(52,"A2","Snare Low"), new(48,"A3","Low Tom"), new(50,"A4","Mid Tom"), new(53,"A5","Hi Tom"), new(79,"A6","Brush"), new(58,"A7","Brush Hit"), new(63,"A8","Ride Cymbal") },
+        new PadSpec[] { new(45,"B1","Bass Drum"), new(49,"B2","Snare Hi"), new(41,"B3","Synth Tom Lo"), new(42,"B4","Synth Tom Mid"), new(43,"B5","Synth Tom Hi"), new(57,"B6","Hi-Hat Closed"), new(59,"B7","Hi-Hat Open"), new(60,"B8","Crash Cymbal") },
+        new PadSpec[] { new(67,"C1","Bongo Low"), new(68,"C2","Bongo Hi"), new(74,"C3","Agogo Low"), new(75,"C4","Agogo Hi"), new(76,"C5","Cuica Low"), new(77,"C6","Cuica Hi"), new(71,"C7","Tambourine"), new(61,"C8","Splash Cymbal") },
+        new PadSpec[] { new(64,"D1","Conga Low"), new(65,"D2","Conga Hi"), new(69,"D3","Timbale Low"), new(70,"D4","Timbale Hi"), new(55,"D5","Cowbell"), new(56,"D6","Cabasa"), new(54,"D7","Hand Clap"), new(78,"D8","Whistle") }
+    };
+
+    private static readonly PadSpec[][] Pss790PadBanks =
+    {
+        new PadSpec[] { new(44,"N44","Bass Drum Lo"), new(45,"N45","Bass Drum Hi"), new(49,"N49","Snare Hi"), new(38,"N38","Synth Snare"), new(81,"N81","Snare Gated"), new(57,"N57","Hi-Hat Closed"), new(59,"N59","Hi-Hat Open"), new(60,"N60","Crash Cymbal") },
+        new PadSpec[] { new(47,"N47","Tom Bass"), new(48,"N48","Tom Lo"), new(50,"N50","Tom Mid"), new(53,"N53","Tom Hi"), new(40,"N40","Synth Tom Bass"), new(41,"N41","Synth Tom Lo"), new(42,"N42","Synth Tom Mid"), new(43,"N43","Synth Tom Hi") },
+        new PadSpec[] { new(46,"N46","Rim Shot 1"), new(54,"N54","Hand Claps"), new(64,"N64","Conga Lo"), new(65,"N65","Conga Hi"), new(67,"N67","Bongo Lo"), new(68,"N68","Bongo Hi"), new(71,"N71","Tambourine"), new(55,"N55","Cowbell") },
+        new PadSpec[] { new(36,"N36","BD Reverb"), new(80,"N80","HH Foot"), new(62,"N62","Ride Cup"), new(63,"N63","Ride Edge"), new(82,"VOC1","\"One\""), new(83,"VOC2","\"Two\""), new(84,"VOC3","\"Three\""), new(85,"VOC4","\"Four\"") }
+    };
+}

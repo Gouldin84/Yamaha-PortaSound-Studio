@@ -1,0 +1,89 @@
+@inject AppStateStore State
+@inject LibraryService Library
+
+@{
+    var sync = State.SyncState;
+    int pct = sync.Total > 0 ? (int)Math.Round((sync.Processed * 100.0) / sync.Total) : 0;
+}
+
+<div id="syncModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
+    <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-xl w-full mx-auto shadow-2xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div class="flex items-center space-x-2.5">
+                <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-sm">🔄</div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Smart Dual-Hardware Library Sync</h3>
+                    <p class="text-[11px] text-slate-400">Synchronizes GM source songs to PSS-790 &amp; PSS-680 hardware mirrors</p>
+                </div>
+            </div>
+            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white transition text-lg">✕</button>
+        </div>
+
+        @if (sync.IsAnalyzing)
+        {
+            <div class="p-6 text-center text-xs text-cyan-300 animate-pulse">Analyzing GM, PSS-790, and PSS-680 directories...</div>
+        }
+        else
+        {
+            <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800"><span class="text-[10px] text-slate-400 block">GM Source</span><strong class="text-base text-white font-mono">@sync.TotalGm</strong></div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-cyan-800/50"><span class="text-[10px] text-slate-400 block">Update PSS-790</span><strong class="text-base text-cyan-300 font-mono">@sync.NewOrOutdated790</strong></div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-amber-800/50"><span class="text-[10px] text-slate-400 block">Update PSS-680</span><strong class="text-base text-amber-300 font-mono">@sync.NewOrOutdated680</strong></div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-emerald-800/40"><span class="text-[10px] text-slate-400 block">Up To Date</span><strong class="text-base text-emerald-300 font-mono">@sync.UpToDate</strong></div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-rose-800/40"><span class="text-[10px] text-slate-400 block">Orphan 790</span><strong class="text-base text-rose-300 font-mono">@sync.Orphan790</strong></div>
+                <div class="p-2.5 rounded-xl bg-slate-900 border border-rose-800/40"><span class="text-[10px] text-slate-400 block">Orphan 680</span><strong class="text-base text-rose-300 font-mono">@sync.Orphan680</strong></div>
+            </div>
+
+            <div class="space-y-1.5 text-xs text-slate-300 p-3 rounded-xl bg-slate-900/70 border border-slate-800">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" checked="@_removeOrphans" @onchange="(e) => _removeOrphans = e.Value is bool b && b" class="accent-cyan-500" />
+                    <span>Remove orphaned PSS files without matching GM source</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" checked="@_pruneEmpty" @onchange="(e) => _pruneEmpty = e.Value is bool b && b" class="accent-cyan-500" />
+                    <span>Prune empty subdirectories across library roots</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" checked="@_forceAll" @onchange="(e) => _forceAll = e.Value is bool b && b" class="accent-amber-500" />
+                    <span>Force re-convert all GM files with latest DSP rules</span>
+                </label>
+            </div>
+        }
+
+        @if (sync.IsRunning || sync.Total > 0)
+        {
+            <div class="space-y-1 text-xs">
+                <div class="flex justify-between text-slate-300">
+                    <span class="truncate font-mono">@sync.Status @sync.CurrentFile</span>
+                    <span class="font-mono text-cyan-400">@sync.Processed/@sync.Total (@pct%)</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-cyan-500 transition-all duration-150" style="width: @(pct)%;"></div>
+                </div>
+            </div>
+        }
+
+        <div class="flex items-center justify-end space-x-2 border-t border-slate-800 pt-3">
+            @if (sync.IsRunning)
+            {
+                <button type="button" @onclick="() => Library.CancelLibrarySync()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white">Cancel</button>
+            }
+            else
+            {
+                <button type="button" @onclick="() => Library.AnalyzeLibrarySync()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300">Re-Scan</button>
+                <button type="button" @onclick="Close" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Close</button>
+                <button type="button" @onclick="() => Library.ExecuteLibrarySync(_removeOrphans, _pruneEmpty, _forceAll)"
+                        class="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white shadow-lg">Execute Sync</button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _removeOrphans = true;
+    private bool _pruneEmpty = true;
+    private bool _forceAll;
+
+    protected override void OnInitialized() => Library.AnalyzeLibrarySync();
+    private void Close() => State.Mutate(s => s.ShowSyncModal = false);
+}

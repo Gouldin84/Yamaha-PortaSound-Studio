@@ -1,0 +1,132 @@
+@inject AppStateStore State
+@inject PlaybackCoordinator Playback
+@inject LibraryService Library
+
+@{
+    string folderKey = $"dir:{Node.FullPath}";
+    bool isExpanded = !string.IsNullOrWhiteSpace(State.SearchQuery) || State.ExpandedFolders.Contains(folderKey);
+}
+
+<div class="tree-folder-group pl-1.5">
+    <div class="flex items-center justify-between px-1.5 py-1 rounded-lg hover:bg-slate-800/70 cursor-pointer group transition"
+         @onclick="() => ToggleFolder(folderKey)"
+         @oncontextmenu="OpenFolderMenu"
+         @oncontextmenu:preventDefault="true">
+        <div class="flex items-center space-x-1.5 min-w-0">
+            <span class="text-[10px] text-slate-400 w-3 text-center transition-transform @(isExpanded ? "rotate-90" : "")">▶</span>
+            <span class="text-amber-400 text-xs shrink-0">📁</span>
+            <span class="font-medium text-slate-200 truncate" title="@Node.Name">@Node.Name</span>
+        </div>
+        <span class="text-[10px] font-mono text-slate-500 px-1.5 py-0.2 rounded bg-slate-900/70 shrink-0">@Node.TotalCount</span>
+    </div>
+
+    @if (isExpanded)
+    {
+        <div class="pl-2.5 border-l border-slate-800/80 ml-2 space-y-0.5 mt-0.5">
+            @foreach (var sub in Node.SubFolders)
+            {
+                <LibraryTreeNode Node="sub" />
+            }
+
+            @foreach (var song in FilteredDirectFiles)
+            {
+                bool isSelected = string.Equals(State.SelectedSongPath, song.FullPath, StringComparison.OrdinalIgnoreCase);
+                bool isPlaying = string.Equals(State.PlayingSongPath, song.FullPath, StringComparison.OrdinalIgnoreCase);
+                bool isChecked = State.SelectedBatchPaths.Contains(song.FullPath);
+                bool isFav = song.IsFavorite || State.Favorites.Contains(song.FullPath);
+
+                <div class="tree-song-item flex items-center justify-between px-1.5 py-1 rounded-lg border border-transparent cursor-pointer group @(isPlaying ? "playing" : isSelected ? "selected" : "")"
+                     @onclick="() => SelectSong(song)"
+                     @ondblclick="() => PlaySong(song)"
+                     @oncontextmenu="(e) => OpenSongMenu(e, song, isFav)"
+                     @oncontextmenu:preventDefault="true">
+                    <div class="flex items-center space-x-1.5 min-w-0 flex-1 pr-1">
+                        @if (State.IsSelectMode)
+                        {
+                            <input type="checkbox"
+                                   checked="@isChecked"
+                                   @onclick:stopPropagation="true"
+                                   @onchange="(e) => ToggleBatchCheck(song.FullPath, (bool?)e.Value == true)"
+                                   class="song-checkbox w-3.5 h-3.5 rounded accent-cyan-500 shrink-0 cursor-pointer" />
+                        }
+                        <span class="text-[10px] text-amber-400 shrink-0 @(isFav ? "opacity-100" : "opacity-0 group-hover:opacity-60 hover:!opacity-100")"
+                              title="Toggle Favourite"
+                              @onclick:stopPropagation="true"
+                              @onclick="() => Library.ToggleFavorite(song.FullPath)">@(isFav ? "★" : "☆")</span>
+                        <span class="song-title truncate text-[11px]" title="@song.RelativePath">
+                            @Path.GetFileNameWithoutExtension(song.FileName)
+                        </span>
+                    </div>
+
+                    <button type="button"
+                            class="btn-song-play text-slate-400 opacity-75 group-hover:opacity-100 shrink-0"
+                            title="Play now"
+                            @onclick:stopPropagation="true"
+                            @onclick="() => PlaySong(song)">
+                        ▶
+                    </button>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public FolderNode Node { get; set; } = default!;
+
+    private IEnumerable<MidiFileItem> FilteredDirectFiles =>
+        string.IsNullOrWhiteSpace(State.SearchQuery)
+            ? Node.Files
+            : Node.Files.Where(f =>
+                f.FileName.Contains(State.SearchQuery.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                f.RelativePath.Contains(State.SearchQuery.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private void ToggleFolder(string key)
+    {
+        State.Mutate(s =>
+        {
+            if (!s.ExpandedFolders.Add(key)) s.ExpandedFolders.Remove(key);
+        });
+    }
+
+    private void SelectSong(MidiFileItem song) => _ = Playback.LoadFileAsync(song.FullPath, autoPlay: false);
+    private void PlaySong(MidiFileItem song) => _ = Playback.LoadFileAsync(song.FullPath, autoPlay: true);
+
+    private void ToggleBatchCheck(string path, bool checkedVal)
+    {
+        State.Mutate(s =>
+        {
+            if (checkedVal) s.SelectedBatchPaths.Add(path);
+            else s.SelectedBatchPaths.Remove(path);
+        });
+    }
+
+    private void OpenFolderMenu(MouseEventArgs e)
+    {
+        State.Mutate(s => s.LibraryContextMenu = new ContextMenuState
+        {
+            ClientX = e.ClientX,
+            ClientY = e.ClientY,
+            FullPath = Node.FullPath,
+            Name = Node.Name,
+            Category = Node.Format,
+            SubFolder = Node.RelativePath,
+            IsFolder = true
+        });
+    }
+
+    private void OpenSongMenu(MouseEventArgs e, MidiFileItem song, bool isFav)
+    {
+        State.Mutate(s => s.LibraryContextMenu = new ContextMenuState
+        {
+            ClientX = e.ClientX,
+            ClientY = e.ClientY,
+            FullPath = song.FullPath,
+            Name = song.FileName,
+            Category = song.Format,
+            SubFolder = song.SubFolder,
+            IsFolder = false,
+            IsFavorite = isFav
+        });
+    }
+}

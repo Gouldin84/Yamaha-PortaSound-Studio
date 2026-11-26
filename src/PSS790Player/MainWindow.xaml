@@ -1,14 +1,23 @@
 ﻿<Window x:Class="PSS790Player.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:blazor="clr-namespace:Microsoft.AspNetCore.Components.WebView.Wpf;assembly=Microsoft.AspNetCore.Components.WebView.Wpf"
+        xmlns:core="clr-namespace:PSS790Player.Core"
+        xmlns:components="clr-namespace:PSS790Player.Components"
+        mc:Ignorable="d"
         Title="Yamaha PortaSound Studio"
-        Width="1280" Height="720"
-        MinWidth="960" MinHeight="480"
-        WindowState="Maximized"
+        Height="860" Width="1380" MinHeight="640" MinWidth="960"
         WindowStartupLocation="CenterScreen"
         Background="#0b1324">
     <Grid>
-        <wv2:WebView2 Name="MainWebView" DefaultBackgroundColor="#0b1324" />
+        <core:SingleFileBlazorWebView x:Name="MainBlazorWebView"
+                                      HostPage="wwwroot\index.html"
+                                      Services="{DynamicResource services}">
+            <blazor:BlazorWebView.RootComponents>
+                <blazor:RootComponent Selector="#app" ComponentType="{x:Type components:App}" />
+            </blazor:BlazorWebView.RootComponents>
+        </core:SingleFileBlazorWebView>
     </Grid>
 </Window>
