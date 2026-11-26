@@ -210,28 +210,5 @@ namespace PSS790Player.Tests
             Assert.NotEmpty(pcs);
             Assert.Equal(3, (byte)pcs[0].ProgramNumber); // PSS-790 Voice 00 is MidiProgram 3
         }
-
-        [Fact]
-        public void Generate_NeverEnough_Pss790ReadyFiles()
-        {
-            var rootDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, @"..\..\..\..\.."));
-            var sourceFile = Path.Combine(rootDir, "General MIDI", "Never Enough.mid");
-            if (!File.Exists(sourceFile)) return;
-
-            var midi = MidiFile.Read(sourceFile, Constants.DefaultReadingSettings);
-            var remapped = Remapper.Remap(midi, new RemapperOptions
-            {
-                EnablePolyphonyGuard = true
-            });
-
-            var targetDir = Path.Combine(rootDir, "PSS-790 Midi");
-            if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
-
-            Remapper.SaveRemapped(remapped, Path.Combine(targetDir, "Never Enough.mid"));
-            Remapper.SaveRemapped(remapped, Path.Combine(targetDir, "Greatest Showman Theme - Never Enough.mid"));
-
-            Assert.True(File.Exists(Path.Combine(targetDir, "Never Enough.mid")));
-            Assert.True(File.Exists(Path.Combine(targetDir, "Greatest Showman Theme - Never Enough.mid")));
-        }
     }
 }

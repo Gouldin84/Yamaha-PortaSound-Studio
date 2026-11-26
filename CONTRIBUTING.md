@@ -35,7 +35,7 @@ dotnet test -c Release
 ### Building Standalone Executable
 To package the standalone single-file Windows x64 executable:
 ```powershell
-dotnet publish src/PSS790Player/PSS790Player.csproj `
+dotnet publish src/PortaSoundStudio/PortaSoundStudio.csproj `
   -c Release `
   -r win-x64 `
   --self-contained true `

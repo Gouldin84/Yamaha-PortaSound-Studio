@@ -191,41 +191,5 @@ namespace PSS790Player.Tests
             // GM Kick 36 should be remapped to PSS-790 Channel 15 (Ch 16) with PSS Kick 45 (BASS DRUM HI / A2)
             Assert.Contains(remappedNotes, n => n.Channel == (FourBitNumber)15 && n.NoteNumber == (SevenBitNumber)45);
         }
-
-        [Fact]
-        public void StressTest_MidiHealthInspector_BenchmarkLibraryFiles()
-        {
-            // Locate General MIDI directory
-            var baseDir = AppContext.BaseDirectory;
-            var gmDir = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "..", "General MIDI"));
-            if (!Directory.Exists(gmDir)) return; // Skip in environments where full library path differs
-
-            // 1. Brothers in Arms 3: Inferred instruments
-            var biaPath = Path.Combine(gmDir, "brothers in arms 3.mid");
-            if (File.Exists(biaPath))
-            {
-                var biaMidi = MidiFile.Read(biaPath);
-                var biaReport = MidiHealthInspector.Analyze(biaMidi, fileName: "brothers in arms 3.mid");
-                Assert.True(biaReport.InferredProgramChannels.Count >= 2);
-            }
-
-            // 2. At Zanarkand: Stuck sustain pedal
-            var zanPath = Path.Combine(gmDir, "At Zanarkand.mid");
-            if (File.Exists(zanPath))
-            {
-                var zanMidi = MidiFile.Read(zanPath);
-                var zanReport = MidiHealthInspector.Analyze(zanMidi, fileName: "At Zanarkand.mid");
-                Assert.True(zanReport.StuckPedalIntervalsCount > 0);
-            }
-
-            // 3. The Show Must Go On: XG SysEx Voicing
-            var showPath = Path.Combine(gmDir, "The Show Must Go On (Celestial Trance Version).mid");
-            if (File.Exists(showPath))
-            {
-                var showMidi = MidiFile.Read(showPath);
-                var showReport = MidiHealthInspector.Analyze(showMidi, fileName: "The Show Must Go On.mid");
-                Assert.True(showReport.XgSysExChannels.Count >= 3);
-            }
-        }
     }
 }

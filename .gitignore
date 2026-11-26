@@ -19,6 +19,7 @@ TestResults/
 
 # Temporary / Scratch Files
 scratch/
+.tmp_publish/
 *.tmp
 
 # User Output Directories & Third-Party Assets

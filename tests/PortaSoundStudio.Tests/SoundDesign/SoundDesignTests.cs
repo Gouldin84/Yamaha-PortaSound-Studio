@@ -367,7 +367,7 @@ namespace PSS790Player.Tests
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
             while (dir != null)
             {
-                var candidate = Path.Combine(dir.FullName, "src", "PSS790Player", "wwwroot", "js", "studioInterop.js");
+                var candidate = Path.Combine(dir.FullName, "src", "PortaSoundStudio", "wwwroot", "js", "studioInterop.js");
                 if (File.Exists(candidate))
                 {
                     appJsPath = candidate;

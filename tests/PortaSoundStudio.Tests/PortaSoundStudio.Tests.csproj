@@ -10,7 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\PSS790Player\PSS790Player.csproj" />
+    <ProjectReference Include="..\..\src\PortaSoundStudio\PortaSoundStudio.csproj" />
   </ItemGroup>
 
   <ItemGroup>

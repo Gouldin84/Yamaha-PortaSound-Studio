@@ -354,7 +354,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Multi-Agent Swarm Quality Audit & Engine Hardening**:
-  - Executed a comprehensive parallel swarm audit across all 113 General MIDI files, establishing the [Master Anomaly Matrix](docs/MASTER_ANOMALY_MATRIX.md).
+  - Executed a comprehensive parallel swarm audit across all 113 General MIDI files, establishing a Master Anomaly Matrix.
 - **Intelligent Track-Name Instrument Inference**:
   - Implemented `InferGmProgramFromText` in `Remapper.cs`. When active tracks contain note data without standard `ProgramChangeEvent`s (e.g. *Brothers In Arms 3*), the engine scans track metadata and text events for instrument keywords (`bass`, `guitar`, `strings`, `organ`, `vocal`, `choir`, `brass`, `flute`, `pad`) to automatically assign true GM instruments instead of falling back to Acoustic Piano.
 - **Yamaha XG Multi-Part SysEx Voicing Extractor**:

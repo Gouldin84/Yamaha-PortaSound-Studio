@@ -347,7 +347,7 @@ namespace PSS790Player.Tests
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
             while (dir != null)
             {
-                var candidate = Path.Combine(dir.FullName, "src", "PSS790Player");
+                var candidate = Path.Combine(dir.FullName, "src", "PortaSoundStudio");
                 if (Directory.Exists(candidate)) return candidate;
                 dir = dir.Parent;
             }

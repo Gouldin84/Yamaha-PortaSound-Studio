@@ -14,26 +14,21 @@ if exist "dist\PSS-Studio.exe" (
     exit
 )
 
-if exist "bin\Publish\PSS-Studio.exe" (
-    start "" "bin\Publish\PSS-Studio.exe"
+if exist "src\PortaSoundStudio\bin\Release\net8.0-windows\win-x64\PSS-Studio.exe" (
+    start "" "src\PortaSoundStudio\bin\Release\net8.0-windows\win-x64\PSS-Studio.exe"
     exit
 )
 
-if exist "src\PSS790Player\bin\Release\net8.0-windows\win-x64\PSS-Studio.exe" (
-    start "" "src\PSS790Player\bin\Release\net8.0-windows\win-x64\PSS-Studio.exe"
-    exit
-)
-
-if exist "src\PSS790Player\bin\Debug\net8.0-windows\win-x64\PSS-Studio.exe" (
-    start "" "src\PSS790Player\bin\Debug\net8.0-windows\win-x64\PSS-Studio.exe"
+if exist "src\PortaSoundStudio\bin\Debug\net8.0-windows\win-x64\PSS-Studio.exe" (
+    start "" "src\PortaSoundStudio\bin\Debug\net8.0-windows\win-x64\PSS-Studio.exe"
     exit
 )
 
 if exist "build.bat" (
     echo Build not found. Running build.bat first...
     call build.bat
-    if exist "bin\Publish\PSS-Studio.exe" (
-        start "" "bin\Publish\PSS-Studio.exe"
+    if exist "dist\PSS-Studio.exe" (
+        start "" "dist\PSS-Studio.exe"
     )
     exit
 )
