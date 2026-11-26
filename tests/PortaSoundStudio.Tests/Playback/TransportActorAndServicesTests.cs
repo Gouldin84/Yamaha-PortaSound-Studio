@@ -216,6 +216,61 @@ namespace PSS790Player.Tests
             Assert.Equal("C Maj / E", cOverE.ChordName);
         }
 
+        [Fact]
+        public void AppStateStore_ScopedChanged_PropagatesExactScopeAndManagesToasts()
+        {
+            var store = new AppStateStore();
+            var scopes = new List<StateScope>();
+            store.ScopedChanged += scope => scopes.Add(scope);
+
+            store.Mutate(s => s.ActiveTab = StudioTab.Recorder, StateScope.Shell);
+            store.Mutate(s => s.LibraryFilter = "gm", StateScope.Library);
+
+            Assert.Equal(2, scopes.Count);
+            Assert.Equal(StateScope.Shell, scopes[0]);
+            Assert.Equal(StateScope.Library, scopes[1]);
+            Assert.Equal(StudioTab.Recorder, store.ActiveTab);
+
+            store.AddToast("Model switched", ToastSeverity.Success);
+            Assert.Single(store.Toasts);
+            Guid toastId = store.Toasts[0].Id;
+
+            store.RemoveToast(toastId);
+            Assert.Empty(store.Toasts);
+        }
+
+        [Fact]
+        public void PlaybackCoordinator_GetFilteredSongList_HidesInactiveHardwareModel()
+        {
+            File.WriteAllBytes(Path.Combine(_gmDir, "gm_track.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            File.WriteAllBytes(Path.Combine(_pss790Dir, "790_track.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+            File.WriteAllBytes(Path.Combine(_pss680Dir, "680_track.mid"), new byte[] { 0x4D, 0x54, 0x68, 0x64 });
+
+            var store = new AppStateStore();
+            var library = new LibraryService(store);
+            var snapshot = library.BuildSnapshot(_gmDir, _pss790Dir, _pss680Dir);
+            store.Mutate(s =>
+            {
+                s.Library = snapshot;
+                s.LibraryFilter = "all";
+            }, StateScope.Library);
+
+            using var devices = new HardwareDeviceService(store);
+            using var playback = new PlaybackCoordinator(store, devices, library);
+
+            playback.SetActiveModel("pss790");
+            var visibleOn790 = playback.GetFilteredSongList();
+            Assert.Contains(visibleOn790, f => f.Format == "gm");
+            Assert.Contains(visibleOn790, f => f.Format == "pss790");
+            Assert.DoesNotContain(visibleOn790, f => f.Format == "pss680");
+
+            playback.SetActiveModel("pss680");
+            var visibleOn680 = playback.GetFilteredSongList();
+            Assert.Contains(visibleOn680, f => f.Format == "gm");
+            Assert.Contains(visibleOn680, f => f.Format == "pss680");
+            Assert.DoesNotContain(visibleOn680, f => f.Format == "pss790");
+        }
+
         private sealed class ThreadSafeMockDevice : Melanchall.DryWetMidi.Multimedia.IOutputDevice
         {
             public event EventHandler<Melanchall.DryWetMidi.Multimedia.MidiEventSentEventArgs>? EventSent;

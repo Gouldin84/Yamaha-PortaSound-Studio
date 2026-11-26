@@ -1,5 +1,4 @@
-@implements IDisposable
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject HardwareDeviceService Devices
 @inject RecorderService Recorder
 @inject IJSRuntime JS
@@ -362,6 +361,8 @@
 </section>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Recorder | StateScope.Shell;
+
     private string _searchQuery = string.Empty;
     private string _exportName = string.Empty;
     private string? _renamingPath;
@@ -369,6 +370,7 @@
 
     protected override void OnInitialized()
     {
+        base.OnInitialized();
         Recorder.InboundNoteVelocity += HandleInboundVelocity;
         Recorder.MetronomeBeatTriggered += HandleMetronomeBeat;
     }
@@ -410,7 +412,7 @@
         _renameDraft = string.Empty;
     }
 
-    public void Dispose()
+    protected override void OnDisposing()
     {
         Recorder.InboundNoteVelocity -= HandleInboundVelocity;
         Recorder.MetronomeBeatTriggered -= HandleMetronomeBeat;

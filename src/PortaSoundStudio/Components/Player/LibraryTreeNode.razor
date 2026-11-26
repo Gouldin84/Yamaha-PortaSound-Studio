@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject LibraryService Library
 
@@ -72,6 +72,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Library | StateScope.Shell | StateScope.Transport;
+
     [Parameter, EditorRequired] public FolderNode Node { get; set; } = default!;
 
     private IEnumerable<MidiFileItem> FilteredDirectFiles =>

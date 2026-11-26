@@ -5,18 +5,34 @@ using PSS790Player.Models;
 
 namespace PSS790Player.Services
 {
+    [Flags]
+    public enum StateScope
+    {
+        None = 0,
+        Shell = 1 << 0,
+        Library = 1 << 1,
+        Transport = 1 << 2,
+        Channels = 1 << 3,
+        SoundDesign = 1 << 4,
+        Recorder = 1 << 5,
+        Modals = 1 << 6,
+        All = Shell | Library | Transport | Channels | SoundDesign | Recorder | Modals
+    }
+
     /// <summary>
     /// Thread-safe reactive application state store for all Blazor UI components and background services.
-    /// Raises <see cref="Changed"/> whenever UI-bound properties update so Razor components can re-render cleanly.
+    /// Raises <see cref="ScopedChanged"/> and <see cref="Changed"/> whenever UI-bound properties update.
     /// </summary>
     public sealed class AppStateStore
     {
         private readonly object _gate = new();
 
         public event Action? Changed;
+        public event Action<StateScope>? ScopedChanged;
 
         // UI Shell & Navigation
         public StudioTab ActiveTab { get; set; } = StudioTab.Player;
+        public string? ActiveHeaderMenu { get; set; } // "model", "more", or null
         public string SysExViewMode { get; set; } = "fm"; // fm, vector, drums, vault
         public string ActiveModel { get; set; } = "pss790";
         public bool IsDarkTheme { get; set; } = true;
@@ -163,12 +179,13 @@ namespace PSS790Player.Services
         public HashSet<string> SelectedBatchPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool IsSelectMode { get; set; }
 
-        public void Mutate(Action<AppStateStore> updater)
+        public void Mutate(Action<AppStateStore> updater, StateScope scope = StateScope.All)
         {
             lock (_gate)
             {
                 updater(this);
             }
+            ScopedChanged?.Invoke(scope);
             Changed?.Invoke();
         }
 
@@ -184,7 +201,14 @@ namespace PSS790Player.Services
                     Toasts.RemoveAt(0);
                 }
             }
+            ScopedChanged?.Invoke(StateScope.Modals);
             Changed?.Invoke();
+
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(4500).ConfigureAwait(false);
+                RemoveToast(toast.Id);
+            });
         }
 
         public void RemoveToast(Guid id)
@@ -194,7 +218,11 @@ namespace PSS790Player.Services
             {
                 removed = Toasts.RemoveAll(t => t.Id == id) > 0;
             }
-            if (removed) Changed?.Invoke();
+            if (removed)
+            {
+                ScopedChanged?.Invoke(StateScope.Modals);
+                Changed?.Invoke();
+            }
         }
 
         private static List<DrummerTrackState> BuildDefaultDrummerRows()

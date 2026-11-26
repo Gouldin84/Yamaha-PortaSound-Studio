@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject SoundDesignService SoundDesign
 
@@ -97,7 +97,8 @@
                     }
                     else
                     {
-                        <select value="@ch.PssVoice"
+                        <select @key="@($"{State.ActiveModel}-{ch.Channel}")"
+                                value="@ch.PssVoice"
                                 @onchange="(e) => OnVoiceChanged(ch.Channel, e.Value?.ToString())"
                                 class="flex-1 min-w-0 bg-slate-900 border @(ch.IsOverridden ? "border-cyan-500 text-cyan-300 font-bold" : "border-slate-700 text-slate-200") rounded px-1 py-0.5 text-[10px] focus:outline-none focus:border-cyan-500 cursor-pointer truncate">
                             @foreach (var v in voices)
@@ -136,15 +137,20 @@
 </section>
 
 @code {
-    private static List<ChannelStateDto> DefaultEmptyChannels() =>
-        Enumerable.Range(0, 16).Select(ch => new ChannelStateDto
+    protected override StateScope SubscribedScopes => StateScope.Channels | StateScope.Transport | StateScope.Shell | StateScope.SoundDesign;
+
+    private List<ChannelStateDto> DefaultEmptyChannels()
+    {
+        bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+        return Enumerable.Range(0, 16).Select(ch => new ChannelStateDto
         {
             Channel = ch,
             Role = $"Channel {ch + 1}",
-            PssVoiceName = ch == 15 ? "Fixed Rhythm (Ch 16)" : "PIANO",
+            PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion (Ch 16)" : "Fixed Rhythm (Ch 16)") : (is680 ? "Piano" : "PIANO"),
             IsDrum = ch == 15,
             Volume = 100
         }).ToList();
+    }
 
     private void OnVoiceChanged(int channel, string? rawVal)
     {

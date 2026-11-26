@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject LibraryService Library
 
 @{
@@ -80,10 +80,17 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Shell;
+
     private bool _removeOrphans = true;
     private bool _pruneEmpty = true;
     private bool _forceAll;
 
-    protected override void OnInitialized() => Library.AnalyzeLibrarySync();
-    private void Close() => State.Mutate(s => s.ShowSyncModal = false);
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Library.AnalyzeLibrarySync();
+    }
+
+    private void Close() => State.Mutate(s => s.ShowSyncModal = false, StateScope.Modals);
 }

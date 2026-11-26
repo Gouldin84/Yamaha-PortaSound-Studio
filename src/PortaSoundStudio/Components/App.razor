@@ -1,20 +1,16 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject LibraryService Library
 @inject IJSRuntime JS
-@implements IDisposable
 
 <MainLayout />
 <ToastContainer />
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.None;
+
     private DotNetObjectReference<App>? _dotNetRef;
     private bool _jsInitialized;
-
-    protected override void OnInitialized()
-    {
-        State.Changed += OnStateChanged;
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -160,9 +156,8 @@
         _ = Playback.LoadFileAsync(songs[next].FullPath, autoPlay: false);
     }
 
-    public void Dispose()
+    protected override void OnDisposing()
     {
-        State.Changed -= OnStateChanged;
         _dotNetRef?.Dispose();
     }
 

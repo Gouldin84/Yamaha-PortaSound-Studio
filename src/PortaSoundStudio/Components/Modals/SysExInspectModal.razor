@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject SoundDesignService SoundDesign
 @inject IJSRuntime JS
 
@@ -57,6 +57,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.SoundDesign;
+
     private bool _copied;
 
     private void Close() => State.Mutate(s => s.InspectedSysEx = null);

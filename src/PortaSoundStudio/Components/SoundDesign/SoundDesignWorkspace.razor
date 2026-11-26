@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject SoundDesignService SoundDesign
 
 @{
@@ -82,5 +82,7 @@
 </section>
 
 @code {
-    private void SetViewMode(string mode) => State.Mutate(s => s.SysExViewMode = mode);
+    protected override StateScope SubscribedScopes => StateScope.SoundDesign | StateScope.Shell;
+
+    private void SetViewMode(string mode) => State.Mutate(s => s.SysExViewMode = mode, StateScope.SoundDesign);
 }

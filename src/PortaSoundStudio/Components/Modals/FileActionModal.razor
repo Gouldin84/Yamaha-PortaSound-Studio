@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject LibraryService Library
 
 @{
@@ -95,6 +95,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Library | StateScope.Shell;
+
     private string _inputName = string.Empty;
     private string _targetSubFolder = string.Empty;
     private bool _applyToLinked = true;

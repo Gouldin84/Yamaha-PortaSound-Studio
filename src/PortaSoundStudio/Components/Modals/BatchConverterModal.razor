@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject LibraryService Library
 
 @{
@@ -133,6 +133,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Shell;
+
     private readonly BatchConversionRequest _req = new();
-    private void Close() => State.Mutate(s => s.ShowBatchModal = false);
+    private void Close() => State.Mutate(s => s.ShowBatchModal = false, StateScope.Modals);
 }

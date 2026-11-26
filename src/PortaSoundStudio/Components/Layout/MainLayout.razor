@@ -1,7 +1,12 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 
-<div class="h-screen w-screen flex flex-col overflow-hidden">
+<div class="h-screen w-screen flex flex-col overflow-hidden relative">
     <HeaderBar />
+
+    @if (!string.IsNullOrEmpty(State.ActiveHeaderMenu))
+    {
+        <div class="fixed inset-0 z-30" @onclick="() => State.Mutate(s => s.ActiveHeaderMenu = null, StateScope.Shell)"></div>
+    }
 
     <main class="flex-1 min-h-0 flex p-2 sm:p-2.5 w-full overflow-hidden">
         @switch (State.ActiveTab)
@@ -20,3 +25,7 @@
 
     <ModalsContainer />
 </div>
+
+@code {
+    protected override StateScope SubscribedScopes => StateScope.Shell;
+}

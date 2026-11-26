@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 
 @{
     var song = State.LoadedSong;
@@ -57,5 +57,7 @@
 </div>
 
 @code {
-    private void Close() => State.Mutate(s => s.ShowHealthModal = false);
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Transport;
+
+    private void Close() => State.Mutate(s => s.ShowHealthModal = false, StateScope.Modals);
 }

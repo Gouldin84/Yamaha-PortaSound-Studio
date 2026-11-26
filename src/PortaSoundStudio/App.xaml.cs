@@ -14,6 +14,7 @@ namespace PSS790Player;
 public partial class App : Application
 {
     internal static string? SmokeMarkerPath { get; private set; }
+    internal static string? DiagMarkerPath { get; private set; }
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -22,7 +23,10 @@ public partial class App : Application
             if (string.Equals(e.Args[i], "--smoke", StringComparison.OrdinalIgnoreCase))
             {
                 SmokeMarkerPath = e.Args[i + 1];
-                break;
+            }
+            else if (string.Equals(e.Args[i], "--diag", StringComparison.OrdinalIgnoreCase))
+            {
+                DiagMarkerPath = e.Args[i + 1];
             }
         }
 

@@ -1,8 +1,11 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject LibraryService Library
 @inject IJSRuntime JS
-@implements IDisposable
+
+@{
+    bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+}
 
 <aside id="quickPickSidebar"
        class="shrink-0 glass-panel rounded-xl border border-slate-800/80 shadow-xl p-2.5 flex flex-col space-y-2 h-full max-h-full overflow-hidden @(State.IsSidebarCollapsed ? "sidebar-collapsed" : "")"
@@ -21,7 +24,7 @@
             <button id="btnToggleSelectMode" type="button" @onclick="ToggleSelectMode" title="Multi-Select Mode" class="w-6 h-6 flex items-center justify-center text-xs @(State.IsSelectMode ? "bg-cyan-600 text-white" : "text-slate-400 hover:text-white hover:bg-slate-800") transition rounded-lg">☑</button>
             <button id="btnCollapseAll" type="button" @onclick="ToggleCollapseAll" title="Collapse / Expand All Folders" class="w-6 h-6 flex items-center justify-center text-xs text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg font-mono">⊟</button>
             <span id="sidebarSongCount" class="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-cyan-400 border border-slate-700/60">
-                @State.Library.AllFiles.Count songs
+                @VisibleFiles.Count() songs
             </span>
             <button id="btnCloseSidebar" type="button" @onclick="() => State.Mutate(s => s.IsSidebarCollapsed = true)" title="Collapse Sidebar (Ctrl+B)" class="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white transition hover:bg-slate-800 rounded-lg">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,8 +55,14 @@
     <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
         @RenderCategorySection("cat:fav", "⭐ Favourites", "fav", FavoriteSongs, null)
         @RenderCategorySection("cat:gm", "🎼 General MIDI", "gm", State.Library.Gm.Files, State.Library.Gm.SubFolders, State.Library.Gm.Count, State.Library.Gm.FullPath)
-        @RenderCategorySection("cat:pss790", "🎹 Yamaha PSS-790", "pss790", State.Library.Pss790.Files, State.Library.Pss790.SubFolders, State.Library.Pss790.Count, State.Library.Pss790.FullPath)
-        @RenderCategorySection("cat:pss680", "⚡ Yamaha PSS-680", "pss680", State.Library.Pss680.Files, State.Library.Pss680.SubFolders, State.Library.Pss680.Count, State.Library.Pss680.FullPath)
+        @if (!is680)
+        {
+            @RenderCategorySection("cat:pss790", "🎹 Yamaha PSS-790", "pss790", State.Library.Pss790.Files, State.Library.Pss790.SubFolders, State.Library.Pss790.Count, State.Library.Pss790.FullPath)
+        }
+        else
+        {
+            @RenderCategorySection("cat:pss680", "⚡ Yamaha PSS-680", "pss680", State.Library.Pss680.Files, State.Library.Pss680.SubFolders, State.Library.Pss680.Count, State.Library.Pss680.FullPath)
+        }
     </div>
 
     <!-- Batch Selection Action Bar -->
@@ -141,6 +150,8 @@
     private const string CtxRename = "rename";
     private const string CtxDelete = "delete";
 
+    protected override StateScope SubscribedScopes => StateScope.Library | StateScope.Shell | StateScope.Transport;
+
     private DotNetObjectReference<LibrarySidebar>? _dotNetRef;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -158,10 +169,21 @@
 
     [JSInvokable]
     public void OnSidebarWidthChanged(int width) =>
-        State.Mutate(s => s.SidebarWidth = Math.Clamp(width, 260, 650));
+        State.Mutate(s => s.SidebarWidth = Math.Clamp(width, 260, 650), StateScope.Shell);
+
+    private IEnumerable<MidiFileItem> VisibleFiles
+    {
+        get
+        {
+            string hiddenFormat = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase)
+                ? "pss790"
+                : "pss680";
+            return State.Library.AllFiles.Where(f => !string.Equals(f.Format, hiddenFormat, StringComparison.OrdinalIgnoreCase));
+        }
+    }
 
     private List<MidiFileItem> FavoriteSongs =>
-        State.Library.AllFiles.Where(f => f.IsFavorite || State.Favorites.Contains(f.FullPath)).ToList();
+        VisibleFiles.Where(f => f.IsFavorite || State.Favorites.Contains(f.FullPath)).ToList();
 
     private RenderFragment RenderCategorySection(
         string key,
@@ -289,8 +311,9 @@
 
     private void AutoFitWidth()
     {
-        int maxLen = State.Library.AllFiles.Count == 0 ? 22 : State.Library.AllFiles.Max(f => f.FileName.Length);
-        State.Mutate(s => s.SidebarWidth = Math.Clamp(160 + (maxLen * 6), 280, 560));
+        var files = VisibleFiles.ToList();
+        int maxLen = files.Count == 0 ? 22 : files.Max(f => f.FileName.Length);
+        State.Mutate(s => s.SidebarWidth = Math.Clamp(160 + (maxLen * 6), 280, 560), StateScope.Shell);
     }
 
     private void ToggleBatchItem(string path, bool chk) => State.Mutate(s =>
@@ -364,5 +387,5 @@
         });
     }
 
-    public void Dispose() => _dotNetRef?.Dispose();
+    protected override void OnDisposing() => _dotNetRef?.Dispose();
 }

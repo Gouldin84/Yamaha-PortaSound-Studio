@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject LibraryService Library
 
@@ -172,6 +172,8 @@
 </section>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Transport | StateScope.Library | StateScope.Shell;
+
     private void ToggleCurrentFavorite()
     {
         if (State.LoadedSong != null && !string.IsNullOrEmpty(State.LoadedSong.FilePath))

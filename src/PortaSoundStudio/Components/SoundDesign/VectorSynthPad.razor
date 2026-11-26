@@ -1,5 +1,4 @@
-@implements IDisposable
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject SoundDesignService SoundDesign
 @inject IJSRuntime JS
 
@@ -155,6 +154,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.SoundDesign | StateScope.Shell;
+
     private DotNetObjectReference<VectorSynthPad>? _dotNetRef;
     private readonly HashSet<string> _collapsedCats = new(StringComparer.OrdinalIgnoreCase);
 
@@ -257,7 +258,7 @@
         SoundDesign.SetVectorPosition(x, y, true);
     }
 
-    public void Dispose()
+    protected override void OnDisposing()
     {
         _ = JS.InvokeVoidAsync("studioInterop.stopVectorOrbit");
         _dotNetRef?.Dispose();

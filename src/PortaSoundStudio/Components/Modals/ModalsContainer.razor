@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 
 @if (State.ShowBatchModal)
 {
@@ -35,4 +35,8 @@
 @if (State.ShowHardwareGuideModal)
 {
     <HardwareGuideModal />
+}
+
+@code {
+    protected override StateScope SubscribedScopes => StateScope.Modals;
 }

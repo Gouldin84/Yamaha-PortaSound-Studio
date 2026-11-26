@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject SoundDesignService SoundDesign
 
 @{
@@ -75,7 +75,10 @@
                         <div class="flex items-center flex-wrap gap-1" @onclick:stopPropagation="true">
                             <button type="button" @onclick="() => SoundDesign.InspectSysExDump(dump.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-indigo-600 text-indigo-300 hover:text-white text-[10px] font-semibold">🔍 Inspect</button>
                             <button type="button" @onclick="() => SoundDesign.ExtractSysExToMidi(dump.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-600 text-emerald-300 hover:text-white text-[10px] font-semibold">Extract .mid</button>
-                            <button type="button" @onclick="() => SoundDesign.LoadDrummerPatternFromSysEx(dump.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-amber-600 text-amber-300 hover:text-white text-[10px] font-semibold">03H Grid</button>
+                            @if (is680)
+                            {
+                                <button type="button" @onclick="() => SoundDesign.LoadDrummerPatternFromSysEx(dump.FilePath)" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-amber-600 text-amber-300 hover:text-white text-[10px] font-semibold">03H Grid</button>
+                            }
                             <button type="button" @onclick="() => BeginRename(dump)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]">✏️</button>
                             <button type="button" @onclick="() => SoundDesign.DeleteSysExDump(dump.FilePath)" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-rose-700 text-rose-400 hover:text-white text-[10px]">🗑</button>
                         </div>
@@ -225,6 +228,8 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.SoundDesign | StateScope.Shell;
+
     private string _searchQuery = string.Empty;
     private string? _selectedDumpPath;
     private string? _renamingPath;

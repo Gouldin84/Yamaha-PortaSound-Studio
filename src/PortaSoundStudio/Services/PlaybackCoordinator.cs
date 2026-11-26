@@ -96,7 +96,7 @@ namespace PSS790Player.Services
                 s.SelectedSongPath = filePath;
                 if (autoPlay) s.PlayingSongPath = filePath;
                 s.IsLoadingSong = true;
-            });
+            }, StateScope.Transport | StateScope.Library);
 
             // Stop active audio immediately on the Transport Actor before parsing/remapping
             await _devices.Player.StopAsync().ConfigureAwait(false);
@@ -179,7 +179,7 @@ namespace PSS790Player.Services
                     s.DurationSeconds = loadedState.DurationSeconds;
                     s.CurrentSeconds = 0;
                     s.IsLoadingSong = false;
-                });
+                }, StateScope.Transport | StateScope.Channels | StateScope.Library | StateScope.Shell);
 
                 if (autoPlay && !_userRequestedStop && seq == Interlocked.Read(ref _loadSequence))
                 {
@@ -298,7 +298,7 @@ namespace PSS790Player.Services
                 s.IsPlaying = false;
                 s.IsPaused = false;
                 s.CurrentSeconds = 0;
-            });
+            }, StateScope.Transport);
         }
 
         public void PanicStop() => Stop();
@@ -306,7 +306,7 @@ namespace PSS790Player.Services
         public void Seek(double seconds)
         {
             double clamped = Math.Max(0, seconds);
-            _state.Mutate(s => s.CurrentSeconds = clamped);
+            _state.Mutate(s => s.CurrentSeconds = clamped, StateScope.Transport);
             _ = _devices.Player.SeekAsync(TimeSpan.FromSeconds(clamped));
         }
 
@@ -314,13 +314,13 @@ namespace PSS790Player.Services
         {
             double clamped = Math.Clamp(speed, 0.25, 2.5);
             _devices.Player.SetSpeed(clamped);
-            _state.Mutate(s => s.Speed = clamped);
+            _state.Mutate(s => s.Speed = clamped, StateScope.Transport);
         }
 
         public void SetLoop(bool loop)
         {
             _devices.Player.SetLoop(loop);
-            _state.Mutate(s => s.LoopEnabled = loop);
+            _state.Mutate(s => s.LoopEnabled = loop, StateScope.Transport);
         }
 
         public void SetGmPassthrough(bool enabled)
@@ -684,14 +684,18 @@ namespace PSS790Player.Services
 
         public List<MidiFileItem> GetFilteredSongList()
         {
-            var all = _state.Library.AllFiles;
+            string hiddenFormat = string.Equals(_state.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase)
+                ? "pss790"
+                : "pss680";
+            var visible = _state.Library.AllFiles.Where(f => !string.Equals(f.Format, hiddenFormat, StringComparison.OrdinalIgnoreCase));
+
             IEnumerable<MidiFileItem> query = _state.LibraryFilter switch
             {
-                "gm" => all.Where(f => f.Format == "gm"),
-                "pss790" => all.Where(f => f.Format == "pss790"),
-                "pss680" => all.Where(f => f.Format == "pss680"),
-                "favorites" => all.Where(f => f.IsFavorite || _state.Favorites.Contains(f.FullPath)),
-                _ => all
+                "gm" => visible.Where(f => f.Format == "gm"),
+                "pss790" => visible.Where(f => f.Format == "pss790"),
+                "pss680" => visible.Where(f => f.Format == "pss680"),
+                "favorites" => visible.Where(f => f.IsFavorite || _state.Favorites.Contains(f.FullPath)),
+                _ => visible
             };
 
             if (!string.IsNullOrWhiteSpace(_state.SearchQuery))
@@ -844,7 +848,7 @@ namespace PSS790Player.Services
                 {
                     s.DurationSeconds = e.TotalTime.TotalSeconds;
                 }
-            });
+            }, StateScope.Transport);
         }
 
         private void OnPlayerPlaybackFinished(object? sender, EventArgs e)
@@ -898,7 +902,7 @@ namespace PSS790Player.Services
                 {
                     Array.Copy(activeCopy, s.ChannelActive, 16);
                     Array.Copy(velCopy, s.ChannelVelocities, 16);
-                });
+                }, StateScope.Channels);
             }
         }
 
@@ -913,7 +917,7 @@ namespace PSS790Player.Services
             {
                 Array.Clear(s.ChannelActive);
                 Array.Clear(s.ChannelVelocities);
-            });
+            }, StateScope.Channels);
         }
 
         private void OnHardwareModelAutoDetected(HardwareModel model) => SetActiveModel(model.ToModelKey());

@@ -72,7 +72,7 @@ namespace PSS790Player.Services
                 s.Favorites = favs;
                 s.LibraryRoot = AppPaths.BaseMidiDir;
                 s.DefaultLibraryRoot = AppPaths.DefaultBaseMidiDir;
-            });
+            }, StateScope.Library | StateScope.Shell);
         }
 
         public static CategoryTreeData BuildCategoryTree(

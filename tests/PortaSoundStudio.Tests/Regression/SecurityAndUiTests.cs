@@ -201,6 +201,32 @@ namespace PSS790Player.Tests
             Assert.Contains("SysExManager", sysexContent);
         }
 
+        [Fact]
+        public void BlazorHybrid_Assets_ReactiveScopesAndModelFilteringAreWired()
+        {
+            var srcDir = FindRepoSrcDir();
+            Assert.NotNull(srcDir);
+
+            var mainLayout = File.ReadAllText(Path.Combine(srcDir!, "Components", "Layout", "MainLayout.razor"));
+            Assert.Contains("@inherits StudioComponentBase", mainLayout);
+            Assert.Contains("StateScope.Shell", mainLayout);
+            Assert.Contains("ActiveHeaderMenu", mainLayout);
+
+            var headerBar = File.ReadAllText(Path.Combine(srcDir!, "Components", "Layout", "HeaderBar.razor"));
+            Assert.Contains("@inherits StudioComponentBase", headerBar);
+            Assert.Contains("StateScope.Shell", headerBar);
+            Assert.Contains("ActiveHeaderMenu", headerBar);
+
+            var librarySidebar = File.ReadAllText(Path.Combine(srcDir!, "Components", "Player", "LibrarySidebar.razor"));
+            Assert.Contains("@inherits StudioComponentBase", librarySidebar);
+            Assert.Contains("cat:pss790", librarySidebar);
+            Assert.Contains("cat:pss680", librarySidebar);
+            Assert.Contains("ActiveModel", librarySidebar);
+
+            var drumPads = File.ReadAllText(Path.Combine(srcDir!, "Components", "SoundDesign", "DrumPadsDeck.razor"));
+            Assert.Contains("@if (is680)", drumPads);
+        }
+
         private static string? FindRepoSrcDir()
         {
             var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);

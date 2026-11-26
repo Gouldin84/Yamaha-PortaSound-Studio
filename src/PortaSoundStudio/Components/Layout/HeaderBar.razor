@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject HardwareDeviceService Devices
 @inject LibraryService Library
 @inject PlaybackCoordinator Playback
@@ -28,18 +28,17 @@
                             @(IsPss680 ? "2-Op FM Engine" : "AWM Engine")
                         </span>
                     </div>
-                    <p id="activeModelSubtitle" class="hidden 2xl:block text-[10px] text-slate-400">Yamaha PortaSound Studio v3.0</p>
+                    <p id="activeModelSubtitle" class="hidden 2xl:block text-[10px] text-slate-400">Yamaha PortaSound Studio v3.0.1</p>
                 </div>
                 <svg id="modelDropdownChevron"
-                     class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-transform duration-200 ml-0.5 sm:ml-1 shrink-0 @(_showModelMenu ? "rotate-180" : "")"
+                     class="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-400 transition-transform duration-200 ml-0.5 sm:ml-1 shrink-0 @(ShowModelMenu ? "rotate-180" : "")"
                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                 </svg>
             </button>
 
-            @if (_showModelMenu)
+            @if (ShowModelMenu)
             {
-                <div class="fixed inset-0 z-40" @onclick="CloseMenus"></div>
                 <div id="modelDropdownMenu"
                      class="absolute left-0 top-full mt-1.5 w-80 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl shadow-cyan-950/30 p-2 z-50 transition-all duration-150"
                      role="menu">
@@ -248,9 +247,8 @@
                 </svg>
             </button>
 
-            @if (_showMoreMenu)
+            @if (ShowMoreMenu)
             {
-                <div class="fixed inset-0 z-40" @onclick="CloseMenus"></div>
                 <div id="moreToolsDropdownMenu"
                      class="absolute right-0 top-full mt-1.5 w-60 rounded-2xl bg-slate-950/95 backdrop-blur-xl border border-slate-800 shadow-2xl p-1.5 z-50"
                      role="menu">
@@ -283,37 +281,38 @@
 </header>
 
 @code {
-    private bool _showModelMenu;
-    private bool _showMoreMenu;
+    protected override StateScope SubscribedScopes => StateScope.Shell | StateScope.Library;
 
+    private bool ShowModelMenu => State.ActiveHeaderMenu == "model";
+    private bool ShowMoreMenu => State.ActiveHeaderMenu == "more";
     private bool IsPss680 => string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
-    private void ToggleModelMenu()
-    {
-        _showMoreMenu = false;
-        _showModelMenu = !_showModelMenu;
-    }
+    private void ToggleModelMenu() =>
+        State.Mutate(s => s.ActiveHeaderMenu = s.ActiveHeaderMenu == "model" ? null : "model", StateScope.Shell);
 
-    private void ToggleMoreMenu()
-    {
-        _showModelMenu = false;
-        _showMoreMenu = !_showMoreMenu;
-    }
+    private void ToggleMoreMenu() =>
+        State.Mutate(s => s.ActiveHeaderMenu = s.ActiveHeaderMenu == "more" ? null : "more", StateScope.Shell);
 
-    private void CloseMenus()
-    {
-        _showModelMenu = false;
-        _showMoreMenu = false;
-    }
+    private void CloseMenus() =>
+        State.Mutate(s => s.ActiveHeaderMenu = null, StateScope.Shell);
 
     private async Task SelectModel(string model)
     {
         CloseMenus();
         Playback.SetActiveModel(model);
-        await JS.InvokeVoidAsync("studioInterop.applyBodyPreferences", State.IsDarkTheme, State.HandheldMode, model);
+        try
+        {
+            await JS.InvokeVoidAsync("studioInterop.applyBodyPreferences", State.IsDarkTheme, State.HandheldMode, model);
+        }
+        catch { }
     }
 
-    private void SetTab(StudioTab tab) => State.Mutate(s => s.ActiveTab = tab);
+    private void SetTab(StudioTab tab) =>
+        State.Mutate(s =>
+        {
+            s.ActiveHeaderMenu = null;
+            s.ActiveTab = tab;
+        }, StateScope.Shell);
 
     private void OnOutputDeviceChanged(ChangeEventArgs e)
     {

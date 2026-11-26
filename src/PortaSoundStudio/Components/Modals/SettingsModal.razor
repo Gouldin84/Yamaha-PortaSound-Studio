@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 @inject LibraryService Library
 
 <div id="settingsModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
@@ -54,9 +54,15 @@
 </div>
 
 @code {
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Library;
+
     private string _rootDraft = string.Empty;
 
-    protected override void OnInitialized() => _rootDraft = State.LibraryRoot;
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _rootDraft = State.LibraryRoot;
+    }
 
     private void Browse()
     {

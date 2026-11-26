@@ -1,4 +1,4 @@
-@inject AppStateStore State
+@inherits StudioComponentBase
 
 <div id="hardwareGuideModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-3">
     <div class="glass-panel p-5 sm:p-6 rounded-2xl border border-slate-800 max-w-2xl w-full mx-auto shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
@@ -48,5 +48,7 @@
 </div>
 
 @code {
-    private void Close() => State.Mutate(s => s.ShowHardwareGuideModal = false);
+    protected override StateScope SubscribedScopes => StateScope.Modals | StateScope.Shell;
+
+    private void Close() => State.Mutate(s => s.ShowHardwareGuideModal = false, StateScope.Modals);
 }

@@ -389,7 +389,7 @@ namespace PSS790Player.Services
                             s.ActiveInboundNotes.Remove(e.NoteNumber);
                     }
                 }
-            });
+            }, StateScope.Recorder);
 
             if (e.IsActive && e.Velocity > 0)
             {
@@ -416,7 +416,7 @@ namespace PSS790Player.Services
                         s.ActiveInboundNotes.Clear();
                     }
                 }
-            });
+            }, StateScope.Recorder | StateScope.Shell);
 
             if (e.State == RecorderState.CountIn && e.CountInBeat > 0 && e.CountInBeat != _lastCountInBeat)
             {
@@ -445,7 +445,7 @@ namespace PSS790Player.Services
                 s.RecorderNoteCount = e.NoteCount;
                 s.RecorderBar = e.CurrentBar;
                 s.RecorderBeat = e.CurrentBeat;
-            });
+            }, StateScope.Recorder);
 
             if (beatChanged && _state.RecorderState == RecorderState.Recording && _state.RecorderMetronomeEnabled)
             {
