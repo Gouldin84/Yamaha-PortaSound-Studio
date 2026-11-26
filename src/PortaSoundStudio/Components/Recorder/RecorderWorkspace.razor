@@ -17,16 +17,16 @@
 
 <section class="w-full h-full flex flex-col lg:flex-row gap-3 min-h-0 overflow-hidden">
     <!-- Left Sidebar: Recorded Takes Library -->
-    <aside id="recordingsSidebar" class="shrink-0 flex flex-col glass-panel rounded-2xl p-2.5 space-y-2 h-64 lg:h-full z-10 select-none w-full lg:w-72 xl:w-80 overflow-hidden">
-        <div class="flex items-center justify-between pb-1.5 border-b border-slate-800/80 shrink-0">
+    <aside id="recordingsSidebar" class="shrink-0 flex flex-col hw-panel rounded-2xl p-2.5 space-y-2 h-64 lg:h-full z-10 select-none w-full lg:w-72 xl:w-80 overflow-hidden">
+        <div class="flex items-center justify-between pb-1.5 border-b shrink-0" style="border-color: var(--panel-border);">
             <div class="flex items-center space-x-2">
-                <div class="w-6 h-6 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs">🎙️</div>
-                <span class="text-xs font-bold uppercase tracking-wider text-slate-200">Recorded Takes</span>
-                <span class="text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-800 text-rose-400 border border-slate-700">@filteredTakes.Count</span>
+                <div class="w-6 h-6 rounded-lg bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs"><StudioIcon Name="recorder" Class="w-3.5 h-3.5" /></div>
+                <span class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-hi);">Recorded Takes</span>
+                <span class="hw-bay text-[10px] font-mono font-bold px-2 py-0.2 rounded-full text-rose-400">@filteredTakes.Count</span>
             </div>
             <div class="flex items-center space-x-1">
-                <button type="button" @onclick="() => Recorder.OpenRecordingsFolder()" title="Open Recordings Folder" class="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-amber-400 border border-slate-700/60 transition active:scale-95">📁</button>
-                <button type="button" @onclick="() => Recorder.RefreshRecordingsLibrary()" title="Refresh Recordings" class="p-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-cyan-400 border border-slate-700/60 transition active:scale-95">↻</button>
+                <button type="button" @onclick="() => Recorder.OpenRecordingsFolder()" title="Open Recordings Folder" class="hw-btn w-7 h-7 rounded-lg flex items-center justify-center text-amber-400"><StudioIcon Name="folder" Class="w-3.5 h-3.5" /></button>
+                <button type="button" @onclick="() => Recorder.RefreshRecordingsLibrary()" title="Refresh Recordings" class="hw-btn w-7 h-7 rounded-lg flex items-center justify-center" style="color: var(--acc-hi);"><StudioIcon Name="refresh" Class="w-3.5 h-3.5" /></button>
             </div>
         </div>
 
@@ -36,8 +36,8 @@
                    value="@_searchQuery"
                    @oninput="(e) => _searchQuery = e.Value?.ToString() ?? string.Empty"
                    placeholder="Filter recorded takes..."
-                   class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition" />
-            <svg class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   class="hw-input w-full pl-8 pr-3 py-1.5 rounded-xl text-xs" />
+            <svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5" style="color: var(--text-lo);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
         </div>
@@ -79,7 +79,7 @@
                         <div class="flex items-center flex-wrap gap-1">
                             @if (isPreviewing)
                             {
-                                <button type="button" @onclick="() => Recorder.StopPreview()" class="px-2 py-0.5 rounded-lg bg-rose-600 text-white text-[10px] font-bold">Stop</button>
+                                <button type="button" @onclick="() => Recorder.StopPreview()" class="hw-key-rose px-2 py-0.5 rounded-lg text-[10px] font-bold">Stop</button>
                             }
                             else
                             {
@@ -100,16 +100,17 @@
     <!-- Right Main Recorder Console -->
     <div class="flex-1 min-w-0 h-full flex flex-col space-y-3 overflow-y-auto custom-scrollbar pr-0.5">
         <!-- Toolbar -->
-        <div class="glass-panel p-3 rounded-xl border border-slate-800/80 shadow-lg flex flex-wrap items-center justify-between gap-2">
+        <div class="hw-panel p-3 flex flex-wrap items-center justify-between gap-2">
             <div class="flex flex-wrap items-center gap-2">
                 <!-- MIDI In Port -->
-                <div class="flex items-center space-x-1.5 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-700/80">
+                <div class="hw-bay flex items-center space-x-1.5 px-2.5 py-1 rounded-xl">
                     <span class="w-2 h-2 rounded-full @(string.IsNullOrEmpty(State.SelectedInputDevice) ? "bg-rose-500" : "bg-emerald-500 animate-pulse-slow")"></span>
-                    <span class="text-[10px] font-bold uppercase text-slate-400">MIDI In:</span>
+                    <span class="text-[10px] font-bold uppercase" style="color: var(--text-mid);">MIDI In:</span>
                     <select id="inputDeviceSelect"
                             value="@(State.SelectedInputDevice ?? "")"
                             @onchange="(e) => Devices.SelectInputDevice(e.Value?.ToString())"
-                            class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer max-w-[180px] truncate">
+                            class="bg-transparent text-xs font-semibold focus:outline-none cursor-pointer max-w-[180px] truncate"
+                            style="color: var(--text-hi);">
                         @if (State.InputDevices.Count == 0)
                         {
                             <option value="">No MIDI Inputs Detected</option>
@@ -126,7 +127,7 @@
                 </div>
 
                 <!-- MIDI Thru + Loop Guard -->
-                <label class="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-300 cursor-pointer">
+                <label class="hw-bay flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-xs cursor-pointer" style="color: var(--text-hi);">
                     <input type="checkbox"
                            checked="@State.RecorderMidiThru"
                            @onchange="(e) => Recorder.SetMidiThru(e.Value is bool b && b)"
@@ -136,64 +137,65 @@
 
                 <span id="loopGuardBadge"
                       title="@(is680 ? "Loop Guard: Prevents feedback loops between PSS-680 OUT and IN" : "Loop Guard: Prevents feedback loops between PSS-790 OUT and IN")"
-                      class="px-2 py-1 rounded-lg text-[10px] font-bold border @(State.RecorderMidiThru ? "bg-amber-950/60 text-amber-300 border-amber-700" : "bg-emerald-950/50 text-emerald-300 border-emerald-800/60")">
-                    @(State.RecorderMidiThru ? "⚠ Loop Guard Active (Turn Local OFF on Synth)" : "🛡 Loop Guard Safe")
+                      class="hw-bay px-2 py-1 rounded-xl text-[10px] font-bold @(State.RecorderMidiThru ? "text-amber-500" : "text-emerald-500")">
+                    @(State.RecorderMidiThru ? "Loop Guard Active (Local OFF)" : "Loop Guard Safe")
                 </span>
             </div>
 
             <div class="flex flex-wrap items-center gap-2">
                 <!-- BPM Control -->
-                <div class="flex items-center space-x-1 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
-                    <span class="text-[10px] font-bold text-slate-400">BPM</span>
-                    <button type="button" @onclick="() => Recorder.SetBpm(State.RecorderBpm - 5)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">-</button>
+                <div class="hw-bay flex items-center space-x-1 rounded-xl px-2 py-1">
+                    <span class="text-[10px] font-bold" style="color: var(--text-mid);">BPM</span>
+                    <button type="button" @onclick="() => Recorder.SetBpm(State.RecorderBpm - 5)" class="hw-btn w-5 h-5 rounded text-xs font-bold flex items-center justify-center">-</button>
                     <input type="number" min="40" max="240" value="@State.RecorderBpm"
                            @onchange="(e) => { if (int.TryParse(e.Value?.ToString(), out int b)) Recorder.SetBpm(b); }"
-                           class="w-12 bg-slate-950 border border-slate-700 rounded text-center text-xs font-mono font-bold text-cyan-300" />
-                    <button type="button" @onclick="() => Recorder.SetBpm(State.RecorderBpm + 5)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200">+</button>
+                           class="hw-vfd w-12 rounded text-center text-xs font-mono font-bold" />
+                    <button type="button" @onclick="() => Recorder.SetBpm(State.RecorderBpm + 5)" class="hw-btn w-5 h-5 rounded text-xs font-bold flex items-center justify-center">+</button>
                 </div>
 
-                <label class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300 cursor-pointer">
+                <label class="hw-bay flex items-center space-x-1 px-2 py-1 rounded-xl text-[11px] cursor-pointer font-medium" style="color: var(--text-hi);">
                     <input type="checkbox" checked="@State.RecorderCountIn" @onchange="(e) => Recorder.SetCountIn(e.Value is bool b && b)" class="accent-cyan-500" />
                     <span>Count-in</span>
                 </label>
 
-                <label class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300 cursor-pointer">
+                <label class="hw-bay flex items-center space-x-1 px-2 py-1 rounded-xl text-[11px] cursor-pointer font-medium" style="color: var(--text-hi);">
                     <input type="checkbox" checked="@State.RecorderMetronomeEnabled" @onchange="(e) => Recorder.SetMetronomeEnabled(e.Value is bool b && b)" class="accent-cyan-500" />
                     <span>Click</span>
                 </label>
 
-                <label class="flex items-center space-x-1 px-2 py-1 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300 cursor-pointer">
+                <label class="hw-bay flex items-center space-x-1 px-2 py-1 rounded-xl text-[11px] cursor-pointer font-medium" style="color: var(--text-hi);">
                     <input type="checkbox" checked="@State.RecorderAutoTrim" @onchange="(e) => Recorder.SetAutoTrim(e.Value is bool b && b)" class="accent-cyan-500" />
                     <span>Auto-Trim</span>
                 </label>
 
-                <button type="button" @onclick="ToggleGuide" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-semibold text-cyan-300 border border-slate-700 transition">
-                    @(State.ShowStudioHardwareGuide ? "Hide Guide" : "📖 Capture Guide")
+                <button type="button" @onclick="ToggleGuide" class="hw-btn px-2.5 py-1 rounded-xl text-[11px] font-semibold flex items-center space-x-1" style="color: var(--acc-hi);">
+                    <StudioIcon Name="guide" Class="w-3.5 h-3.5" />
+                    <span>@(State.ShowStudioHardwareGuide ? "Hide Guide" : "Capture Guide")</span>
                 </button>
             </div>
         </div>
 
         @if (State.ShowStudioHardwareGuide)
         {
-            <div class="glass-panel p-3.5 rounded-xl border border-cyan-500/30 bg-slate-900/90 space-y-2 text-xs">
-                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <div class="font-bold text-cyan-300">📖 Hardware Recording Setup Guide</div>
-                    <div class="flex items-center space-x-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+            <div class="hw-panel p-3.5 space-y-2 text-xs">
+                <div class="flex items-center justify-between border-b pb-2" style="border-color: var(--panel-border);">
+                    <div class="font-bold" style="color: var(--acc-hi);">Hardware Recording Setup Guide</div>
+                    <div class="hw-bay flex items-center space-x-1 p-0.5 rounded-lg">
                         <button type="button" @onclick='() => State.Mutate(s => s.StudioGuideModelTab = "pss790")'
-                                class="px-2 py-0.5 rounded text-[10px] font-bold @(State.StudioGuideModelTab != "pss680" ? "bg-cyan-600 text-white" : "text-slate-400")">PSS-790</button>
+                                class="px-2 py-0.5 rounded text-[10px] font-bold @(State.StudioGuideModelTab != "pss680" ? "hw-key-cyan" : "hw-tab-btn")">PSS-790</button>
                         <button type="button" @onclick='() => State.Mutate(s => s.StudioGuideModelTab = "pss680")'
-                                class="px-2 py-0.5 rounded text-[10px] font-bold @(State.StudioGuideModelTab == "pss680" ? "bg-amber-600 text-white" : "text-slate-400")">PSS-680</button>
+                                class="px-2 py-0.5 rounded text-[10px] font-bold @(State.StudioGuideModelTab == "pss680" ? "hw-key-amber" : "hw-tab-btn")">PSS-680</button>
                     </div>
                 </div>
                 @if (State.StudioGuideModelTab == "pss680")
                 {
-                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                    <p class="text-[11px] leading-relaxed" style="color: var(--text-mid);">
                         Connect PSS-680 <strong>MIDI OUT</strong> &rarr; USB Interface <strong>MIDI IN</strong>. Play directly on the keys or hit Start on an internal rhythm/song memory bank. Turn <strong>Local Control OFF</strong> if using MIDI Thru.
                     </p>
                 }
                 else
                 {
-                    <p class="text-[11px] text-slate-300 leading-relaxed">
+                    <p class="text-[11px] leading-relaxed" style="color: var(--text-mid);">
                         Connect PSS-790 <strong>MIDI OUT</strong> &rarr; USB Interface <strong>MIDI IN</strong>. Ideal for capturing live performances or transferring internal 8-track Song Memory onto PC in real time!
                     </p>
                 }
@@ -228,7 +230,7 @@
                     <button type="button"
                             disabled="@isRecordingOrCountIn"
                             @onclick="() => _ = Recorder.StartRecordingAsync()"
-                            class="flex-1 py-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 disabled:opacity-40 text-white font-bold text-xs shadow-lg shadow-rose-600/25 flex items-center justify-center space-x-1.5 transition active:scale-95">
+                            class="hw-key-rose flex-1 py-2 rounded-xl disabled:opacity-40 font-bold text-xs flex items-center justify-center space-x-1.5">
                         <StudioIcon Name="recorder" Class="w-3.5 h-3.5" />
                         <span>@(isRecordingOrCountIn ? "Recording..." : "Start Recording")</span>
                     </button>
@@ -288,11 +290,11 @@
         </div>
 
         <!-- Post-Take Editor & Save/Export Panel -->
-        <div class="glass-panel p-4 rounded-xl border border-slate-800/80 space-y-3">
-            <div class="flex items-center justify-between flex-wrap gap-2 border-b border-slate-800 pb-2">
+        <div class="hw-panel p-4 space-y-3">
+            <div class="flex items-center justify-between flex-wrap gap-2 border-b pb-2" style="border-color: var(--panel-border);">
                 <div>
-                    <h3 class="text-xs font-bold uppercase tracking-wider text-white">Post-Take Master &amp; Export</h3>
-                    <p class="text-[11px] text-slate-400">
+                    <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-hi);">Post-Take Master &amp; Export</h3>
+                    <p class="text-[11px]" style="color: var(--text-mid);">
                         @if (State.LastTakeStats != null)
                         {
                             <span>Last Take: @State.LastTakeStats.NoteCount notes (@State.LastTakeStats.DurationFormatted)</span>
@@ -304,11 +306,11 @@
                     </p>
                 </div>
                 <div class="flex items-center flex-wrap gap-1.5">
-                    <button type="button" @onclick="() => Recorder.TrimCurrentTake()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition">✂ Trim Silence</button>
-                    <button type="button" @onclick="() => Recorder.QuantizeCurrentTake(16)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-slate-700 transition">Quantize 1/16</button>
-                    <button type="button" @onclick="() => Recorder.QuantizeCurrentTake(8)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-cyan-300 border border-slate-700 transition">Quantize 1/8</button>
-                    <button type="button" @onclick="() => Recorder.PreviewCurrentTake()" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition">▶ Audition</button>
-                    <button type="button" @onclick="() => Recorder.StopPreview()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600 text-xs font-semibold text-slate-200 border border-slate-700 transition">⏹ Stop</button>
+                    <button type="button" @onclick="() => Recorder.TrimCurrentTake()" class="hw-btn px-2.5 py-1 rounded-xl text-xs font-semibold">✂ Trim Silence</button>
+                    <button type="button" @onclick="() => Recorder.QuantizeCurrentTake(16)" class="hw-btn px-2.5 py-1 rounded-xl text-xs font-semibold" style="color: var(--acc-hi);">Quantize 1/16</button>
+                    <button type="button" @onclick="() => Recorder.QuantizeCurrentTake(8)" class="hw-btn px-2.5 py-1 rounded-xl text-xs font-semibold" style="color: var(--acc-hi);">Quantize 1/8</button>
+                    <button type="button" @onclick="() => Recorder.PreviewCurrentTake()" class="hw-key-emerald px-3 py-1 rounded-xl text-xs font-bold">▶ Audition</button>
+                    <button type="button" @onclick="() => Recorder.StopPreview()" class="hw-btn px-2.5 py-1 rounded-xl text-xs font-semibold">⏹ Stop</button>
                 </div>
             </div>
 
@@ -317,43 +319,44 @@
                        value="@_exportName"
                        @oninput="(e) => _exportName = e.Value?.ToString() ?? string.Empty"
                        placeholder="Custom take filename (optional)..."
-                       class="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500" />
+                       class="hw-input px-3 py-2.5 rounded-xl text-xs" />
                 <button id="btnSaveTakePss" type="button" @onclick="() => Recorder.SaveTake(_exportName, isNativePss: true)"
-                        class="p-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-left transition active:scale-95">
+                        class="hw-key-cyan p-2.5 rounded-xl text-left">
                     <div id="lblSaveTakePss" class="text-xs font-bold">@(is680 ? "Save Native (PSS-680 Ready)" : "Save Native (PSS-790 Ready)")</div>
-                    <div id="descSaveTakePss" class="text-[10px] text-cyan-100/80">Saves 1:1 capture directly into library.</div>
+                    <div id="descSaveTakePss" class="text-[10px] opacity-90">Saves 1:1 capture directly into library.</div>
                 </button>
                 <div class="flex items-center space-x-2">
                     <button id="btnSaveTakeGm" type="button" @onclick="() => Recorder.SaveTake(_exportName, isNativePss: false)"
-                            class="flex-1 p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-left transition active:scale-95">
+                            class="hw-key-indigo flex-1 p-2.5 rounded-xl text-left">
                         <div class="text-xs font-bold">Export General MIDI</div>
-                        <div id="descSaveTakeGm" class="text-[10px] text-indigo-100/80">Reverse-remaps Ch 16 drums &rarr; Ch 10.</div>
+                        <div id="descSaveTakeGm" class="text-[10px] opacity-90">Reverse-remaps Ch 16 drums &rarr; Ch 10.</div>
                     </button>
                     <button type="button" @onclick="() => Recorder.SendTakeToPlayer(_exportName)"
                             title="Load current take directly into Player Workspace"
-                            class="px-3 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white border border-slate-700 transition">
-                        🎹 Player
+                            class="hw-btn px-3 py-3 rounded-xl text-xs font-bold flex items-center space-x-1 shrink-0">
+                        <StudioIcon Name="player" Class="w-3.5 h-3.5" />
+                        <span>Player</span>
                     </button>
                 </div>
             </div>
         </div>
 
         <!-- 16-Channel Live Inbound LED Matrix -->
-        <div class="glass-panel p-3.5 rounded-xl border border-slate-800/80 space-y-2">
-            <h3 class="text-[10px] font-bold uppercase tracking-wider text-slate-400">16-Channel Live Inbound MIDI Monitor</h3>
+        <div class="hw-panel p-3.5 space-y-2">
+            <h3 class="text-[10px] font-bold uppercase tracking-wider" style="color: var(--text-mid);">16-Channel Live Inbound MIDI Monitor</h3>
             <div class="grid grid-cols-4 sm:grid-cols-8 xl:grid-cols-16 gap-1.5">
                 @for (int ch = 0; ch < 16; ch++)
                 {
                     bool active = State.RecorderChannelActive[ch];
                     byte vel = State.RecorderChannelVelocity[ch];
                     byte? note = State.RecorderChannelNote[ch];
-                    <div class="p-1.5 rounded-lg bg-slate-900 border @(active ? "border-cyan-400 bg-cyan-950/30" : "border-slate-800") text-center space-y-0.5">
+                    <div class="glass-card @(active ? "is-live-glow" : "") p-1.5 rounded-lg text-center space-y-0.5">
                         <div class="flex items-center justify-center space-x-1">
                             <span class="meter-led @(active ? (ch == 15 || ch == 9 ? "drum-active" : "active") : "") w-2 h-2 rounded-full bg-slate-800"></span>
-                            <span class="text-[10px] font-bold text-slate-200">@(ch + 1)</span>
+                            <span class="text-[10px] font-bold" style="color: var(--text-hi);">@(ch + 1)</span>
                         </div>
-                        <div class="text-[9px] font-mono text-slate-400">@(note.HasValue ? $"N{note}" : "--")</div>
-                        <div class="text-[8px] font-mono text-cyan-400">@(active ? $"v{vel}" : "·")</div>
+                        <div class="text-[9px] font-mono" style="color: var(--text-mid);">@(note.HasValue ? $"N{note}" : "--")</div>
+                        <div class="text-[8px] font-mono" style="color: var(--acc-hi);">@(active ? $"v{vel}" : "·")</div>
                     </div>
                 }
             </div>

@@ -85,7 +85,7 @@
                         <div class="text-[10px] text-slate-400">Scan source `.mid` files for polyphony bursts, dangling bends &amp; program coverage</div>
                     </div>
                     <button type="button" disabled="@audit.IsRunning" @onclick="() => Library.RunHealthAudit()"
-                            class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-xs font-bold text-white">
+                            class="hw-key-indigo px-3 py-1.5 rounded-xl disabled:opacity-40 text-xs font-bold">
                         @(audit.IsRunning ? $"Scanning {audit.ScannedCount}/{audit.TotalCount}..." : "Run Library Health Audit")
                     </button>
                 </div>
@@ -118,15 +118,15 @@
         </div>
 
         <!-- Footer -->
-        <div class="flex items-center justify-end space-x-2 border-t border-slate-800 pt-3 shrink-0">
+        <div class="flex items-center justify-end space-x-2 border-t pt-3 shrink-0" style="border-color: var(--panel-border);">
             @if (p.IsRunning)
             {
-                <button type="button" @onclick="() => Library.CancelBatchConversion()" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-xs font-bold text-white">Cancel Batch</button>
+                <button type="button" @onclick="() => Library.CancelBatchConversion()" class="hw-key-rose px-4 py-2 rounded-xl text-xs font-bold">Cancel Batch</button>
             }
             else
             {
-                <button type="button" @onclick="Close" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Close</button>
-                <button type="button" @onclick="() => Library.StartBatchConversion(_req)" class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-xs font-bold text-white shadow-lg">⚡ Start Batch Convert</button>
+                <button type="button" @onclick="Close" class="hw-btn px-4 py-2 rounded-xl text-xs font-semibold">Close</button>
+                <button type="button" @onclick="() => Library.StartBatchConversion(_req)" class="hw-key-amber px-5 py-2 rounded-xl text-xs font-bold">⚡ Start Batch Convert</button>
             }
         </div>
     </div>

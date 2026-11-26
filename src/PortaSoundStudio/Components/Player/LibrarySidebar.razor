@@ -68,20 +68,19 @@
     <!-- Batch Selection Action Bar -->
     @if (State.IsSelectMode && State.SelectedBatchPaths.Count > 0)
     {
-        <div id="sidebarBatchBar" class="shrink-0 p-2 rounded-xl bg-slate-900/95 border border-cyan-500/40 shadow-xl space-y-1.5 select-none">
+        <div id="sidebarBatchBar" class="hw-panel shrink-0 p-2 rounded-xl space-y-1.5 select-none">
             <div class="flex items-center justify-between text-xs">
-                <span class="font-bold text-cyan-400 text-[11px]">@State.SelectedBatchPaths.Count selected</span>
+                <span class="font-bold text-[11px]" style="color: var(--acc-hi);">@State.SelectedBatchPaths.Count selected</span>
                 <div class="space-x-2">
-                    <button type="button" @onclick="SelectAllVisible" class="text-[10px] text-slate-400 hover:text-cyan-300">All</button>
-                    <span class="text-slate-600 text-[10px]">•</span>
-                    <button type="button" @onclick="() => State.Mutate(s => s.SelectedBatchPaths.Clear())" class="text-[10px] text-slate-400 hover:text-rose-400">Clear</button>
+                    <button type="button" @onclick="SelectAllVisible" class="hw-btn px-1.5 py-0.5 rounded text-[10px]">All</button>
+                    <button type="button" @onclick="() => State.Mutate(s => s.SelectedBatchPaths.Clear())" class="hw-close-chip px-1.5 py-0.5 rounded text-[10px]">Clear</button>
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-1.5">
-                <button id="btnBatchMove" type="button" @onclick="OpenBatchMove" class="px-2 py-1.5 rounded-lg bg-cyan-600/90 hover:bg-cyan-500 text-white font-semibold text-xs flex items-center justify-center space-x-1 transition">
+                <button id="btnBatchMove" type="button" @onclick="OpenBatchMove" class="hw-key-cyan px-2 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1">
                     <span>📦</span><span>Move</span>
                 </button>
-                <button id="btnBatchDelete" type="button" @onclick="OpenBatchDelete" class="px-2 py-1.5 rounded-lg bg-rose-600/90 hover:bg-rose-500 text-white font-semibold text-xs flex items-center justify-center space-x-1 transition">
+                <button id="btnBatchDelete" type="button" @onclick="OpenBatchDelete" class="hw-key-rose px-2 py-1.5 rounded-lg font-semibold text-xs flex items-center justify-center space-x-1">
                     <span>🗑️</span><span>Delete</span>
                 </button>
             </div>

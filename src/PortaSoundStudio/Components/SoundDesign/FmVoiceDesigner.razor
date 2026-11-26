@@ -84,7 +84,7 @@
                            value="@fm.Name"
                            @oninput="(e) => UpdateFm(v => v.Name = e.Value?.ToString() ?? string.Empty, liveSync: false)"
                            placeholder="Voice Patch Name"
-                           class="w-44 sm:w-56 px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-amber-500" />
+                           class="hw-input w-44 sm:w-56 px-2.5 py-1 rounded-xl text-xs font-bold" />
 
                     <!-- Bank 1-5 Selector -->
                     <div class="hw-bay flex items-center space-x-0.5 p-0.5 rounded-lg">
@@ -113,11 +113,11 @@
                         <StudioIcon Name="send" Class="w-3 h-3" /><span>Transmit B@(State.SelectedFmBank + 1)</span>
                     </button>
                     <button id="btnFmSave" type="button" @onclick="() => SoundDesign.SaveFmVoicePatch()"
-                            class="px-2.5 py-1 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center space-x-1 transition active:scale-95">
+                            class="hw-key-cyan px-2.5 py-1 rounded-xl text-xs font-bold flex items-center space-x-1">
                         <StudioIcon Name="save" Class="w-3 h-3" /><span>Save</span>
                     </button>
                     <select value="0" @onchange="SendToMixerChannel"
-                            class="bg-slate-900 border border-slate-700 rounded-xl px-2 py-1 text-[11px] font-semibold text-slate-200 cursor-pointer">
+                            class="hw-select rounded-xl px-2 py-1 text-[11px] font-semibold cursor-pointer">
                         <option value="0">Apply to Ch...</option>
                         @for (int ch = 0; ch < 15; ch++)
                         {

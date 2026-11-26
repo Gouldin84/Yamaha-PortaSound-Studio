@@ -36,16 +36,16 @@
                 <div class="space-y-1">
                     <label class="text-slate-400 font-semibold">@(req.Mode == "new_folder" ? "Folder Name" : "New Name")</label>
                     <input type="text" value="@_inputName" @oninput="(e) => _inputName = e.Value?.ToString() ?? string.Empty"
-                           class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white focus:outline-none focus:border-cyan-500" />
+                           class="hw-input w-full px-3 py-2 rounded-xl text-xs" />
                 </div>
             }
 
             @if (isMove)
             {
                 <div class="space-y-1">
-                    <label class="text-slate-400 font-semibold">Target Subfolder (@req.Category.ToUpperInvariant())</label>
+                    <label class="font-semibold" style="color: var(--text-mid);">Target Subfolder (@req.Category.ToUpperInvariant())</label>
                     <select value="@_targetSubFolder" @onchange="(e) => _targetSubFolder = e.Value?.ToString() ?? string.Empty"
-                            class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white cursor-pointer">
+                            class="hw-select w-full px-3 py-2 rounded-xl text-xs cursor-pointer">
                         <option value="">(Root Folder)</option>
                         @foreach (var f in destTree.AllFolders)
                         {
@@ -84,10 +84,10 @@
             }
         </div>
 
-        <div class="flex items-center justify-end space-x-2 border-t border-slate-800 pt-3">
-            <button type="button" @onclick="Close" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-300">Cancel</button>
+        <div class="flex items-center justify-end space-x-2 border-t pt-3" style="border-color: var(--panel-border);">
+            <button type="button" @onclick="Close" class="hw-btn px-4 py-2 rounded-xl text-xs font-semibold">Cancel</button>
             <button type="button" @onclick="Confirm"
-                    class="px-5 py-2 rounded-xl @(isDelete ? "bg-rose-600 hover:bg-rose-500" : "bg-cyan-600 hover:bg-cyan-500") text-xs font-bold text-white">
+                    class="@(isDelete ? "hw-key-rose" : "hw-key-cyan") px-5 py-2 rounded-xl text-xs font-bold">
                 @(isDelete ? "Delete" : "Apply")
             </button>
         </div>

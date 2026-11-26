@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2026-11-26
+
+### Fixed
+- **Consistent 3D Frosted Acrylic Controls Across All Views & Modals**: Replaced remaining flat Tailwind action buttons, inputs, selects, and status trays in Recorder (`Start Recording`, `Audition`, `Save Native`, `Export General MIDI`, `Trim Silence`, `Quantize`, `Stop`, `Player`, 16-channel inbound LED cards), Drum Pads / 03H Grid, SysEx Bulk Vault, FM Save, Library Batch Bar, and all 9 dialogs with semantic extruded 3D acrylic keycaps (`.hw-key-rose`, `.hw-key-emerald`, `.hw-key-cyan`, `.hw-key-indigo`, `.hw-key-amber`, `.hw-btn`, `.hw-bay`, `.hw-input`, `.hw-select`).
+- **60fps Vector Gimbal Drag Smoothness**: Decoupled pointer drag & LFO canvas repaints onto `requestAnimationFrame` with live DOM weight updates (`vecCoordDisplay`, `vecPct0..3`, `vecBar0..3`, `vecSlotPct0..3`) and suppressed redundant intermediate Blazor virtual-DOM re-renders during drag/orbit ticks.
+
 ## [3.1.0] - 2026-11-26
 
 ### Added

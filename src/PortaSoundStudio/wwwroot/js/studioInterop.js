@@ -601,6 +601,28 @@ window.studioInterop = (() => {
         ctx.fill();
 
         ctx.restore();
+
+        // Sync live coordinate & blend readouts directly in DOM at 60fps without Blazor tree re-renders
+        const coordEl = document.getElementById("vecCoordDisplay");
+        if (coordEl) {
+            const fmt = (n) => (n >= 0 ? "+" : "") + n.toFixed(2);
+            coordEl.textContent = `X: ${fmt(vectorStateX)} \u2022 Y: ${fmt(vectorStateY)}`;
+        }
+        const pcts = [
+            Math.round(w.wA * 100),
+            Math.round(w.wB * 100),
+            Math.round(w.wC * 100),
+            Math.round(w.wD * 100)
+        ];
+        const letters = ["A", "B", "C", "D"];
+        for (let i = 0; i < 4; i++) {
+            const pEl = document.getElementById(`vecPct${i}`);
+            if (pEl) pEl.textContent = `${letters[i]}: ${pcts[i]}%`;
+            const bEl = document.getElementById(`vecBar${i}`);
+            if (bEl) bEl.style.width = `${pcts[i]}%`;
+            const sEl = document.getElementById(`vecSlotPct${i}`);
+            if (sEl) sEl.textContent = `${pcts[i]}%`;
+        }
     }
 
     function setupVectorTouchpad(canvasId, dotNetRef) {
@@ -610,31 +632,67 @@ window.studioInterop = (() => {
 
         let dragging = false;
         let lastSend = 0;
+        let syncInFlight = false;
+        let rafPending = false;
+        let pendingX = 0, pendingY = 0;
 
-        function handlePointer(e, forceSend) {
+        function computeCoords(e) {
             const rect = canvas.getBoundingClientRect();
             const scale = (rect.width / 240) * 72;
             let x = (e.clientX - rect.left - rect.width / 2) / Math.max(1, scale);
             let y = (rect.height / 2 - (e.clientY - rect.top)) / Math.max(1, scale);
             const dist = Math.sqrt(x * x + y * y);
             if (dist > 1.0) { x /= dist; y /= dist; }
-            stopVectorOrbit();
-            drawVectorCanvas(canvasId, x, y);
+            return [x, y];
+        }
 
-            const now = performance.now();
-            if (forceSend || now - lastSend > 28) {
-                lastSend = now;
-                dotNetRef.invokeMethodAsync("OnVectorPointerPosition", x, y);
+        function sendToDotNet(x, y, commit) {
+            if (!commit && syncInFlight) return;
+            syncInFlight = true;
+            lastSend = performance.now();
+            dotNetRef.invokeMethodAsync("OnVectorPointerPosition", x, y, !!commit)
+                .catch(() => { })
+                .finally(() => { syncInFlight = false; });
+        }
+
+        function schedulePaint() {
+            if (rafPending) return;
+            rafPending = true;
+            requestAnimationFrame(() => {
+                rafPending = false;
+                drawVectorCanvas(canvasId, pendingX, pendingY, true);
+            });
+        }
+
+        function handlePointer(e, commit) {
+            const [x, y] = computeCoords(e);
+            pendingX = x;
+            pendingY = y;
+            stopVectorOrbit();
+            if (commit) {
+                rafPending = false;
+                drawVectorCanvas(canvasId, x, y, true);
+                sendToDotNet(x, y, true);
+            } else {
+                schedulePaint();
+                const now = performance.now();
+                if (now - lastSend > 38) {
+                    sendToDotNet(x, y, false);
+                }
             }
         }
 
         canvas.addEventListener("pointerdown", (e) => {
             dragging = true;
+            e.preventDefault();
             try { canvas.setPointerCapture(e.pointerId); } catch { }
-            handlePointer(e, true);
+            handlePointer(e, false);
         });
         canvas.addEventListener("pointermove", (e) => {
-            if (dragging) handlePointer(e, false);
+            if (dragging) {
+                e.preventDefault();
+                handlePointer(e, false);
+            }
         });
         const stopDrag = (e) => {
             if (!dragging) return;
@@ -646,8 +704,8 @@ window.studioInterop = (() => {
         canvas.addEventListener("pointercancel", stopDrag);
         canvas.addEventListener("dblclick", () => {
             stopVectorOrbit();
-            drawVectorCanvas(canvasId, 0, 0);
-            dotNetRef.invokeMethodAsync("OnVectorPointerPosition", 0, 0);
+            drawVectorCanvas(canvasId, 0, 0, false);
+            sendToDotNet(0, 0, true);
         });
     }
 

@@ -140,8 +140,11 @@ namespace PSS790Player
                                 await Snap("05_fm_dark.png");
 
                                 _state.Mutate(s => s.ActiveTab = StudioTab.Recorder);
-                                await SetTheme(true);
+                                await SetTheme(true, handheld: false);
                                 await Snap("06_recorder_dark.png");
+
+                                await SetTheme(false, handheld: false);
+                                await Snap("09_recorder_light.png");
                             }
                             else if (!string.IsNullOrEmpty(App.DiagMarkerPath))
                             {

@@ -6,29 +6,29 @@
             <div class="flex items-center space-x-3">
                 <img src="images/app_icon.png" alt="App Icon" class="w-10 h-10 rounded-xl border border-slate-700" />
                 <div>
-                    <h3 class="text-sm font-bold text-white">Yamaha PortaSound Studio v3.0.2</h3>
-                    <p class="text-[11px] text-cyan-400">Dual Hardware Workbench: PSS-790 &amp; PSS-680/480/780</p>
+                    <h3 class="text-sm font-bold" style="color: var(--text-hi);">Yamaha PortaSound Studio v3.1.1</h3>
+                    <p class="text-[11px]" style="color: var(--acc-hi);">Dual Hardware Workbench: PSS-790 &amp; PSS-680/480/780</p>
                 </div>
             </div>
-            <button type="button" @onclick="Close" class="text-slate-400 hover:text-white text-lg">✕</button>
+            <button type="button" @onclick="Close" class="hw-close-chip w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold">✕</button>
         </div>
 
-        <div class="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+        <div class="space-y-2.5 text-xs leading-relaxed" style="color: var(--text-mid);">
             <p>
                 Built on a <strong>Single-Writer MIDI Transport Actor</strong> and native <strong>WPF Blazor Hybrid</strong> UI architecture for lock-free hot-swapping, deterministic Note-Off protection, and zero stuck notes across vintage Yamaha hardware.
             </p>
-            <div class="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1 text-[11px]">
-                <div class="font-bold text-white">Supported Synthesizers:</div>
+            <div class="hw-bay p-3 rounded-xl space-y-1 text-[11px]">
+                <div class="font-bold" style="color: var(--text-hi);">Supported Synthesizers:</div>
                 <div>&bull; <strong>Yamaha PSS-790:</strong> 28-voice AWM, Chart 1/2 remapping, 2D 4-voice Vector Synth &amp; Memory Bulk Dump.</div>
                 <div>&bull; <strong>Yamaha PSS-680 / 480 / 780:</strong> 12-voice 2-Op FM Synth (18 hidden parameters), 32-pad Hand Percussion, Format 00H–03H SysEx &amp; Custom Drummer Builder.</div>
             </div>
-            <p class="text-[10px] text-slate-500">
+            <p class="text-[10px]" style="color: var(--text-lo);">
                 Uses Melanchall.DryWetMidi (.NET 8) and Microsoft Edge WebView2. Independent community tool, not affiliated with Yamaha Corporation.
             </p>
         </div>
 
-        <div class="flex justify-end border-t border-slate-800 pt-3">
-            <button type="button" @onclick="Close" class="px-4 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white">Close</button>
+        <div class="flex justify-end border-t pt-3" style="border-color: var(--panel-border);">
+            <button type="button" @onclick="Close" class="hw-key-cyan px-4 py-1.5 rounded-xl text-xs font-bold">Close</button>
         </div>
     </div>
 </div>

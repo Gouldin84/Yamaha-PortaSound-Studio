@@ -332,7 +332,7 @@ namespace PSS790Player.Services
             _devices.Player.SendVoiceOverride(3, vD);
         }
 
-        public void SetVectorPosition(double x, double y, bool sendToHardware = true)
+        public void SetVectorPosition(double x, double y, bool sendToHardware = true, bool suppressUiNotify = false)
         {
             double dist = Math.Sqrt(x * x + y * y);
             if (dist > 1.0)
@@ -341,11 +341,19 @@ namespace PSS790Player.Services
                 y /= dist;
             }
 
-            _state.Mutate(s =>
+            if (suppressUiNotify)
             {
-                s.VectorX = x;
-                s.VectorY = y;
-            });
+                _state.VectorX = x;
+                _state.VectorY = y;
+            }
+            else
+            {
+                _state.Mutate(s =>
+                {
+                    s.VectorX = x;
+                    s.VectorY = y;
+                });
+            }
 
             if (sendToHardware)
             {

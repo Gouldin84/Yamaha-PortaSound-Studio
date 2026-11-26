@@ -81,7 +81,7 @@
         <div class="w-full flex items-center justify-between">
             <div>
                 <h3 class="text-xs font-bold uppercase tracking-wider" style="color: var(--text-hi);">2D Quad Vector Gimbal</h3>
-                <div class="text-[10px] font-mono" style="color: var(--text-mid);">X: @($"{State.VectorX:+0.00;-0.00;0.00}") &bull; Y: @($"{State.VectorY:+0.00;-0.00;0.00}")</div>
+                <div id="vecCoordDisplay" class="text-[10px] font-mono" style="color: var(--text-mid);">X: @($"{State.VectorX:+0.00;-0.00;0.00}") &bull; Y: @($"{State.VectorY:+0.00;-0.00;0.00}")</div>
             </div>
             <button id="btnVecCenter" type="button" @onclick="CenterVector"
                     class="hw-btn px-2.5 py-1 rounded-xl text-[11px] font-bold" style="color: var(--acc-hi);">
@@ -94,20 +94,20 @@
         <!-- 4 Cardinal Blend Mix Bars with Live Level Fills -->
         <div class="w-full grid grid-cols-4 gap-2 text-center font-mono text-[10px]">
             <div class="hw-bay p-1.5 rounded-xl border-cyan-500/40 space-y-1">
-                <div class="text-cyan-400 font-bold">A: @((int)Math.Round(wA * 100))%</div>
-                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-cyan-400 transition-all duration-75" style="width: @($"{wA * 100:0}%");"></div></div>
+                <div id="vecPct0" class="text-cyan-400 font-bold">A: @((int)Math.Round(wA * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div id="vecBar0" class="h-full bg-cyan-400 transition-all duration-75" style="width: @($"{wA * 100:0}%");"></div></div>
             </div>
             <div class="hw-bay p-1.5 rounded-xl border-emerald-500/40 space-y-1">
-                <div class="text-emerald-400 font-bold">B: @((int)Math.Round(wB * 100))%</div>
-                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-emerald-400 transition-all duration-75" style="width: @($"{wB * 100:0}%");"></div></div>
+                <div id="vecPct1" class="text-emerald-400 font-bold">B: @((int)Math.Round(wB * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div id="vecBar1" class="h-full bg-emerald-400 transition-all duration-75" style="width: @($"{wB * 100:0}%");"></div></div>
             </div>
             <div class="hw-bay p-1.5 rounded-xl border-amber-500/40 space-y-1">
-                <div class="text-amber-400 font-bold">C: @((int)Math.Round(wC * 100))%</div>
-                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-amber-400 transition-all duration-75" style="width: @($"{wC * 100:0}%");"></div></div>
+                <div id="vecPct2" class="text-amber-400 font-bold">C: @((int)Math.Round(wC * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div id="vecBar2" class="h-full bg-amber-400 transition-all duration-75" style="width: @($"{wC * 100:0}%");"></div></div>
             </div>
             <div class="hw-bay p-1.5 rounded-xl border-rose-500/40 space-y-1">
-                <div class="text-rose-400 font-bold">D: @((int)Math.Round(wD * 100))%</div>
-                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div class="h-full bg-rose-400 transition-all duration-75" style="width: @($"{wD * 100:0}%");"></div></div>
+                <div id="vecPct3" class="text-rose-400 font-bold">D: @((int)Math.Round(wD * 100))%</div>
+                <div class="h-1 rounded-full bg-slate-900 overflow-hidden"><div id="vecBar3" class="h-full bg-rose-400 transition-all duration-75" style="width: @($"{wD * 100:0}%");"></div></div>
             </div>
         </div>
 
@@ -198,7 +198,7 @@
                             class="hw-btn px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold text-indigo-400">
                         VIB: @eff.Vib
                     </button>
-                    <span class="hw-vfd px-1.5 py-0.5 rounded text-[10px] font-bold w-10 text-center">@((int)Math.Round(weight * 100))%</span>
+                    <span id="@($"vecSlotPct{chIdx}")" class="hw-vfd px-1.5 py-0.5 rounded text-[10px] font-bold w-10 text-center">@((int)Math.Round(weight * 100))%</span>
                 </div>
             </div>
             <select value="@selectedVoice"
@@ -257,16 +257,19 @@
     }
 
     [JSInvokable]
-    public void OnVectorPointerPosition(double x, double y)
+    public void OnVectorPointerPosition(double x, double y, bool commit = true)
     {
-        State.Mutate(s => { s.VectorOrbitMode = "manual"; s.VectorIsOrbiting = false; });
-        SoundDesign.SetVectorPosition(x, y, true);
+        if (State.VectorOrbitMode != "manual" || State.VectorIsOrbiting)
+        {
+            State.Mutate(s => { s.VectorOrbitMode = "manual"; s.VectorIsOrbiting = false; });
+        }
+        SoundDesign.SetVectorPosition(x, y, true, suppressUiNotify: !commit);
     }
 
     [JSInvokable]
     public void OnVectorOrbitTick(double x, double y)
     {
-        SoundDesign.SetVectorPosition(x, y, true);
+        SoundDesign.SetVectorPosition(x, y, true, suppressUiNotify: true);
     }
 
     protected override void OnDisposing()

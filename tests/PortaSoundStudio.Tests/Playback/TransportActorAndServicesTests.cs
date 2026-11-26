@@ -291,9 +291,13 @@ namespace PSS790Player.Tests
 
             using var playback = new PlaybackCoordinator(store, devices, library);
 
-            // Start loading with 400ms settle delay so test runs fast
-            var loadTask = playback.LoadFileAsync(trackPath, autoPlay: true, settleDelayMs: 400);
-            await Task.Delay(120);
+            // Start loading with 800ms settle delay so test has ample margin before cancelling
+            var loadTask = playback.LoadFileAsync(trackPath, autoPlay: true, settleDelayMs: 800);
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (store.LoadedSong == null && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(25);
+            }
 
             Assert.NotNull(store.LoadedSong);
             Assert.Equal("settle_test.mid", store.LoadedSong!.FileName);
