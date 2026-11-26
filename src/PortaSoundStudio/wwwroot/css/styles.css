@@ -156,6 +156,18 @@ input[type="range"].accent-indigo-400::-webkit-slider-thumb:hover {
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s ease, background-color 0.2s ease;
 }
 
+/* Channel strip fader - compact pill thumb that fits within the narrow card */
+.channel-strip-card input[type="range"] {
+    min-width: 0;
+    width: 100%;
+}
+
+.channel-strip-card input[type="range"]::-webkit-slider-thumb {
+    width: 8px;
+    height: 14px;
+    border-radius: 4px;
+}
+
 .channel-strip-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.5), 0 4px 8px -2px rgba(6, 182, 212, 0.2);
@@ -740,6 +752,27 @@ body.theme-light .song-title-prefix {
 
 body.theme-light .tree-folder-group .font-medium {
     color: #0f172a !important;
+}
+
+/* Library Category Headers - Light Theme High Contrast */
+body.theme-light .tree-category-group > div:first-child {
+    background-color: #dbeafe !important;
+    border-color: #93c5fd !important;
+}
+
+body.theme-light .tree-category-group > div:first-child .text-slate-200,
+body.theme-light .tree-category-group > div:first-child [class*="font-bold"] {
+    color: #1e3a5f !important;
+}
+
+body.theme-light .tree-category-group > div:first-child [class*="text-cyan-4"],
+body.theme-light .tree-category-group > div:first-child .text-cyan-400 {
+    color: #1d4ed8 !important;
+}
+
+body.theme-light .tree-category-group > div:first-child [class*="bg-slate-950"] {
+    background-color: #bfdbfe !important;
+    color: #1e3a5f !important;
 }
 
 /* Context & Dropdown Menus */
