@@ -183,15 +183,211 @@ window.studioInterop = (() => {
         };
     }
 
+    let vectorBowlCache = null;
+    let vectorBowlCacheKey = "";
+
+    function getVectorBowlCache(isLight, dpr) {
+        const key = `${isLight ? "L" : "D"}:${dpr}`;
+        if (vectorBowlCache && vectorBowlCacheKey === key) return vectorBowlCache;
+
+        const logicalW = 240, logicalH = 240;
+        const off = document.createElement("canvas");
+        off.width = logicalW * dpr;
+        off.height = logicalH * dpr;
+        const ctx = off.getContext("2d");
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        const cx = 120, cy = 120, rActive = 84;
+
+        // 1. Exterior Cast Drop Shadow beneath Machined Flange
+        const outerDrop = ctx.createRadialGradient(cx + 3, cy + 8, rActive * 0.72, cx + 3, cy + 8, rActive + 32);
+        outerDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.30)" : "rgba(2, 6, 16, 0.80)");
+        outerDrop.addColorStop(0.65, isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(2, 6, 16, 0.38)");
+        outerDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.fillStyle = outerDrop;
+        ctx.beginPath();
+        ctx.arc(cx + 3, cy + 8, rActive + 32, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Sculpted Chamfered Hardware Bezel Flange
+        ctx.beginPath();
+        ctx.arc(cx, cy, rActive + 24, 0, Math.PI * 2);
+        const flangeGrad = ctx.createLinearGradient(cx - rActive - 20, cy - rActive - 20, cx + rActive + 20, cy + rActive + 20);
+        if (isLight) {
+            flangeGrad.addColorStop(0, "#ffffff");
+            flangeGrad.addColorStop(0.35, "#e6edf6");
+            flangeGrad.addColorStop(0.75, "#c2cfdf");
+            flangeGrad.addColorStop(1, "#94a6be");
+        } else {
+            flangeGrad.addColorStop(0, "#55688c");
+            flangeGrad.addColorStop(0.38, "#34425c");
+            flangeGrad.addColorStop(0.78, "#222c40");
+            flangeGrad.addColorStop(1, "#141c2b");
+        }
+        ctx.fillStyle = flangeGrad;
+        ctx.fill();
+        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.22)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Corner Hex Mounting Screws
+        [45, 135, 225, 315].forEach(deg => {
+            const rad = (deg * Math.PI) / 180;
+            const sx = cx + Math.cos(rad) * (rActive + 16);
+            const sy = cy + Math.sin(rad) * (rActive + 16);
+            ctx.beginPath();
+            ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
+            ctx.fillStyle = isLight ? "#94a3b8" : "#111827";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(sx, sy, 2.7, 0, Math.PI * 2);
+            const screwG = ctx.createLinearGradient(sx - 2, sy - 2, sx + 2, sy + 2);
+            screwG.addColorStop(0, isLight ? "#ffffff" : "#94a3b8");
+            screwG.addColorStop(1, isLight ? "#cbd5e1" : "#334155");
+            ctx.fillStyle = screwG;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(sx - 1.5, sy - 0.8);
+            ctx.lineTo(sx + 1.5, sy + 0.8);
+            ctx.strokeStyle = isLight ? "#475569" : "#0f172a";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        });
+
+        // 3. Stepped Deep Parabolic Rim Wall
+        ctx.beginPath();
+        ctx.arc(cx, cy, rActive + 9, 0, Math.PI * 2);
+        const lipWallGrad = ctx.createLinearGradient(cx - rActive, cy - rActive, cx + rActive, cy + rActive);
+        if (isLight) {
+            lipWallGrad.addColorStop(0, "#7f92ab");
+            lipWallGrad.addColorStop(0.55, "#b7c6da");
+            lipWallGrad.addColorStop(1, "#f8fafc");
+        } else {
+            lipWallGrad.addColorStop(0, "#0b111c");
+            lipWallGrad.addColorStop(0.55, "#1f2a3f");
+            lipWallGrad.addColorStop(1, "#45587a");
+        }
+        ctx.fillStyle = lipWallGrad;
+        ctx.fill();
+
+        // 4. Deep Concave Funnel Bowl
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(cx, cy, rActive + 2, 0, Math.PI * 2);
+        ctx.clip();
+
+        const slopeGrad = ctx.createLinearGradient(cx - rActive * 0.8, cy - rActive * 0.8, cx + rActive * 0.85, cy + rActive * 0.85);
+        if (isLight) {
+            slopeGrad.addColorStop(0, "#91a3bc");
+            slopeGrad.addColorStop(0.32, "#bac8db");
+            slopeGrad.addColorStop(0.68, "#dce6f2");
+            slopeGrad.addColorStop(1, "#f8fbff");
+        } else {
+            slopeGrad.addColorStop(0, "#0c1322");
+            slopeGrad.addColorStop(0.38, "#182236");
+            slopeGrad.addColorStop(0.75, "#25334d");
+            slopeGrad.addColorStop(1, "#354769");
+        }
+        ctx.fillStyle = slopeGrad;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        const depthWell = ctx.createRadialGradient(cx, cy + 5, 4, cx, cy, rActive + 2);
+        if (isLight) {
+            depthWell.addColorStop(0, "rgba(15, 23, 42, 0.72)");
+            depthWell.addColorStop(0.28, "rgba(30, 41, 59, 0.44)");
+            depthWell.addColorStop(0.62, "rgba(71, 85, 105, 0.16)");
+            depthWell.addColorStop(1, "rgba(255, 255, 255, 0)");
+        } else {
+            depthWell.addColorStop(0, "rgba(2, 5, 12, 0.94)");
+            depthWell.addColorStop(0.32, "rgba(5, 10, 22, 0.70)");
+            depthWell.addColorStop(0.68, "rgba(12, 18, 34, 0.28)");
+            depthWell.addColorStop(1, "rgba(0, 0, 0, 0)");
+        }
+        ctx.fillStyle = depthWell;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        const overhangShadow = ctx.createRadialGradient(cx + 8, cy + 10, rActive * 0.78, cx, cy, rActive + 4);
+        overhangShadow.addColorStop(0, "rgba(0,0,0,0)");
+        overhangShadow.addColorStop(1, isLight ? "rgba(15, 23, 42, 0.34)" : "rgba(0, 0, 0, 0.75)");
+        ctx.fillStyle = overhangShadow;
+        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
+
+        const glows = [
+            [cx, cy - rActive * 0.68, "6, 182, 212"],
+            [cx + rActive * 0.68, cy, "16, 185, 129"],
+            [cx, cy + rActive * 0.68, "245, 158, 11"],
+            [cx - rActive * 0.68, cy, "244, 63, 94"]
+        ];
+        glows.forEach(([gx, gy, rgb]) => {
+            const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, 48);
+            g.addColorStop(0, `rgba(${rgb}, ${isLight ? 0.26 : 0.24})`);
+            g.addColorStop(1, `rgba(${rgb}, 0)`);
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(gx, gy, 48, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        [0.88, 0.70, 0.52, 0.36].forEach((f, idx) => {
+            const lerp = (1 - f) * 0.85;
+            const ringY = cy + 5 * lerp;
+            const ringR = rActive * f;
+            ctx.beginPath();
+            ctx.arc(cx, ringY, ringR, 0, Math.PI * 2);
+            ctx.strokeStyle = isLight
+                ? `rgba(15, 23, 42, ${0.10 + idx * 0.05})`
+                : `rgba(148, 163, 184, ${0.12 + idx * 0.03})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(cx, ringY, ringR - 0.8, 0.1 * Math.PI, 0.65 * Math.PI);
+            ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.08)";
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+        });
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - rActive); ctx.lineTo(cx, cy + 5);
+        ctx.moveTo(cx, cy + rActive); ctx.lineTo(cx, cy + 5);
+        ctx.moveTo(cx - rActive, cy); ctx.lineTo(cx, cy + 5);
+        ctx.moveTo(cx + rActive, cy); ctx.lineTo(cx, cy + 5);
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.22)" : "rgba(148, 163, 184, 0.20)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy + 5, 28, 0, Math.PI * 2);
+        const pitFloor = ctx.createRadialGradient(cx, cy + 5, 4, cx, cy + 5, 28);
+        pitFloor.addColorStop(0, "#02050c");
+        pitFloor.addColorStop(0.65, isLight ? "#1e293b" : "#070c16");
+        pitFloor.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = pitFloor;
+        ctx.fill();
+
+        ctx.restore();
+
+        ctx.font = "900 11px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = isLight ? "#0284c7" : "#22d3ee"; ctx.fillText("A", cx, cy - rActive - 15);
+        ctx.fillStyle = isLight ? "#059669" : "#34d399"; ctx.fillText("B", cx + rActive + 15, cy);
+        ctx.fillStyle = isLight ? "#d97706" : "#fbbf24"; ctx.fillText("C", cx, cy + rActive + 15);
+        ctx.fillStyle = isLight ? "#e11d48" : "#fb7185"; ctx.fillText("D", cx - rActive - 15, cy);
+
+        ctx.restore();
+        vectorBowlCache = off;
+        vectorBowlCacheKey = key;
+        return off;
+    }
+
     function scheduleVectorDecay(canvasId) {
         if (vectorTrailDecayId) return;
         const stepDecay = () => {
             vectorTrailDecayId = null;
             if (vectorTrail.length === 0) return;
             drawVectorCanvas(canvasId, vectorStateX, vectorStateY, false);
-            if (vectorTrail.length > 0) {
-                vectorTrailDecayId = requestAnimationFrame(stepDecay);
-            }
         };
         vectorTrailDecayId = requestAnimationFrame(stepDecay);
     }
@@ -216,249 +412,63 @@ window.studioInterop = (() => {
             canvas.style.height = logicalH + "px";
         }
 
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, logicalW, logicalH);
-
         const isLight = document.body.classList.contains("theme-light");
+        const bowl = getVectorBowlCache(isLight, dpr);
+
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bowl, 0, 0);
+        ctx.scale(dpr, dpr);
+
         const cx = 120, cy = 120, rActive = 84;
         const w = calculateVectorWeights(vectorStateX, vectorStateY);
         const rCol = Math.round(w.wA * 34 + w.wB * 52 + w.wC * 251 + w.wD * 251);
         const gCol = Math.round(w.wA * 211 + w.wB * 211 + w.wC * 191 + w.wD * 113);
         const bCol = Math.round(w.wA * 238 + w.wB * 153 + w.wC * 36 + w.wD * 133);
 
-        // 1. Deep Exterior Cast Drop Shadow beneath Raised Machined Joystick Flange
-        const outerDrop = ctx.createRadialGradient(cx + 3, cy + 8, rActive * 0.72, cx + 3, cy + 8, rActive + 32);
-        outerDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.32)" : "rgba(2, 6, 16, 0.80)");
-        outerDrop.addColorStop(0.65, isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(2, 6, 16, 0.38)");
-        outerDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
-        ctx.fillStyle = outerDrop;
-        ctx.beginPath();
-        ctx.arc(cx + 3, cy + 8, rActive + 32, 0, Math.PI * 2);
-        ctx.fill();
+        const puckX = cx + vectorStateX * (rActive - 12);
+        const puckY = (cy - 2) - vectorStateY * (rActive - 12);
 
-        // 2. Sculpted Chamfered Hardware Bezel Flange (Top-left light source 315°)
-        ctx.beginPath();
-        ctx.arc(cx, cy, rActive + 24, 0, Math.PI * 2);
-        const flangeGrad = ctx.createLinearGradient(cx - rActive - 20, cy - rActive - 20, cx + rActive + 20, cy + rActive + 20);
-        if (isLight) {
-            flangeGrad.addColorStop(0, "#ffffff");
-            flangeGrad.addColorStop(0.35, "#e6edf6");
-            flangeGrad.addColorStop(0.75, "#c2cfdf");
-            flangeGrad.addColorStop(1, "#94a6be");
-        } else {
-            flangeGrad.addColorStop(0, "#516488");
-            flangeGrad.addColorStop(0.38, "#34425c");
-            flangeGrad.addColorStop(0.78, "#222c40");
-            flangeGrad.addColorStop(1, "#141c2b");
-        }
-        ctx.fillStyle = flangeGrad;
-        ctx.fill();
-        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.22)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Corner Hex Mounting Screws on Bezel (at 45°, 135°, 225°, 315°)
-        [45, 135, 225, 315].forEach(deg => {
-            const rad = (deg * Math.PI) / 180;
-            const sx = cx + Math.cos(rad) * (rActive + 16);
-            const sy = cy + Math.sin(rad) * (rActive + 16);
-            ctx.beginPath();
-            ctx.arc(sx, sy, 3.6, 0, Math.PI * 2);
-            ctx.fillStyle = isLight ? "#94a3b8" : "#111827";
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(sx, sy, 2.7, 0, Math.PI * 2);
-            const screwG = ctx.createLinearGradient(sx - 2, sy - 2, sx + 2, sy + 2);
-            screwG.addColorStop(0, isLight ? "#ffffff" : "#94a3b8");
-            screwG.addColorStop(1, isLight ? "#cbd5e1" : "#334155");
-            ctx.fillStyle = screwG;
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(sx - 1.5, sy - 0.8);
-            ctx.lineTo(sx + 1.5, sy + 0.8);
-            ctx.strokeStyle = isLight ? "#475569" : "#0f172a";
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-        });
-
-        // 3. Stepped Deep Parabolic Rim Wall (Receding inward into the pit)
-        // Outer recessed lip highlight
-        ctx.beginPath();
-        ctx.arc(cx, cy, rActive + 9, 0, Math.PI * 2);
-        const lipWallGrad = ctx.createLinearGradient(cx - rActive, cy - rActive, cx + rActive, cy + rActive);
-        if (isLight) {
-            lipWallGrad.addColorStop(0, "#7f92ab");
-            lipWallGrad.addColorStop(0.55, "#b7c6da");
-            lipWallGrad.addColorStop(1, "#f8fafc");
-        } else {
-            lipWallGrad.addColorStop(0, "#0b111c");
-            lipWallGrad.addColorStop(0.55, "#1f2a3f");
-            lipWallGrad.addColorStop(1, "#45587a");
-        }
-        ctx.fillStyle = lipWallGrad;
-        ctx.fill();
-
-        // 4. Deep Concave Funnel Bowl (Concentric Depth Shading: Brighter edge -> Deep Pit Center!)
-        // Subtle 3D perspective center offset (+0px, +5px) gives an overhead 15-degree camera pitch down into the dish
-        const pitAnchorX = cx + vectorStateX * 9;
-        const pitAnchorY = (cy + 5) - vectorStateY * 9;
-
+        // 1. Pleated Rubber Gaiter Ribs
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, rActive + 2, 0, Math.PI * 2);
         ctx.clip();
-
-        // Base angled funnel slope (top-left inner wall sits in shadow, bottom-right wall catches overhead studio light!)
-        const slopeGrad = ctx.createLinearGradient(cx - rActive * 0.8, cy - rActive * 0.8, cx + rActive * 0.85, cy + rActive * 0.85);
-        if (isLight) {
-            slopeGrad.addColorStop(0, "#91a3bc");
-            slopeGrad.addColorStop(0.32, "#bac8db");
-            slopeGrad.addColorStop(0.68, "#dce6f2");
-            slopeGrad.addColorStop(1, "#f8fbff");
-        } else {
-            slopeGrad.addColorStop(0, "#0c1322");
-            slopeGrad.addColorStop(0.38, "#182236");
-            slopeGrad.addColorStop(0.75, "#25334d");
-            slopeGrad.addColorStop(1, "#354769");
-        }
-        ctx.fillStyle = slopeGrad;
-        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
-
-        // Deep concentric depth darkening down into the center bowl
-        const depthWell = ctx.createRadialGradient(pitAnchorX, pitAnchorY, 4, cx, cy, rActive + 2);
-        if (isLight) {
-            depthWell.addColorStop(0, "rgba(15, 23, 42, 0.72)");
-            depthWell.addColorStop(0.28, "rgba(30, 41, 59, 0.44)");
-            depthWell.addColorStop(0.62, "rgba(71, 85, 105, 0.16)");
-            depthWell.addColorStop(1, "rgba(255, 255, 255, 0)");
-        } else {
-            depthWell.addColorStop(0, "rgba(2, 5, 12, 0.94)");
-            depthWell.addColorStop(0.32, "rgba(5, 10, 22, 0.70)");
-            depthWell.addColorStop(0.68, "rgba(12, 18, 34, 0.28)");
-            depthWell.addColorStop(1, "rgba(0, 0, 0, 0)");
-        }
-        ctx.fillStyle = depthWell;
-        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
-
-        // Strong inner-rim overhang cast shadow (top-left shadow lip falling onto bowl wall)
-        const overhangShadow = ctx.createRadialGradient(cx + 8, cy + 10, rActive * 0.78, cx, cy, rActive + 4);
-        overhangShadow.addColorStop(0, "rgba(0,0,0,0)");
-        overhangShadow.addColorStop(1, isLight ? "rgba(15, 23, 42, 0.34)" : "rgba(0, 0, 0, 0.75)");
-        ctx.fillStyle = overhangShadow;
-        ctx.fillRect(cx - rActive - 4, cy - rActive - 4, (rActive + 4) * 2, (rActive + 4) * 2);
-
-        // Cardinal Voice Color Wash inside bowl walls
-        const glows = [
-            [cx, cy - rActive * 0.68, "6, 182, 212"],
-            [cx + rActive * 0.68, cy, "16, 185, 129"],
-            [cx, cy + rActive * 0.68, "245, 158, 11"],
-            [cx - rActive * 0.68, cy, "244, 63, 94"]
-        ];
-        glows.forEach(([gx, gy, rgb]) => {
-            const g = ctx.createRadialGradient(gx, gy, 2, gx, gy, 48);
-            g.addColorStop(0, `rgba(${rgb}, ${isLight ? 0.26 : 0.24})`);
-            g.addColorStop(1, `rgba(${rgb}, 0)`);
-            ctx.fillStyle = g;
-            ctx.beginPath();
-            ctx.arc(gx, gy, 48, 0, Math.PI * 2);
-            ctx.fill();
-        });
-
-        // Stepped Perspective Elevation Contours inside Bowl (Receding deeper toward pitAnchor)
-        [0.88, 0.70, 0.52, 0.36].forEach((f, idx) => {
-            const lerp = (1 - f) * 0.85;
-            const ringX = cx + (pitAnchorX - cx) * lerp;
-            const ringY = cy + (pitAnchorY - cy) * lerp;
-            const ringR = rActive * f;
-            ctx.beginPath();
-            ctx.arc(ringX, ringY, ringR, 0, Math.PI * 2);
-            ctx.strokeStyle = isLight
-                ? `rgba(15, 23, 42, ${0.10 + idx * 0.05})`
-                : `rgba(148, 163, 184, ${0.12 + idx * 0.03})`;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Subtle lower-right highlight arc on each step contour
-            ctx.beginPath();
-            ctx.arc(ringX, ringY, ringR - 0.8, 0.1 * Math.PI, 0.65 * Math.PI);
-            ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.08)";
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-        });
-
-        // Recessed Axis Guide Grooves converging into bottom pit
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - rActive); ctx.lineTo(pitAnchorX, pitAnchorY);
-        ctx.moveTo(cx, cy + rActive); ctx.lineTo(pitAnchorX, pitAnchorY);
-        ctx.moveTo(cx - rActive, cy); ctx.lineTo(pitAnchorX, pitAnchorY);
-        ctx.moveTo(cx + rActive, cy); ctx.lineTo(pitAnchorX, pitAnchorY);
-        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.22)" : "rgba(148, 163, 184, 0.20)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        // 5. Deep Gimbal Socket Well & Pleated Articulated Rubber Bellows (Dust Boot)
-        const puckX = cx + vectorStateX * (rActive - 12);
-        const puckY = (cy - 2) - vectorStateY * (rActive - 12);
-
-        // Deep Mechanical Socket Floor
-        ctx.beginPath();
-        ctx.arc(cx, cy + 5, 28, 0, Math.PI * 2);
-        const pitFloor = ctx.createRadialGradient(cx, cy + 5, 4, cx, cy + 5, 28);
-        pitFloor.addColorStop(0, "#02050c");
-        pitFloor.addColorStop(0.65, isLight ? "#1e293b" : "#070c16");
-        pitFloor.addColorStop(1, "rgba(0,0,0,0)");
-        ctx.fillStyle = pitFloor;
-        ctx.fill();
-
-        // 3 Concentric Molded Rubber Gaiter Ribs stepping up toward the Stick Neck
-        const ribRadii = [23, 17.5, 12.5];
-        ribRadii.forEach((rr, idx) => {
-            const t = (idx + 1) / (ribRadii.length + 1);
-            const rx = cx + (puckX - cx) * (t * 0.42);
-            const ry = (cy + 5) + (puckY - (cy + 5)) * (t * 0.42);
-            // Pleat drop shadow
+        [23, 17.5, 12.5].forEach((rr, idx) => {
+            const t = (idx + 1) / 4;
+            const rx = cx + (puckX - cx) * (t * 0.36);
+            const ry = (cy + 5) + (puckY - (cy + 5)) * (t * 0.36);
             ctx.beginPath();
             ctx.arc(rx + 1.5, ry + 2.5, rr + 1, 0, Math.PI * 2);
             ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
             ctx.fill();
-            // Pleat rubber body
             ctx.beginPath();
             ctx.arc(rx, ry, rr, 0, Math.PI * 2);
             const bootG = ctx.createRadialGradient(rx - rr * 0.3, ry - rr * 0.3, 1, rx, ry, rr);
             if (isLight) {
-                bootG.addColorStop(0, "#475569");
-                bootG.addColorStop(0.65, "#1e293b");
-                bootG.addColorStop(1, "#090d16");
+                bootG.addColorStop(0, "#64748b");
+                bootG.addColorStop(0.6, "#334155");
+                bootG.addColorStop(1, "#0f172a");
             } else {
-                bootG.addColorStop(0, "#334155");
-                bootG.addColorStop(0.65, "#161f30");
+                bootG.addColorStop(0, "#3b4963");
+                bootG.addColorStop(0.6, "#182234");
                 bootG.addColorStop(1, "#050810");
             }
             ctx.fillStyle = bootG;
             ctx.fill();
-            ctx.strokeStyle = isLight ? "rgba(255,255,255,0.22)" : "rgba(148,163,184,0.20)";
+            ctx.strokeStyle = isLight ? "rgba(255,255,255,0.28)" : "rgba(148,163,184,0.24)";
             ctx.lineWidth = 0.8;
             ctx.stroke();
         });
-
         ctx.restore();
 
-        // Engraved Cardinal Corner Badges on the Bezel (A, B, C, D)
-        ctx.font = "900 11px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = isLight ? "#0284c7" : "#22d3ee"; ctx.fillText("A", cx, cy - rActive - 15);
-        ctx.fillStyle = isLight ? "#059669" : "#34d399"; ctx.fillText("B", cx + rActive + 15, cy);
-        ctx.fillStyle = isLight ? "#d97706" : "#fbbf24"; ctx.fillText("C", cx, cy + rActive + 15);
-        ctx.fillStyle = isLight ? "#e11d48" : "#fb7185"; ctx.fillText("D", cx - rActive - 15, cy);
-
-        // Motion Phosphor Trail (Fades out completely over 320ms once stationary)
+        // 2. Motion Phosphor Trail
         const nowMs = performance.now();
-        const trailLifetimeMs = 320;
+        const trailLifetimeMs = 300;
         if (recordTrail && (Math.hypot(x - prevX, y - prevY) > 0.012)) {
             vectorTrail.push({ x: puckX, y: puckY, t: nowMs });
-            if (vectorTrail.length > 24) vectorTrail.shift();
+            if (vectorTrail.length > 20) vectorTrail.shift();
         }
         while (vectorTrail.length > 0 && (nowMs - vectorTrail[0].t) > trailLifetimeMs) {
             vectorTrail.shift();
@@ -474,107 +484,166 @@ window.studioInterop = (() => {
         }
         if (vectorTrail.length > 0) scheduleVectorDecay(canvasId);
 
-        // 6. Cast Shadows beneath Raised Chrome Shaft & Elevated Thumb Hat (15° Overhead Key Light)
-        const shaftBaseX = cx + (puckX - cx) * 0.14;
-        const shaftBaseY = (cy + 5) + (puckY - (cy + 5)) * 0.14;
+        // 3. Cast Shadow on Bowl beneath Shaft & Cap
+        const baseCx = cx + (puckX - cx) * 0.14;
+        const baseCy = (cy + 5) + (puckY - (cy + 5)) * 0.14;
+        const neckX = puckX;
+        const neckY = puckY + 3.5;
         const hatShadowX = puckX + 6 + vectorStateX * 4;
         const hatShadowY = puckY + 11 - vectorStateY * 4;
 
         ctx.beginPath();
-        ctx.moveTo(shaftBaseX + 3, shaftBaseY + 6);
+        ctx.moveTo(baseCx + 3, baseCy + 5);
         ctx.lineTo(hatShadowX, hatShadowY);
-        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.30)" : "rgba(0, 0, 0, 0.72)";
-        ctx.lineWidth = 8;
+        ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.28)" : "rgba(0, 0, 0, 0.72)";
+        ctx.lineWidth = 8.5;
         ctx.lineCap = "round";
         ctx.stroke();
 
         const hatDrop = ctx.createRadialGradient(hatShadowX, hatShadowY, 5, hatShadowX, hatShadowY, 26);
         hatDrop.addColorStop(0, isLight ? "rgba(15, 23, 42, 0.42)" : "rgba(0, 0, 0, 0.85)");
-        hatDrop.addColorStop(0.55, isLight ? "rgba(15, 23, 42, 0.18)" : "rgba(0, 0, 0, 0.42)");
+        hatDrop.addColorStop(0.55, isLight ? "rgba(15, 23, 42, 0.16)" : "rgba(0, 0, 0, 0.40)");
         hatDrop.addColorStop(1, "rgba(0, 0, 0, 0)");
         ctx.fillStyle = hatDrop;
         ctx.beginPath();
         ctx.arc(hatShadowX, hatShadowY, 26, 0, Math.PI * 2);
         ctx.fill();
 
-        // 7. Foreshortened Steel Shaft extending out from the Deep Gimbal Pit
-        // Draws from shaftBase up to thumb cap neck even at (0,0) because cy+5 pit -> cy-2 elevated hat!
-        const shaftGrad = ctx.createLinearGradient(shaftBaseX - 5, shaftBaseY, puckX + 5, puckY);
-        shaftGrad.addColorStop(0, "#1e293b");
-        shaftGrad.addColorStop(0.42, "#e2e8f0");
-        shaftGrad.addColorStop(0.75, "#94a3b8");
-        shaftGrad.addColorStop(1, "#334155");
+        // 4. Machined Metallic Base Collar Ring inside Dust Boot
         ctx.beginPath();
-        ctx.moveTo(shaftBaseX, shaftBaseY);
-        ctx.lineTo(puckX, puckY + 3);
-        ctx.strokeStyle = shaftGrad;
-        ctx.lineWidth = 8.5;
-        ctx.lineCap = "round";
-        ctx.stroke();
+        ctx.arc(baseCx, baseCy, 7.2, 0, Math.PI * 2);
+        const collarG = ctx.createRadialGradient(baseCx - 2, baseCy - 2, 1, baseCx, baseCy, 7.5);
+        if (isLight) {
+            collarG.addColorStop(0, "#ffffff");
+            collarG.addColorStop(0.55, "#cbd5e1");
+            collarG.addColorStop(1, "#475569");
+        } else {
+            collarG.addColorStop(0, "#cbd5e1");
+            collarG.addColorStop(0.5, "#475569");
+            collarG.addColorStop(1, "#0f172a");
+        }
+        ctx.fillStyle = collarG;
+        ctx.fill();
 
-        // 8. Luminous LED Blend Collar Ring tucked directly beneath the Mushroom Cap
+        // 5. True 3D CNC Tapered Cylindrical Chrome / Titanium Shaft (Perpendicular Metallic Shading)
+        const sdx = neckX - baseCx;
+        const sdy = neckY - baseCy;
+        const slen = Math.hypot(sdx, sdy);
+        if (slen > 1.2) {
+            const nx = -sdy / slen;
+            const ny = sdx / slen;
+            const rBase = 3.6;
+            const rTop = 5.4;
+            const midX = (baseCx + neckX) * 0.5;
+            const midY = (baseCy + neckY) * 0.5;
+
+            const cylGrad = ctx.createLinearGradient(
+                midX - nx * rTop, midY - ny * rTop,
+                midX + nx * rTop, midY + ny * rTop
+            );
+            if (isLight) {
+                cylGrad.addColorStop(0.00, "#475569");
+                cylGrad.addColorStop(0.24, "#cbd5e1");
+                cylGrad.addColorStop(0.42, "#ffffff");
+                cylGrad.addColorStop(0.68, "#94a3b8");
+                cylGrad.addColorStop(0.88, "#64748b");
+                cylGrad.addColorStop(1.00, "#334155");
+            } else {
+                cylGrad.addColorStop(0.00, "#0f172a");
+                cylGrad.addColorStop(0.22, "#475569");
+                cylGrad.addColorStop(0.42, "#f8fafc");
+                cylGrad.addColorStop(0.66, "#64748b");
+                cylGrad.addColorStop(0.88, "#334155");
+                cylGrad.addColorStop(1.00, "#090f1d");
+            }
+
+            ctx.beginPath();
+            ctx.moveTo(baseCx - nx * rBase, baseCy - ny * rBase);
+            ctx.lineTo(neckX - nx * rTop, neckY - ny * rTop);
+            ctx.lineTo(neckX + nx * rTop, neckY + ny * rTop);
+            ctx.lineTo(baseCx + nx * rBase, baseCy + ny * rBase);
+            ctx.closePath();
+            ctx.fillStyle = cylGrad;
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(baseCx, baseCy, rBase, 0, Math.PI * 2);
+            ctx.fillStyle = cylGrad;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(neckX, neckY, rTop, 0, Math.PI * 2);
+            ctx.fillStyle = cylGrad;
+            ctx.fill();
+        }
+
+        // 6. Luminous Blend Halo beneath Cap
         const collarGlow = ctx.createRadialGradient(puckX, puckY + 2, 10, puckX, puckY + 2, 26);
-        collarGlow.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, 0.85)`);
-        collarGlow.addColorStop(0.65, `rgba(${rCol}, ${gCol}, ${bCol}, 0.24)`);
+        collarGlow.addColorStop(0, `rgba(${rCol}, ${gCol}, ${bCol}, 0.72)`);
+        collarGlow.addColorStop(0.65, `rgba(${rCol}, ${gCol}, ${bCol}, 0.20)`);
         collarGlow.addColorStop(1, `rgba(${rCol}, ${gCol}, ${bCol}, 0)`);
         ctx.fillStyle = collarGlow;
         ctx.beginPath();
         ctx.arc(puckX, puckY + 2, 26, 0, Math.PI * 2);
         ctx.fill();
 
-        // 9. Thick 3D Sculpted Hardware Joystick Cap (Skirt -> Knurled Bevel -> Concave Thumb Dish)
+        // 7. 3D Machined Metallic Cap (Brushed Chrome Silver vs Smoked Gunmetal Titanium)
         const capR = 20;
-        // Lower 3D Cylinder Skirt / Side Wall (offset slightly downward for perspective thickness)
         ctx.beginPath();
         ctx.arc(puckX, puckY + 3.2, capR, 0, Math.PI * 2);
         const skirtGrad = ctx.createLinearGradient(puckX - capR, puckY, puckX + capR, puckY + 6);
-        skirtGrad.addColorStop(0, isLight ? "#64748b" : "#1e293b");
-        skirtGrad.addColorStop(0.5, isLight ? "#334155" : "#090f1d");
-        skirtGrad.addColorStop(1, "#020617");
+        if (isLight) {
+            skirtGrad.addColorStop(0, "#cbd5e1");
+            skirtGrad.addColorStop(0.45, "#64748b");
+            skirtGrad.addColorStop(1, "#334155");
+        } else {
+            skirtGrad.addColorStop(0, "#475569");
+            skirtGrad.addColorStop(0.45, "#1e293b");
+            skirtGrad.addColorStop(1, "#020617");
+        }
         ctx.fillStyle = skirtGrad;
         ctx.fill();
 
-        // Colored LED Accent Ring around Cap Waist
+        // LED Accent Trim Line around Cap Waist
         ctx.beginPath();
         ctx.arc(puckX, puckY + 1.4, capR - 0.5, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(${rCol}, ${gCol}, ${bCol}, 0.90)`;
         ctx.lineWidth = 1.6;
         ctx.stroke();
 
-        // Top Mushroom Dome Rim
+        // Brushed Metallic Top Rim
         ctx.beginPath();
         ctx.arc(puckX, puckY, capR - 1, 0, Math.PI * 2);
         const domeTop = ctx.createRadialGradient(puckX - 6, puckY - 7, 2, puckX, puckY, capR);
         if (isLight) {
-            domeTop.addColorStop(0, "#ffffff");
-            domeTop.addColorStop(0.45, "#dbe4f0");
-            domeTop.addColorStop(0.85, "#8fa1b9");
-            domeTop.addColorStop(1, "#475569");
+            domeTop.addColorStop(0.0, "#ffffff");
+            domeTop.addColorStop(0.42, "#eef2f8");
+            domeTop.addColorStop(0.78, "#94a3b8");
+            domeTop.addColorStop(1.0, "#475569");
         } else {
-            domeTop.addColorStop(0, "#8fa4c4");
-            domeTop.addColorStop(0.40, "#4b5c7d");
-            domeTop.addColorStop(0.82, "#243047");
-            domeTop.addColorStop(1, "#0f172a");
+            domeTop.addColorStop(0.0, "#e2e8f0");
+            domeTop.addColorStop(0.32, "#94a3b8");
+            domeTop.addColorStop(0.75, "#334155");
+            domeTop.addColorStop(1.0, "#0f172a");
         }
         ctx.fillStyle = domeTop;
         ctx.fill();
-        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.92)" : "rgba(255, 255, 255, 0.35)";
+        ctx.strokeStyle = isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(255, 255, 255, 0.45)";
         ctx.lineWidth = 1.2;
         ctx.stroke();
 
-        // Sculpted Concave Thumb Dimple (Inner illumination flipped: dark top-left, bright bottom-right!)
+        // Lathe-Turned Concave Metallic Thumb Dish
         const dimpleR = 12;
         ctx.beginPath();
         ctx.arc(puckX, puckY, dimpleR, 0, Math.PI * 2);
         const dimpleGrad = ctx.createLinearGradient(puckX - dimpleR, puckY - dimpleR, puckX + dimpleR, puckY + dimpleR);
         if (isLight) {
-            dimpleGrad.addColorStop(0, "#7c8ea7");
-            dimpleGrad.addColorStop(0.5, "#cfdbe9");
-            dimpleGrad.addColorStop(1, "#ffffff");
+            dimpleGrad.addColorStop(0.0, "#7c8ea7");
+            dimpleGrad.addColorStop(0.45, "#cbd5e1");
+            dimpleGrad.addColorStop(1.0, "#ffffff");
         } else {
-            dimpleGrad.addColorStop(0, "#0b111e");
-            dimpleGrad.addColorStop(0.52, "#1f2b40");
-            dimpleGrad.addColorStop(1, "#4d6185");
+            dimpleGrad.addColorStop(0.0, "#0f172a");
+            dimpleGrad.addColorStop(0.48, "#334155");
+            dimpleGrad.addColorStop(1.0, "#94a3b8");
         }
         ctx.fillStyle = dimpleGrad;
         ctx.fill();
@@ -582,11 +651,11 @@ window.studioInterop = (() => {
         ctx.lineWidth = 1;
         ctx.stroke();
 
-        // Concentric Thumb Grip Texture Rings + Tiny Center LED Jewel
+        // Lathe Concentric Grooves + Center Jewel
         [8.5, 5.5].forEach(gr => {
             ctx.beginPath();
             ctx.arc(puckX, puckY, gr, 0, Math.PI * 2);
-            ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.14)" : "rgba(255, 255, 255, 0.08)";
+            ctx.strokeStyle = isLight ? "rgba(15, 23, 42, 0.16)" : "rgba(255, 255, 255, 0.14)";
             ctx.lineWidth = 0.7;
             ctx.stroke();
         });
@@ -655,13 +724,19 @@ window.studioInterop = (() => {
                 .finally(() => { syncInFlight = false; });
         }
 
+        function paintLoop() {
+            rafPending = false;
+            if (vectorTrailDecayId) {
+                cancelAnimationFrame(vectorTrailDecayId);
+                vectorTrailDecayId = null;
+            }
+            drawVectorCanvas(canvasId, pendingX, pendingY, true);
+        }
+
         function schedulePaint() {
             if (rafPending) return;
             rafPending = true;
-            requestAnimationFrame(() => {
-                rafPending = false;
-                drawVectorCanvas(canvasId, pendingX, pendingY, true);
-            });
+            requestAnimationFrame(paintLoop);
         }
 
         function handlePointer(e, commit) {
@@ -671,12 +746,16 @@ window.studioInterop = (() => {
             stopVectorOrbit();
             if (commit) {
                 rafPending = false;
+                if (vectorTrailDecayId) {
+                    cancelAnimationFrame(vectorTrailDecayId);
+                    vectorTrailDecayId = null;
+                }
                 drawVectorCanvas(canvasId, x, y, true);
                 sendToDotNet(x, y, true);
             } else {
                 schedulePaint();
                 const now = performance.now();
-                if (now - lastSend > 38) {
+                if (now - lastSend > 55) {
                     sendToDotNet(x, y, false);
                 }
             }

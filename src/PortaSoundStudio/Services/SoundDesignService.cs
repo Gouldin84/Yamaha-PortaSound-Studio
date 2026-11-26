@@ -27,6 +27,9 @@ namespace PSS790Player.Services
         private readonly SysExManager _sysexManager;
         private readonly object _fmTimerLock = new();
         private CancellationTokenSource? _fmLiveDebounceCts;
+        private readonly object _vectorMidiLock = new();
+        private (byte A, byte B, byte C, byte D)? _pendingVectorVolumes;
+        private bool _vectorMidiDispatchRunning;
         private volatile bool _isDisposed;
 
         public SoundDesignService(
@@ -358,11 +361,60 @@ namespace PSS790Player.Services
             if (sendToHardware)
             {
                 var (wA, wB, wC, wD) = CalculateVectorWeights(x, y);
-                SendVectorVolumes(
-                    (byte)Math.Round(wA * 127),
-                    (byte)Math.Round(wB * 127),
-                    (byte)Math.Round(wC * 127),
-                    (byte)Math.Round(wD * 127));
+                byte vA = (byte)Math.Round(wA * 127);
+                byte vB = (byte)Math.Round(wB * 127);
+                byte vC = (byte)Math.Round(wC * 127);
+                byte vD = (byte)Math.Round(wD * 127);
+
+                if (suppressUiNotify)
+                {
+                    EnqueueVectorVolumes(vA, vB, vC, vD);
+                }
+                else
+                {
+                    EnqueueVectorVolumes(vA, vB, vC, vD);
+                }
+            }
+        }
+
+        private void EnqueueVectorVolumes(byte volA, byte volB, byte volC, byte volD)
+        {
+            if (_isDisposed) return;
+            bool startWorker = false;
+            lock (_vectorMidiLock)
+            {
+                _pendingVectorVolumes = (volA, volB, volC, volD);
+                if (!_vectorMidiDispatchRunning)
+                {
+                    _vectorMidiDispatchRunning = true;
+                    startWorker = true;
+                }
+            }
+
+            if (startWorker)
+            {
+                _ = Task.Run(() =>
+                {
+                    while (!_isDisposed)
+                    {
+                        (byte A, byte B, byte C, byte D)? next;
+                        lock (_vectorMidiLock)
+                        {
+                            next = _pendingVectorVolumes;
+                            _pendingVectorVolumes = null;
+                            if (!next.HasValue)
+                            {
+                                _vectorMidiDispatchRunning = false;
+                                break;
+                            }
+                        }
+                        try
+                        {
+                            SendVectorVolumes(next.Value.A, next.Value.B, next.Value.C, next.Value.D);
+                        }
+                        catch { }
+                    }
+                });
             }
         }
 

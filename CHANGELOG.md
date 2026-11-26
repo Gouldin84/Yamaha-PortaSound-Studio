@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2026-11-26
+
+### Fixed
+- **Silky 60fps Manual Vector Joystick Dragging**: Offscreen-cached the static 3D gimbal bowl (`getVectorBowlCache`), eliminated overlapping `requestAnimationFrame` races, and moved `SendVectorVolumes` MIDI CC transmission onto a coalesced background queue so manual dragging never stalls the WebView2 UI thread.
+- **3D CNC Machined Metallic Vector Shaft & Cap**: Replaced the flat grey rod with a true perpendicular-shaded cylindrical chrome/titanium shaft, machined base collar ring, and theme-matched brushed silver aluminum (Light) or gunmetal titanium (Dark) thumb cap.
+
 ## [3.1.1] - 2026-11-26
 
 ### Fixed

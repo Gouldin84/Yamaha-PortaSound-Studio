@@ -128,11 +128,15 @@ namespace PSS790Player
                                 await Snap("08_touch_light.png");
 
                                 _state.Mutate(s => { s.ActiveTab = StudioTab.SysEx; s.SysExViewMode = "vector"; });
+                                _soundDesign.SetVectorPosition(0.58, 0.28, sendToHardware: false);
                                 await SetTheme(false, handheld: false);
+                                await args.WebView.ExecuteScriptAsync("studioInterop.drawVectorCanvas('vecCanvas', 0.58, 0.28, false)");
                                 await Snap("03_vector_light.png");
 
                                 await SetTheme(true, handheld: false);
+                                await args.WebView.ExecuteScriptAsync("studioInterop.drawVectorCanvas('vecCanvas', 0.58, 0.28, false)");
                                 await Snap("04_vector_dark.png");
+                                _soundDesign.SetVectorPosition(0, 0, sendToHardware: false);
 
                                 _playback.SetActiveModel("pss680");
                                 _state.Mutate(s => { s.ActiveTab = StudioTab.SysEx; s.SysExViewMode = "fm"; });
