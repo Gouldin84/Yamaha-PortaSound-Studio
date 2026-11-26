@@ -336,74 +336,24 @@ namespace PSS790Player.Core
 
                     var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
                     int melodicWeight = activeMelodic.Sum(c => c.Weight);
-                    while (melodicWeight > effectiveLimit)
-                    {
-                        // Only actively held notes (not already-released tails) compete for lead/bass protection.
-                        var heldMelodic = activeMelodic.Where(c => c.EffectiveEndTime > currentTime).ToList();
-                        var leadPool = heldMelodic.Count > 0 ? heldMelodic : activeMelodic;
-                        var leadNote = leadPool.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
-                                       ?? leadPool.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
-                        var bassNote = leadPool.OrderBy(c => c.NoteNumber).FirstOrDefault();
-
-                        var channelCounts = new int[16];
-                        foreach (var m in activeMelodic)
-                        {
-                            if (m.Channel >= 0 && m.Channel < 16)
-                                channelCounts[m.Channel]++;
-                        }
-
-                        var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
-                        if (candidates.Count == 0)
-                        {
-                            break;
-                        }
-
-                        // Keep fresh note attacks alive by evicting already-released tails first, then older decaying / dense chord notes.
-                        var olderCandidates = candidates.Where(c => c != currentCtx).ToList();
-                        var selectionPool = olderCandidates.Count > 0 ? olderCandidates : candidates;
-
-                        var candidateToDrop = selectionPool
-                            .OrderBy(c => c.EffectiveEndTime <= currentTime ? 0 : 1)
-                            .ThenBy(c => c.Priority)
-                            .ThenBy(c =>
-                            {
-                                int cnt = (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0;
-                                return cnt <= 1 ? 2 : (cnt <= 2 ? 1 : 0);
-                            })
-                            .ThenByDescending(c => (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0)
-                            .ThenBy(c => c.Time)
-                            .ThenBy(c => c.Velocity)
-                            .First();
-
-                        // Prefer truncating/yielding held or already-releasing tails rather than retroactively erasing notes that already sounded.
-                        if (candidateToDrop.EffectiveEndTime <= currentTime)
-                        {
-                            // Already received NoteOff; natural FM envelope tail yields to the incoming voice without deleting the note.
-                        }
-                        else
-                        {
-                            long heldTicks = currentTime - candidateToDrop.Time;
-                            long minAudibleTicks = LengthConverter.ConvertFrom(new MetricTimeSpan(0, 0, 0, 45), candidateToDrop.Time, tempoMap);
-                            if (heldTicks >= Math.Max(1, minAudibleTicks))
-                            {
-                                candidateToDrop.EffectiveLength = Math.Min(candidateToDrop.EffectiveLength, heldTicks);
-                            }
-                            else
-                            {
-                                contextsToCull.Add(candidateToDrop);
-                            }
-                        }
-
-                        activeMelodic.Remove(candidateToDrop);
-                        activeContexts.Remove(candidateToDrop);
-                        activeWeightSum -= candidateToDrop.Weight;
-                        melodicWeight -= candidateToDrop.Weight;
-                    }
+                    EvictOrStealMelodicVoices(
+                        activeContexts,
+                        activeMelodic,
+                        contextsToCull,
+                        currentCtx,
+                        currentTime,
+                        effectiveLimit,
+                        currentWeight: melodicWeight,
+                        prioritizeExpiredTailsFirst: true,
+                        stealTier1HeldNotes: true,
+                        tempoMap,
+                        ref activeWeightSum);
                 }
                 else
                 {
                     // PSS-790 Architecture: 28-voice shared AWM PCM polyphony.
-                    // Cull incidental drums above effectiveLimit (e.g. 26), and steal melodic voices above the 28-voice hardware ceiling.
+                    // Cull incidental drums above effectiveLimit (e.g. 26), then gracefully yield expired tails
+                    // or release-steal melodic voices above the 28-voice hardware ceiling.
                     int melodicCeiling = Math.Max(Constants.PolyphonyMax, effectiveLimit);
                     while (activeWeightSum > effectiveLimit)
                     {
@@ -427,41 +377,23 @@ namespace PSS790Player.Core
                         }
 
                         var activeMelodic = activeContexts.Where(c => c.Channel != 15).ToList();
-                        // Prefer foreground melodic/harmonic voices (Tier 2+) for the high lead shield so long Tier-1 background pads/strings
-                        // (e.g. sustained high string drones) cannot starve real melodies or linger above 28 hardware voices.
-                        var leadNote = activeMelodic.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
-                                       ?? activeMelodic.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
-                        var bassNote = activeMelodic.OrderBy(c => c.NoteNumber).FirstOrDefault();
-
-                        // Shield global high lead & low bass, plus prefer keeping fresh note triggers and
-                        // sparse melodic/solo channels (<= 2 concurrent notes) over dense accompaniment chords/pads.
-                        var channelCounts = new int[16];
-                        foreach (var m in activeMelodic)
-                        {
-                            if (m.Channel >= 0 && m.Channel < 16)
-                                channelCounts[m.Channel]++;
-                        }
-
-                        var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
-                        if (candidates.Count == 0)
+                        int beforeWeight = activeWeightSum;
+                        EvictOrStealMelodicVoices(
+                            activeContexts,
+                            activeMelodic,
+                            contextsToCull,
+                            currentCtx,
+                            currentTime,
+                            melodicCeiling,
+                            currentWeight: activeWeightSum,
+                            prioritizeExpiredTailsFirst: false,
+                            stealTier1HeldNotes: false,
+                            tempoMap,
+                            ref activeWeightSum);
+                        if (activeWeightSum == beforeWeight)
                         {
                             break;
                         }
-
-                        // Only steal the freshly triggered note itself if no already-sounding candidate exists.
-                        var olderCandidates = candidates.Where(c => c != currentCtx).ToList();
-                        var selectionPool = olderCandidates.Count > 0 ? olderCandidates : candidates;
-
-                        var candidateToDrop = selectionPool
-                            .OrderBy(c => c.Priority)
-                            .ThenBy(c => (c.Channel >= 0 && c.Channel < 16 && channelCounts[c.Channel] <= 2) ? 1 : 0)
-                            .ThenBy(c => c.Time)
-                            .ThenBy(c => c.Velocity)
-                            .First();
-
-                        contextsToCull.Add(candidateToDrop);
-                        activeContexts.Remove(candidateToDrop);
-                        activeWeightSum -= candidateToDrop.Weight;
                     }
                 }
             }
@@ -506,6 +438,92 @@ namespace PSS790Player.Core
             }
 
             return resultFile;
+        }
+
+        private static void EvictOrStealMelodicVoices(
+            List<NoteContext> activeContexts,
+            List<NoteContext> activeMelodic,
+            HashSet<NoteContext> contextsToCull,
+            NoteContext currentCtx,
+            long currentTime,
+            int weightLimit,
+            int currentWeight,
+            bool prioritizeExpiredTailsFirst,
+            bool stealTier1HeldNotes,
+            TempoMap tempoMap,
+            ref int activeWeightSum)
+        {
+            while (currentWeight > weightLimit)
+            {
+                // Only actively held notes (not already-released tails) compete for lead/bass protection.
+                var heldMelodic = activeMelodic.Where(c => c.EffectiveEndTime > currentTime).ToList();
+                var leadPool = heldMelodic.Count > 0 ? heldMelodic : activeMelodic;
+                var leadNote = leadPool.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
+                               ?? leadPool.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
+                var bassNote = leadPool.OrderBy(c => c.NoteNumber).FirstOrDefault();
+
+                var channelCounts = new int[16];
+                foreach (var m in activeMelodic)
+                {
+                    if (m.Channel >= 0 && m.Channel < 16)
+                        channelCounts[m.Channel]++;
+                }
+
+                var candidates = activeMelodic.Where(c => c != leadNote && c != bassNote).ToList();
+                if (candidates.Count == 0)
+                {
+                    break;
+                }
+
+                // Only steal the freshly triggered note itself if no already-sounding candidate exists.
+                var olderCandidates = candidates.Where(c => c != currentCtx).ToList();
+                var selectionPool = olderCandidates.Count > 0 ? olderCandidates : candidates;
+
+                var ordered = prioritizeExpiredTailsFirst
+                    ? selectionPool
+                        .OrderBy(c => c.EffectiveEndTime <= currentTime ? 0 : 1)
+                        .ThenBy(c => c.Priority)
+                    : selectionPool
+                        .OrderBy(c => c.Priority)
+                        .ThenBy(c => c.EffectiveEndTime <= currentTime ? 0 : 1);
+
+                var candidateToDrop = ordered
+                    .ThenBy(c =>
+                    {
+                        int cnt = (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0;
+                        return cnt <= 1 ? 2 : (cnt <= 2 ? 1 : 0);
+                    })
+                    .ThenByDescending(c => (c.Channel >= 0 && c.Channel < 16) ? channelCounts[c.Channel] : 0)
+                    .ThenBy(c => c.Time)
+                    .ThenBy(c => c.Velocity)
+                    .First();
+
+                // Prefer yielding already-released envelope tails or release-stealing audible notes (>= 45ms held)
+                // rather than retroactively erasing notes that already began cleanly.
+                if (candidateToDrop.EffectiveEndTime <= currentTime)
+                {
+                    // Already received NoteOff; natural hardware release tail yields to the incoming voice without deleting the note.
+                }
+                else
+                {
+                    long heldTicks = currentTime - candidateToDrop.Time;
+                    long minAudibleTicks = LengthConverter.ConvertFrom(new MetricTimeSpan(0, 0, 0, 45), candidateToDrop.Time, tempoMap);
+                    if ((stealTier1HeldNotes || candidateToDrop.Priority >= 2) &&
+                        heldTicks >= Math.Max(1, minAudibleTicks))
+                    {
+                        candidateToDrop.EffectiveLength = Math.Min(candidateToDrop.EffectiveLength, heldTicks);
+                    }
+                    else
+                    {
+                        contextsToCull.Add(candidateToDrop);
+                    }
+                }
+
+                activeMelodic.Remove(candidateToDrop);
+                activeContexts.Remove(candidateToDrop);
+                activeWeightSum -= candidateToDrop.Weight;
+                currentWeight -= candidateToDrop.Weight;
+            }
         }
 
         private static int GetInstrumentPriority(int channel, byte gmProgram)

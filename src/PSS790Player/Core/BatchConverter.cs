@@ -335,12 +335,14 @@ namespace PSS790Player.Core
                     var tgtTime = File.GetLastWriteTimeUtc(tgtFullPath);
 
                     bool isOutdated = srcTime > tgtTime;
-                    bool isPss680 = string.Equals(resolvedModel, "pss680", StringComparison.OrdinalIgnoreCase);
 
-                    if (!isOutdated && (isXg || isPss680) && !Remapper.HasAlgorithmV2MarkerFile(tgtFullPath, resolvedModel))
+                    if (!isOutdated && !Remapper.HasAlgorithmV2MarkerFile(tgtFullPath, resolvedModel))
                     {
                         isOutdated = true;
-                        analysis.XgUpgradesInTarget.Add(relPath);
+                        if (isXg)
+                        {
+                            analysis.XgUpgradesInTarget.Add(relPath);
+                        }
                     }
 
                     if (isOutdated)

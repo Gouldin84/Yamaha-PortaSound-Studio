@@ -641,7 +641,7 @@ namespace PSS790Player.Bridge
                                     var activeChannels = AnalyzeChannels(_loadedOriginalMidi, _loadedRemappedMidi, activeFormat);
                                     var activeHealth = MidiHealthInspector.Analyze(_loadedOriginalMidi, _loadedRemappedMidi, Path.GetFileName(activeFileSnap), selectedModel);
                                     SendToJs("channels_updated", new { channels = activeChannels });
-                                    SendToJs("health_updated", BuildHealthPayload(activeHealth));
+                                    SendToJs("health_updated", new { health = BuildHealthPayload(activeHealth) });
                                 }
                             });
                         }

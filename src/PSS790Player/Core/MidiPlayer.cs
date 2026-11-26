@@ -62,7 +62,8 @@ namespace PSS790Player.Core
         private readonly byte[] _channelVolumes = new byte[16];
         private readonly byte[] _lastFileChannelVolumes = new byte[16];
         private readonly byte[] _lastPss680Modulation = new byte[16];
-        private readonly long[] _playedNoteMask = new long[32]; // Lock-free 16ch x 128-note hardware TX history bitmap
+        private readonly long[] _playedNoteMask = new long[32]; // Lock-free 16ch x 128-note unclosed hardware TX bitmap
+        private readonly byte[] _hwActiveNoteCount = new byte[16 * 128]; // Protected strictly by _deviceLock
         private int _stickyPss680ChannelMask;
 
         // Lock-free atomic state for real-time audio path filtering
@@ -74,6 +75,7 @@ namespace PSS790Player.Core
         private int _dirtySustainMask;
         private int _dirtyVolumeMask;
         private volatile bool _isPss680;
+        private volatile bool _stripHardwareCc10;
         private string _activeModel = "pss790";
         private int _vectorQuadPlaybackEnabled;
 
@@ -124,7 +126,18 @@ namespace PSS790Player.Core
                 var normalized = value ?? "pss790";
                 _activeModel = normalized;
                 _isPss680 = string.Equals(normalized, "pss680", StringComparison.OrdinalIgnoreCase);
+                lock (_deviceLock)
+                {
+                    UpdateHardwareCc10FilterLocked();
+                }
             }
+        }
+
+        private void UpdateHardwareCc10FilterLocked()
+        {
+            _stripHardwareCc10 = !_isPss680 &&
+                                 _outputDevice is OutputDevice &&
+                                 !Constants.IsMicrosoftGsWavetableSynth(_currentOutputDeviceName);
         }
 
         public bool VectorQuadPlaybackEnabled
@@ -231,6 +244,7 @@ namespace PSS790Player.Core
                 oldDevice = _outputDevice;
                 _outputDevice = outputDevice;
                 _currentOutputDeviceName = outputDevice != null ? deviceName : null;
+                UpdateHardwareCc10FilterLocked();
             }
 
             if (oldDevice != null && !ReferenceEquals(oldDevice, outputDevice))
@@ -281,6 +295,7 @@ namespace PSS790Player.Core
                 disconnectedName = _currentOutputDeviceName;
                 _outputDevice = null;
                 _currentOutputDeviceName = null;
+                UpdateHardwareCc10FilterLocked();
             }
 
             if (oldDevice != null)
@@ -982,7 +997,7 @@ namespace PSS790Player.Core
                             }
                         }
                         else if (te.Event is ControlChangeEvent cc && te.Time == 0 && cc.Channel != 15 &&
-                                 (cc.ControlNumber == 1 || cc.ControlNumber == 7 || cc.ControlNumber == 10 || cc.ControlNumber == 91))
+                                 (cc.ControlNumber == 1 || cc.ControlNumber == 7 || (cc.ControlNumber == 10 && (is680 || isMsGs)) || cc.ControlNumber == 91))
                         {
                             initialCcs.TryAdd((cc.Channel, (byte)cc.ControlNumber), (byte)cc.ControlValue);
                         }
@@ -1236,7 +1251,7 @@ namespace PSS790Player.Core
                 {
                     target.SendEvent(midiEvent);
                     sent = true;
-                    MarkPlayedNoteBit(this, midiEvent);
+                    TrackSentHardwareNoteLocked(this, midiEvent);
                 }
                 catch
                 {
@@ -1526,18 +1541,22 @@ namespace PSS790Player.Core
             }
 
             var killSet = new HashSet<(int Channel, byte Note)>();
+            var orderedKillList = new List<(int Channel, byte Note)>();
             lock (_notesLock)
             {
                 foreach (var key in _activeNotes.Keys)
                 {
-                    killSet.Add(key);
+                    if (killSet.Add(key))
+                    {
+                        orderedKillList.Add(key);
+                    }
                 }
                 _activeNotes.Clear();
                 Array.Clear(_activeNoteCounts, 0, 16);
             }
 
-            // Drain every (Channel, NoteNumber) touched on hardware since the last clean stop so
-            // even notes cleared earlier by Pause/Seek or overlapping same-pitch triggers receive an explicit Note-Off.
+            // Drain any remaining unclosed (Channel, NoteNumber) touched on hardware since the last clean stop so
+            // notes cleared earlier by Pause/Seek or overlapping same-pitch triggers still receive an explicit Note-Off.
             for (int wordIdx = 0; wordIdx < 32; wordIdx++)
             {
                 long mask = Interlocked.Exchange(ref _playedNoteMask[wordIdx], 0L);
@@ -1549,7 +1568,11 @@ namespace PSS790Player.Core
                 while (uMask != 0UL)
                 {
                     int bit = System.Numerics.BitOperations.TrailingZeroCount(uMask);
-                    killSet.Add((ch, (byte)(noteBase + bit)));
+                    var item = (ch, (byte)(noteBase + bit));
+                    if (killSet.Add(item))
+                    {
+                        orderedKillList.Add(item);
+                    }
                     uMask &= uMask - 1;
                 }
             }
@@ -1560,7 +1583,7 @@ namespace PSS790Player.Core
             int sustainMask = Interlocked.Exchange(ref _dirtySustainMask, 0);
             if (forceAllChannels) Interlocked.Exchange(ref _dirtyVolumeMask, 0);
 
-            foreach (var (ch, _) in killSet)
+            foreach (var (ch, _) in orderedKillList)
             {
                 if (ch >= 0 && ch < 16) usedMask |= (1 << ch);
             }
@@ -1572,12 +1595,24 @@ namespace PSS790Player.Core
 
             bool is680 = _isPss680;
             bool shouldDrainHardware = false;
+            int txPackets = 0;
 
             lock (_deviceLock)
             {
+                Array.Clear(_hwActiveNoteCount, 0, _hwActiveNoteCount.Length);
                 var target = _outputDevice;
                 if (target != null)
                 {
+                    bool isHardwarePort = target is OutputDevice && !Constants.IsMicrosoftGsWavetableSynth(_currentOutputDeviceName);
+
+                    void PaceHardwareTx()
+                    {
+                        if (isHardwarePort && (++txPackets % 10) == 0)
+                        {
+                            Thread.Sleep(3);
+                        }
+                    }
+
                     // 1. Hardware controller cleanup BEFORE Note-Offs so sustain dampers (CC 64) release immediately.
                     // Note: Yamaha PSS-680 Manual p.46 marks All Notes Off (CC 123), All Sound Off (CC 120), and Reset (CC 121) as X (Ignored);
                     // skip blasting those ignored CCs on PSS-680 to conserve 31.25 kbps serial UART bandwidth for real Note-Offs.
@@ -1600,30 +1635,36 @@ namespace PSS790Player.Core
                             if (sendSustain)
                             {
                                 target.SendEvent(new ControlChangeEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = fourBitCh });  // Sustain Off
+                                PaceHardwareTx();
                             }
                             if (sendAllNotesOff)
                             {
                                 target.SendEvent(new ControlChangeEvent((SevenBitNumber)120, (SevenBitNumber)0) { Channel = fourBitCh }); // All Sound Off
+                                PaceHardwareTx();
                                 target.SendEvent(new ControlChangeEvent((SevenBitNumber)123, (SevenBitNumber)0) { Channel = fourBitCh }); // All Notes Off
+                                PaceHardwareTx();
                             }
                             if (forceAllChannels && !is680)
                             {
                                 target.SendEvent(new ControlChangeEvent((SevenBitNumber)121, (SevenBitNumber)0) { Channel = fourBitCh }); // Reset All Controllers
+                                PaceHardwareTx();
                             }
                             if (sendMod)
                             {
                                 target.SendEvent(new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)0) { Channel = fourBitCh });   // Modulation Off
+                                PaceHardwareTx();
                             }
                             if (sendBend)
                             {
                                 target.SendEvent(new PitchBendEvent(8192) { Channel = fourBitCh });                                       // Pitch Bend Center
+                                PaceHardwareTx();
                             }
                         }
                         catch { }
                     }
 
-                    // 2. Explicit Note-Off for every active or touched note (PSS-680 stops notes exclusively via 8nH / 9nH v=0)
-                    foreach (var (ch, note) in killSet)
+                    // 2. Explicit Note-Off prioritizing currently active sounding notes first (PSS-680 stops notes exclusively via 8nH / 9nH v=0)
+                    foreach (var (ch, note) in orderedKillList)
                     {
                         try
                         {
@@ -1631,12 +1672,13 @@ namespace PSS790Player.Core
                             {
                                 Channel = (FourBitNumber)ch
                             });
+                            PaceHardwareTx();
                         }
                         catch { }
                     }
 
                     // 3. Fallback idle Panic sweep for PSS-680 hardware when user clicks Stop a second time with empty killSet
-                    if (is680 && forceAllChannels && killSet.Count == 0 && target is OutputDevice && !_isDisposed)
+                    if (is680 && forceAllChannels && orderedKillList.Count == 0 && target is OutputDevice && !_isDisposed)
                     {
                         int stickyChannels = Interlocked.Exchange(ref _stickyPss680ChannelMask, 0);
                         int melodicMask = (stickyChannels != 0 ? stickyChannels : 0x7FFF) & 0x7FFF;
@@ -1646,19 +1688,29 @@ namespace PSS790Player.Core
                             var fourBitCh = (FourBitNumber)ch;
                             for (int n = 24; n <= 108; n++)
                             {
-                                try { target.SendEvent(new NoteOffEvent((SevenBitNumber)n, (SevenBitNumber)0) { Channel = fourBitCh }); } catch { }
+                                try
+                                {
+                                    target.SendEvent(new NoteOffEvent((SevenBitNumber)n, (SevenBitNumber)0) { Channel = fourBitCh });
+                                    PaceHardwareTx();
+                                }
+                                catch { }
                             }
                         }
                         if ((stickyChannels & (1 << 15)) != 0 || stickyChannels == 0)
                         {
                             for (int n = 38; n <= 79; n++)
                             {
-                                try { target.SendEvent(new NoteOffEvent((SevenBitNumber)n, (SevenBitNumber)0) { Channel = (FourBitNumber)15 }); } catch { }
+                                try
+                                {
+                                    target.SendEvent(new NoteOffEvent((SevenBitNumber)n, (SevenBitNumber)0) { Channel = (FourBitNumber)15 });
+                                    PaceHardwareTx();
+                                }
+                                catch { }
                             }
                         }
-                        shouldDrainHardware = true;
+                        shouldDrainHardware = isHardwarePort;
                     }
-                    else if (is680 && killSet.Count > 0 && target is OutputDevice && !_isDisposed)
+                    else if (isHardwarePort && txPackets > 0 && !_isDisposed)
                     {
                         shouldDrainHardware = true;
                     }
@@ -1667,8 +1719,9 @@ namespace PSS790Player.Core
 
             if (shouldDrainHardware)
             {
-                // Allow USB-MIDI / WinMM to clock explicit Note-Off packets out onto the 31.25 kbps bus before the next song primes.
-                Thread.Sleep(Math.Clamp((killSet.Count / 2) + 12, 14, 45));
+                // Allow USB-MIDI / WinMM to clock explicit Note-Off & cleanup packets out onto the 31.25 kbps bus before the next song primes.
+                int drainMs = Math.Clamp((txPackets * 3 * 1000) / 3125 + 16, 16, 220);
+                Thread.Sleep(drainMs);
             }
 
             // 3. Clear all 16 channel activity indicators outside locks
@@ -1824,6 +1877,7 @@ namespace PSS790Player.Core
                 wasHardwarePort = oldDevice is OutputDevice;
                 _outputDevice = null;
                 _currentOutputDeviceName = null;
+                UpdateHardwareCc10FilterLocked();
             }
 
             if (wasHardwarePort)
@@ -1916,23 +1970,32 @@ namespace PSS790Player.Core
                             }
                         }
 
-                        // Proportional Mixer Scaling for CC 7 (Volume)
-                        if (channelEvent is ControlChangeEvent cc && cc.ControlNumber == 7)
+                        // Proportional Mixer Scaling & Hardware Filtering for CCs
+                        if (channelEvent is ControlChangeEvent cc)
                         {
-                            Volatile.Write(ref _player._lastFileChannelVolumes[ch], (byte)cc.ControlValue);
-                            if (is680)
+                            if (cc.ControlNumber == 10 && _player._stripHardwareCc10)
                             {
-                                // PSS-680 ignores CC 7 in Mode 99; omit from wire to conserve 31.25 kbps MIDI bandwidth
+                                // Omit unsupported Pan (CC 10) on physical PSS-790 UART to prevent <bu full> buffer drops
                                 return;
                             }
 
-                            byte userVolume = Volatile.Read(ref _player._channelVolumes[ch]);
-                            int scaled = Math.Clamp((int)Math.Round((double)cc.ControlValue * userVolume / 100.0), 0, 127);
-
-                            midiEvent = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+                            if (cc.ControlNumber == 7)
                             {
-                                Channel = cc.Channel
-                            };
+                                Volatile.Write(ref _player._lastFileChannelVolumes[ch], (byte)cc.ControlValue);
+                                if (is680)
+                                {
+                                    // PSS-680 ignores CC 7 in Mode 99; omit from wire to conserve 31.25 kbps MIDI bandwidth
+                                    return;
+                                }
+
+                                byte userVolume = Volatile.Read(ref _player._channelVolumes[ch]);
+                                int scaled = Math.Clamp((int)Math.Round((double)cc.ControlValue * userVolume / 100.0), 0, 127);
+
+                                midiEvent = new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+                                {
+                                    Channel = cc.Channel
+                                };
+                            }
                         }
                     }
 
@@ -1965,6 +2028,7 @@ namespace PSS790Player.Core
                     if (baseEvent is ControlChangeEvent cc)
                     {
                         TrackDirtyControllerState(_player, qCh, baseEvent);
+                        if (cc.ControlNumber == 10 && _player._stripHardwareCc10) return null;
                         if (cc.ControlNumber == 7)
                         {
                             Volatile.Write(ref _player._lastFileChannelVolumes[qCh], (byte)cc.ControlValue);
@@ -2008,7 +2072,7 @@ namespace PSS790Player.Core
                         for (int i = 0; i < eventsToSend.Count; i++)
                         {
                             target.SendEvent(eventsToSend[i]);
-                            MarkPlayedNoteBit(_player, eventsToSend[i]);
+                            TrackSentHardwareNoteLocked(_player, eventsToSend[i]);
                             sentCount++;
                         }
                     }
@@ -2065,7 +2129,7 @@ namespace PSS790Player.Core
                     {
                         target.SendEvent(midiEvent);
                         sent = true;
-                        MarkPlayedNoteBit(_player, midiEvent);
+                        TrackSentHardwareNoteLocked(_player, midiEvent);
 
                         // Manual p.35: Clear factory Sustain/Vibrato flags immediately after mid-song ProgramChanges on PSS-680 hardware
                         if (_player._isPss680 && target is OutputDevice && midiEvent is ProgramChangeEvent pcEvt && pcEvt.Channel != 15)
@@ -2105,19 +2169,53 @@ namespace PSS790Player.Core
             }
         }
 
-        private static void MarkPlayedNoteBit(MidiPlayer player, MidiEvent midiEvent)
+        private static void TrackSentHardwareNoteLocked(MidiPlayer player, MidiEvent midiEvent)
         {
-            if (midiEvent is NoteOnEvent noteOn && noteOn.Velocity > 0)
+            if (midiEvent is NoteOnEvent noteOn)
             {
                 int ch = noteOn.Channel;
                 int note = noteOn.NoteNumber;
-                if ((uint)ch < 16 && (uint)note < 128)
+                if ((uint)ch >= 16 || (uint)note >= 128) return;
+
+                int idx = (ch << 7) | note;
+                int wordIdx = (ch << 1) + (note >> 6);
+                long bit = 1L << (note & 63);
+
+                if (noteOn.Velocity > 0)
                 {
-                    int wordIdx = (ch << 1) + (note >> 6);
-                    long bit = 1L << (note & 63);
+                    if (player._hwActiveNoteCount[idx] < byte.MaxValue)
+                    {
+                        player._hwActiveNoteCount[idx]++;
+                    }
                     Interlocked.Or(ref player._playedNoteMask[wordIdx], bit);
                     SetMaskBit(ref player._usedChannelMask, 1 << ch);
                 }
+                else
+                {
+                    DecrementHardwareNoteLocked(player, idx, wordIdx, bit);
+                }
+            }
+            else if (midiEvent is NoteOffEvent noteOff)
+            {
+                int ch = noteOff.Channel;
+                int note = noteOff.NoteNumber;
+                if ((uint)ch >= 16 || (uint)note >= 128) return;
+
+                DecrementHardwareNoteLocked(player, (ch << 7) | note, (ch << 1) + (note >> 6), 1L << (note & 63));
+            }
+        }
+
+        private static void DecrementHardwareNoteLocked(MidiPlayer player, int idx, int wordIdx, long bit)
+        {
+            byte cur = player._hwActiveNoteCount[idx];
+            if (cur > 1)
+            {
+                player._hwActiveNoteCount[idx] = (byte)(cur - 1);
+            }
+            else
+            {
+                player._hwActiveNoteCount[idx] = 0;
+                Interlocked.And(ref player._playedNoteMask[wordIdx], ~bit);
             }
         }
 

@@ -50,9 +50,9 @@ namespace PSS790Player.Core
 
     public class Remapper
     {
-        public const string Pss790MarkerText = "PSS790_REMAPPED:v2";
+        public const string Pss790MarkerText = "PSS790_REMAPPED:v3";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
-        public const string Pss680MarkerText = "PSS680_REMAPPED:v3";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v4";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         private readonly record struct TimedValueEntry(long Time, int TrackIndex, int EventOrder, byte Value);
@@ -355,8 +355,9 @@ namespace PSS790Player.Core
             // 0. Intelligent Tempo Normalization & Adjustment
             ApplyTempoAdjustments(remapped, options);
 
-            // Normalize zero-velocity NoteOn events to standard NoteOff events to guarantee note pairing across all passes
+            // Normalize zero-velocity NoteOn events to standard NoteOff events and close any orphaned NoteOn events
             NormalizeZeroVelocityNotes(remapped);
+            TerminateUnclosedNotes(remapped);
 
             // 1. Chronological State Pre-scan (Type-1 safe: CC Bank 0/126/127/64, XG SysEx PC/Drum, and mid-song ProgramChanges)
             var drumChannels = new HashSet<int> { 9 };
@@ -846,7 +847,7 @@ namespace PSS790Player.Core
                     }
                 }
 
-                // Auto-center dangling pitch bends before track end
+                // Auto-center dangling pitch bends within tracks having local notes (cross-track Type-1 cleanup follows loop)
                 if (options.AutoCenterDanglingPitchBends && bentChannels.Count > 0)
                 {
                     foreach (var ch in bentChannels)
@@ -880,6 +881,9 @@ namespace PSS790Player.Core
                     }
                 }
             }
+
+            // 7b. Global Type-1 cleanup: center any remaining dangling PitchBend and zero any dangling Modulation (CC 1) at EOF
+            ResetDanglingControllersAtEnd(remapped, resetPitchBend: options.AutoCenterDanglingPitchBends, resetModulation: true);
 
             // 8. Ensure all active melodic channels have an initial Program Change at Tick 0
             // Also pull any early pre-note setup ProgramChange (at Time > 0 before/with the channel's first note)
@@ -1126,6 +1130,14 @@ namespace PSS790Player.Core
                         bestOctave = -Math.Min(3, neededDown);
                     }
                 }
+                else if (maxShifted > minMaxAllowed &&
+                         minShifted >= 60 &&
+                         maxShifted - 12 <= minMaxAllowed)
+                {
+                    // Treble melody overshoots ceiling by <= 1 octave without dipping below C4:
+                    // shift -12 cleanly so ascending phrase contours aren't inverted by per-note folding.
+                    bestOctave = -1;
+                }
 
                 if (bestOctave != 0)
                 {
@@ -1307,6 +1319,179 @@ namespace PSS790Player.Core
                             DeltaTime = noteOn.DeltaTime
                         };
                     }
+                }
+            }
+        }
+
+        private static void TerminateUnclosedNotes(MidiFile midi)
+        {
+            var tracks = midi.GetTrackChunks().ToList();
+            if (tracks.Count == 0) return;
+
+            var noteEvents = new List<(long Time, int TrackIndex, int Order, int Channel, byte Note, bool IsOn)>();
+            long globalMaxTime = 0;
+
+            for (int t = 0; t < tracks.Count; t++)
+            {
+                int order = 0;
+                foreach (var te in tracks[t].GetTimedEvents())
+                {
+                    if (te.Time > globalMaxTime) globalMaxTime = te.Time;
+                    if (te.Event is NoteOnEvent noteOn && noteOn.Velocity > 0)
+                    {
+                        noteEvents.Add((te.Time, t, order, noteOn.Channel, (byte)noteOn.NoteNumber, true));
+                    }
+                    else if (te.Event is NoteOffEvent noteOff)
+                    {
+                        noteEvents.Add((te.Time, t, order, noteOff.Channel, (byte)noteOff.NoteNumber, false));
+                    }
+                    order++;
+                }
+            }
+
+            if (noteEvents.Count == 0) return;
+
+            noteEvents.Sort((a, b) =>
+            {
+                int cmp = a.Time.CompareTo(b.Time);
+                if (cmp != 0) return cmp;
+                cmp = a.TrackIndex.CompareTo(b.TrackIndex);
+                if (cmp != 0) return cmp;
+                return a.Order.CompareTo(b.Order);
+            });
+
+            var openStacks = new Dictionary<(int Channel, byte Note), Stack<int>>();
+            foreach (var ne in noteEvents)
+            {
+                var key = (ne.Channel, ne.Note);
+                if (ne.IsOn)
+                {
+                    if (!openStacks.TryGetValue(key, out var stack))
+                    {
+                        stack = new Stack<int>();
+                        openStacks[key] = stack;
+                    }
+                    stack.Push(ne.TrackIndex);
+                }
+                else if (openStacks.TryGetValue(key, out var stack) && stack.Count > 0)
+                {
+                    stack.Pop();
+                }
+            }
+
+            var toAppendByTrack = new Dictionary<int, List<(int Channel, byte Note)>>();
+            foreach (var (key, stack) in openStacks)
+            {
+                while (stack.Count > 0)
+                {
+                    int trackIdx = stack.Pop();
+                    if (!toAppendByTrack.TryGetValue(trackIdx, out var list))
+                    {
+                        list = new List<(int Channel, byte Note)>();
+                        toAppendByTrack[trackIdx] = list;
+                    }
+                    list.Add(key);
+                }
+            }
+
+            foreach (var (trackIdx, notesToClose) in toAppendByTrack)
+            {
+                using var mgr = tracks[trackIdx].ManageTimedEvents();
+                foreach (var (ch, note) in notesToClose)
+                {
+                    mgr.Objects.Add(new TimedEvent(
+                        new NoteOffEvent((SevenBitNumber)note, (SevenBitNumber)0) { Channel = (FourBitNumber)ch },
+                        globalMaxTime));
+                }
+            }
+        }
+
+        private static void ResetDanglingControllersAtEnd(MidiFile midi, bool resetPitchBend, bool resetModulation)
+        {
+            if (!resetPitchBend && !resetModulation) return;
+
+            var tracks = midi.GetTrackChunks().ToList();
+            if (tracks.Count == 0) return;
+
+            var activeNoteChannels = new HashSet<int>();
+            var rawCtrl = new List<(long Time, int TrackIndex, int Order, int Channel, bool IsPb, ushort Value)>();
+            long globalMaxTime = 0;
+
+            for (int t = 0; t < tracks.Count; t++)
+            {
+                int order = 0;
+                foreach (var te in tracks[t].GetTimedEvents())
+                {
+                    if (te.Time > globalMaxTime) globalMaxTime = te.Time;
+                    if (te.Event is NoteOnEvent on && on.Velocity > 0 && on.Channel != 15)
+                    {
+                        activeNoteChannels.Add(on.Channel);
+                    }
+                    else if (resetPitchBend && te.Event is PitchBendEvent pb && pb.Channel != 15)
+                    {
+                        rawCtrl.Add((te.Time, t, order, pb.Channel, true, pb.PitchValue));
+                    }
+                    else if (resetModulation && te.Event is ControlChangeEvent cc && cc.ControlNumber == 1 && cc.Channel != 15)
+                    {
+                        rawCtrl.Add((te.Time, t, order, cc.Channel, false, (byte)cc.ControlValue));
+                    }
+                    order++;
+                }
+            }
+
+            if (rawCtrl.Count == 0 || activeNoteChannels.Count == 0) return;
+
+            rawCtrl.Sort((a, b) =>
+            {
+                int cmp = a.Time.CompareTo(b.Time);
+                if (cmp != 0) return cmp;
+                cmp = a.TrackIndex.CompareTo(b.TrackIndex);
+                if (cmp != 0) return cmp;
+                return a.Order.CompareTo(b.Order);
+            });
+
+            var lastPb = new Dictionary<int, (ushort Value, int TrackIdx)>();
+            var lastMod = new Dictionary<int, (byte Value, int TrackIdx)>();
+            foreach (var c in rawCtrl)
+            {
+                if (!activeNoteChannels.Contains(c.Channel)) continue;
+                if (c.IsPb) lastPb[c.Channel] = (c.Value, c.TrackIndex);
+                else lastMod[c.Channel] = ((byte)c.Value, c.TrackIndex);
+            }
+
+            var resetsByTrack = new Dictionary<int, List<MidiEvent>>();
+            void QueueReset(int trackIdx, MidiEvent evt)
+            {
+                if (!resetsByTrack.TryGetValue(trackIdx, out var list))
+                {
+                    list = new List<MidiEvent>();
+                    resetsByTrack[trackIdx] = list;
+                }
+                list.Add(evt);
+            }
+
+            foreach (var (ch, info) in lastPb)
+            {
+                if (info.Value != 8192)
+                {
+                    QueueReset(info.TrackIdx, new PitchBendEvent((ushort)8192) { Channel = (FourBitNumber)ch });
+                }
+            }
+
+            foreach (var (ch, info) in lastMod)
+            {
+                if (info.Value > 0)
+                {
+                    QueueReset(info.TrackIdx, new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)0) { Channel = (FourBitNumber)ch });
+                }
+            }
+
+            foreach (var (trackIdx, events) in resetsByTrack)
+            {
+                using var mgr = tracks[trackIdx].ManageTimedEvents();
+                foreach (var evt in events)
+                {
+                    mgr.Objects.Add(new TimedEvent(evt, globalMaxTime));
                 }
             }
         }
@@ -1650,10 +1835,13 @@ namespace PSS790Player.Core
         public static bool IsSustainBakeableInstrument(byte gmProgram, bool is680)
         {
             if (is680) return true; // PSS-680 12-voice FM: bake all CC 64 pedals cleanly into bounded note durations so raw sustain never locks voices
-            if (gmProgram <= 23) return true; // Pianos, Chromatic, Organs
             // PSS-790 has no CC 64 hardware circuit: bake sustained/plucked instruments cleanly
-            return (gmProgram >= 24 && gmProgram <= 27) || // Nylon / Steel / Jazz / Clean Guitar
-                   (gmProgram >= 40 && gmProgram <= 54);   // Strings / Harp / Choir
+            return gmProgram <= 23 ||                         // Pianos, Chromatic, Organs
+                   (gmProgram >= 24 && gmProgram <= 31) ||    // All Guitars
+                   (gmProgram >= 40 && gmProgram <= 54) ||    // Strings / Harp / Choir
+                   (gmProgram >= 56 && gmProgram <= 63) ||    // Brass & Synth Brass
+                   (gmProgram >= 88 && gmProgram <= 95) ||    // Synth Pads
+                   (gmProgram >= 104 && gmProgram <= 107);    // Ethnic Plucked (Sitar / Banjo / Shamisen / Koto)
         }
 
         public static void ApplySustainPedalEmulation(
@@ -1792,6 +1980,7 @@ namespace PSS790Player.Core
 
                     var intervals = pedalIntervals[ch];
                     var notes = group.OrderBy(n => n.Time).ToList();
+                    int intervalIdx = 0;
 
                     for (int i = 0; i < notes.Count; i++)
                     {
@@ -1805,7 +1994,23 @@ namespace PSS790Player.Core
                         bakedChannels.Add(ch);
                         long noteEnd = note.EndTime;
 
-                        var matchingInterval = intervals.FirstOrDefault(inv => note.Time <= inv.End && noteEnd >= inv.Start && noteEnd < inv.End);
+                        while (intervalIdx < intervals.Count && intervals[intervalIdx].End < note.Time)
+                        {
+                            intervalIdx++;
+                        }
+
+                        (long Start, long End) matchingInterval = default;
+                        for (int k = intervalIdx; k < intervals.Count; k++)
+                        {
+                            var inv = intervals[k];
+                            if (inv.Start > noteEnd) break;
+                            if (note.Time <= inv.End && noteEnd >= inv.Start && noteEnd < inv.End)
+                            {
+                                matchingInterval = inv;
+                                break;
+                            }
+                        }
+
                         if (matchingInterval != default)
                         {
                             long newEnd = matchingInterval.End;
@@ -2161,7 +2366,7 @@ namespace PSS790Player.Core
 
         private static void ApplyCcThinning(MidiFile midi)
         {
-            const double MinIntervalMs = 18.0;
+            const double MinIntervalMs = 24.0;
             var tempoMap = midi.GetTempoMap();
             var seenPcAtTick = new HashSet<(long Time, int Channel, byte Program)>();
             var seenCcAtTick = new HashSet<(long Time, int Channel, byte Control, byte Value)>();

@@ -1729,6 +1729,128 @@ namespace PSS790Player.Tests
             Assert.DoesNotContain(switchEvents, e => e is ControlChangeEvent cc && (cc.ControlNumber == 120 || cc.ControlNumber == 123));
         }
 
+        [Fact]
+        public void Remapper_ClosesOrphanedNoteOns_CentersType1DanglingPitchBend_AndZerosDanglingModulation()
+        {
+            // Type-1 split: Track 0 has only controllers (dangling bend + modulation), Track 1 has an unclosed NoteOn
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            var ctrlTrack = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)80) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new PitchBendEvent(12000) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new ControlChangeEvent((SevenBitNumber)1, (SevenBitNumber)64) { Channel = (FourBitNumber)0, DeltaTime = 120 }
+            );
+            var noteTrack = new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)100) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 },
+                new NoteOnEvent((SevenBitNumber)67, (SevenBitNumber)95) { Channel = (FourBitNumber)0, DeltaTime = 0 } // Orphaned NoteOn!
+            );
+            midi.Chunks.Add(ctrlTrack);
+            midi.Chunks.Add(noteTrack);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss680" });
+            var events = remapped.GetTimedEvents().ToList();
+
+            int openCount = 0;
+            foreach (var te in events)
+            {
+                if (te.Event is NoteOnEvent on && on.Velocity > 0 && on.Channel == 0) openCount++;
+                else if (te.Event is NoteOffEvent off && off.Channel == 0) openCount--;
+            }
+            Assert.Equal(0, openCount);
+
+            var lastPb = events.Select(te => te.Event).OfType<PitchBendEvent>().Last(pb => pb.Channel == 0);
+            Assert.Equal(8192, lastPb.PitchValue);
+
+            var lastMod = events.Select(te => te.Event).OfType<ControlChangeEvent>().Last(cc => cc.Channel == 0 && cc.ControlNumber == 1);
+            Assert.Equal((SevenBitNumber)0, lastMod.ControlValue);
+        }
+
+        [Fact]
+        public void Remapper_Pss790_MapsPizzicatoStringsToVoice32_AndPreservesTrebleMelodyContour()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            // Range [76..95] on Pizzicato Strings (GM 45): > 88 aliasing limit; -12 octave shift fits cleanly inside [64..83]
+            var track = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)45) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)76, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)76, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new NoteOnEvent((SevenBitNumber)95, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 120 },
+                new NoteOffEvent((SevenBitNumber)95, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 120 }
+            );
+            midi.Chunks.Add(track);
+
+            var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
+            var pc = remapped.GetTrackChunks().SelectMany(t => t.Events).OfType<ProgramChangeEvent>().First(p => p.Channel == 0);
+            Assert.Equal(Constants.Pss790Voices[32].MidiProgram, (byte)pc.ProgramNumber);
+
+            var notes = remapped.GetNotes().OrderBy(n => n.Time).ToList();
+            Assert.Equal(2, notes.Count);
+            Assert.Equal(19, notes[1].NoteNumber - notes[0].NoteNumber); // Exact ascending 19-semitone interval preserved!
+            Assert.True(notes[1].NoteNumber <= 88);
+        }
+
+        [Fact]
+        public void PolyphonyOptimizer_Pss790_ReleaseStealsLongTier2NotesBeforeDeleting()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            var accompanimentTrack = new TrackChunk();
+
+            // 27 long Tier-2 Piano chord notes holding [0..960] (~1000ms at 120 BPM)
+            for (int i = 0; i < 27; i++)
+            {
+                accompanimentTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(45 + i), (SevenBitNumber)70) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            }
+            for (int i = 0; i < 27; i++)
+            {
+                accompanimentTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(45 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = i == 0 ? 960 : 0 });
+            }
+
+            // At tick 240 (250ms in, >= 45ms held), 4 Tier-3 Alto Sax lead notes enter (total 31 > 28)
+            var leadTrack = new TrackChunk();
+            for (int i = 0; i < 4; i++)
+            {
+                leadTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(72 + i), (SevenBitNumber)105) { Channel = (FourBitNumber)0, DeltaTime = i == 0 ? 240 : 0 });
+            }
+            for (int i = 0; i < 4; i++)
+            {
+                leadTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(72 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = i == 0 ? 480 : 0 });
+            }
+
+            midi.Chunks.Add(accompanimentTrack);
+            midi.Chunks.Add(leadTrack);
+
+            var programs = new Dictionary<int, byte> { [0] = 65, [1] = 0 };
+            var optimizer = new PolyphonyOptimizer(enabled: true, threshold: Constants.PolyphonyGuardThreshold, model: "pss790");
+            var optimized = optimizer.Optimize(midi, programs);
+
+            var surviving = optimized.GetNotes().ToList();
+            Assert.Equal(4, surviving.Count(n => n.Channel == 0)); // Lead preserved intact
+            // All 27 Tier-2 Piano attacks remain instead of retroactive whole-note deletion, with >= 3 truncated cleanly at tick 240!
+            var pianoNotes = surviving.Where(n => n.Channel == 1).ToList();
+            Assert.Equal(27, pianoNotes.Count);
+            Assert.True(pianoNotes.Count(n => n.EndTime <= 240) >= 3);
+        }
+
+        [Fact]
+        public void MidiPlayer_CompletedNormalNotes_ClearHardwareBitmap_SoStopPanicTargetsOnlyUnclosedNotes()
+        {
+            using var player = new MidiPlayer { ActiveModel = "pss680" };
+            var dev = new ThreadSafeMockDevice();
+            player.SetOutputDevice(dev);
+
+            // Note 60 is cleanly closed via NoteOff during playback; Note 64 remains sounding
+            player.SendEvent(new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0 });
+            player.SendEvent(new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0 });
+            player.SendEvent(new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)90) { Channel = (FourBitNumber)1 });
+
+            int countBeforeStop = dev.SnapshotEvents().Count;
+            player.Stop();
+            var stopNoteOffs = dev.SnapshotEvents().Skip(countBeforeStop).OfType<NoteOffEvent>().ToList();
+
+            Assert.DoesNotContain(stopNoteOffs, no => no.Channel == 0 && no.NoteNumber == 60);
+            Assert.Contains(stopNoteOffs, no => no.Channel == 1 && no.NoteNumber == 64);
+        }
+
         private sealed class DisposeOrderMockDevice : IOutputDevice
         {
             private readonly Action<MidiEvent> _onSend;
