@@ -50,6 +50,7 @@ namespace PSS790Player.Core
         private readonly object _notesLock = new();
         private readonly object _initLock = new();
         private readonly object _transportLock = new();
+        private readonly TransportActor _actor = new("MidiTransportActor");
 
         private int _stopEpoch;
         private int _playbackSessionEpoch;
@@ -195,7 +196,11 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SetOutputDevice(string? deviceName)
+        public void SetOutputDevice(string? deviceName) => _actor.Invoke(() => SetOutputDeviceByNameInternal(deviceName));
+
+        public Task SetOutputDeviceAsync(string? deviceName) => _actor.InvokeAsync(() => SetOutputDeviceByNameInternal(deviceName));
+
+        private void SetOutputDeviceByNameInternal(string? deviceName)
         {
             if (string.IsNullOrWhiteSpace(deviceName))
             {
@@ -214,11 +219,11 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SetOutputDevice(IOutputDevice? outputDevice)
+        public void SetOutputDevice(IOutputDevice? outputDevice) => _actor.Invoke(() =>
         {
             string? resolvedName = outputDevice is OutputDevice concrete ? concrete.Name : null;
             SetOutputDeviceInternal(outputDevice, resolvedName);
-        }
+        });
 
         private void SetOutputDeviceInternal(IOutputDevice? outputDevice, string? deviceName)
         {
@@ -273,10 +278,8 @@ namespace PSS790Player.Core
             NotifyState();
         }
 
-        public void HandleDeviceDisconnected()
-        {
-            HandleDeviceDisconnectedInternal(expectedDevice: null, deferStop: false);
-        }
+        public void HandleDeviceDisconnected() =>
+            _actor.Invoke(() => HandleDeviceDisconnectedInternal(expectedDevice: null, deferStop: false));
 
         private void HandleDeviceDisconnectedInternal(IOutputDevice? expectedDevice, bool deferStop)
         {
@@ -305,12 +308,12 @@ namespace PSS790Player.Core
 
             if (deferStop)
             {
-                // Never call Playback.Stop() synchronously from DryWetMIDI's own clock callback thread
-                ThreadPool.QueueUserWorkItem(_ =>
+                // Post asynchronously onto the single-writer actor so DryWetMIDI's callback thread never blocks
+                _actor.Post(() =>
                 {
                     try
                     {
-                        Stop();
+                        StopInternal();
                         if (!string.IsNullOrEmpty(disconnectedName))
                         {
                             OutputDeviceDisconnected?.Invoke(this, disconnectedName);
@@ -321,7 +324,7 @@ namespace PSS790Player.Core
             }
             else
             {
-                Stop();
+                StopInternal();
                 if (!string.IsNullOrEmpty(disconnectedName))
                 {
                     OutputDeviceDisconnected?.Invoke(this, disconnectedName);
@@ -329,7 +332,11 @@ namespace PSS790Player.Core
             }
         }
 
-        public void LoadMidi(MidiFile midiFile)
+        public void LoadMidi(MidiFile midiFile) => _actor.Invoke(() => LoadMidiInternal(midiFile));
+
+        public Task LoadMidiAsync(MidiFile midiFile) => _actor.InvokeAsync(() => LoadMidiInternal(midiFile));
+
+        private void LoadMidiInternal(MidiFile midiFile)
         {
             Interlocked.Increment(ref _stopEpoch);
             Interlocked.Increment(ref _playbackSessionEpoch);
@@ -503,34 +510,44 @@ namespace PSS790Player.Core
                     _playbackFinishedHandler = (s, e) =>
                     {
                         if (_isDisposed) return;
-                        try
+                        _actor.Post(() =>
                         {
-                            Interlocked.Increment(ref _playbackSessionEpoch);
-                            lock (_stateLock)
+                            if (_isDisposed) return;
+                            try
                             {
-                                _hasFinished = true;
-                                try { _progressTimer.Stop(); } catch { }
+                                lock (_stateLock)
+                                {
+                                    if (!ReferenceEquals(_playback, newPlayback)) return;
+                                    _hasFinished = true;
+                                    try { _progressTimer.Stop(); } catch { }
+                                }
+                                Interlocked.Increment(ref _playbackSessionEpoch);
+                                SendPanicNoteOffInternal(forceAllChannels: false);
+                                NotifyState();
+                                PlaybackFinished?.Invoke(this, EventArgs.Empty);
                             }
-                            SendPanicNoteOffInternal(forceAllChannels: false);
-                            NotifyState();
-                            PlaybackFinished?.Invoke(this, EventArgs.Empty);
-                        }
-                        catch { }
+                            catch { }
+                        });
                     };
 
                     _repeatStartedHandler = (s, e) =>
                     {
                         if (_isDisposed) return;
-                        try
+                        _actor.Post(() =>
                         {
-                            lock (_stateLock)
+                            if (_isDisposed) return;
+                            try
                             {
-                                _hasFinished = false;
+                                lock (_stateLock)
+                                {
+                                    if (!ReferenceEquals(_playback, newPlayback)) return;
+                                    _hasFinished = false;
+                                }
+                                SendPanicNoteOffInternal(forceAllChannels: false);
+                                RePrimeInitialControllers();
                             }
-                            SendPanicNoteOffInternal(forceAllChannels: false);
-                            RePrimeInitialControllers();
-                        }
-                        catch { }
+                            catch { }
+                        });
                     };
 
                     newPlayback.Finished += _playbackFinishedHandler;
@@ -801,7 +818,11 @@ namespace PSS790Player.Core
             return ((muteMask & bit) != 0) || (soloMask != 0 && ((soloMask & bit) == 0));
         }
 
-        public void Play()
+        public void Play() => _actor.Invoke(PlayInternal);
+
+        public Task PlayAsync() => _actor.InvokeAsync(PlayInternal);
+
+        private void PlayInternal()
         {
             int stopEpoch = Volatile.Read(ref _stopEpoch);
             bool needsInit;
@@ -1104,7 +1125,11 @@ namespace PSS790Player.Core
             catch { }
         }
 
-        public void Pause()
+        public void Pause() => _actor.Invoke(PauseInternal);
+
+        public Task PauseAsync() => _actor.InvokeAsync(PauseInternal);
+
+        private void PauseInternal()
         {
             Interlocked.Increment(ref _stopEpoch);
             Interlocked.Increment(ref _playbackSessionEpoch);
@@ -1148,7 +1173,11 @@ namespace PSS790Player.Core
             }
         }
 
-        public void Stop()
+        public void Stop() => _actor.Invoke(StopInternal);
+
+        public Task StopAsync() => _actor.InvokeAsync(StopInternal);
+
+        private void StopInternal()
         {
             Interlocked.Increment(ref _stopEpoch);
             Interlocked.Increment(ref _playbackSessionEpoch);
@@ -1156,7 +1185,11 @@ namespace PSS790Player.Core
             NotifyState();
         }
 
-        public void Seek(TimeSpan position)
+        public void Seek(TimeSpan position) => _actor.Invoke(() => SeekInternal(position));
+
+        public Task SeekAsync(TimeSpan position) => _actor.InvokeAsync(() => SeekInternal(position));
+
+        private void SeekInternal(TimeSpan position)
         {
             int stopEpoch = Volatile.Read(ref _stopEpoch);
             Playback? p;
@@ -1204,7 +1237,9 @@ namespace PSS790Player.Core
             NotifyState();
         }
 
-        public void SetSpeed(double speed)
+        public void SetSpeed(double speed) => _actor.Invoke(() => SetSpeedInternal(speed));
+
+        private void SetSpeedInternal(double speed)
         {
             if (speed <= 0.1 || speed >= 3.0) return;
 
@@ -1221,7 +1256,9 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SetLoop(bool loop)
+        public void SetLoop(bool loop) => _actor.Invoke(() => SetLoopInternal(loop));
+
+        private void SetLoopInternal(bool loop)
         {
             Playback? p;
             lock (_stateLock)
@@ -1392,6 +1429,18 @@ namespace PSS790Player.Core
             }
         }
 
+        public (bool IsMuted, bool IsSolo, byte Volume) GetChannelMixerState(int channel)
+        {
+            if (channel < 0 || channel >= 16) return (false, false, 100);
+            int mMask = Volatile.Read(ref _muteMask);
+            int sMask = Volatile.Read(ref _soloMask);
+            bool muted = (mMask & (1 << channel)) != 0;
+            bool solo = (sMask & (1 << channel)) != 0;
+            byte vol;
+            lock (_stateLock) { vol = _channelVolumes[channel]; }
+            return (muted, solo, vol);
+        }
+
         public void SetChannelVolume(int channel, byte volume)
         {
             if (channel < 0 || channel >= 16) return;
@@ -1467,7 +1516,9 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SendActiveNotesOffFast()
+        public void SendActiveNotesOffFast() => _actor.Invoke(SendActiveNotesOffFastInternal);
+
+        private void SendActiveNotesOffFastInternal()
         {
             List<(int Channel, byte Note)> notesToKill;
             bool[] activeChannels = new bool[16];
@@ -1528,7 +1579,7 @@ namespace PSS790Player.Core
             }
         }
 
-        public void SendPanicNoteOff() => SendPanicNoteOffInternal(forceAllChannels: true);
+        public void SendPanicNoteOff() => _actor.Invoke(() => SendPanicNoteOffInternal(forceAllChannels: true));
 
         private void SendPanicNoteOffInternal(bool forceAllChannels)
         {
@@ -1851,6 +1902,12 @@ namespace PSS790Player.Core
 
         public void Dispose()
         {
+            _actor.Shutdown(DisposeOnActorThread);
+            GC.SuppressFinalize(this);
+        }
+
+        private void DisposeOnActorThread()
+        {
             lock (_stateLock)
             {
                 if (_isDisposed) return;
@@ -1888,8 +1945,6 @@ namespace PSS790Player.Core
             }
 
             try { oldDevice?.Dispose(); } catch { }
-
-            GC.SuppressFinalize(this);
         }
 
         private sealed class FilteringOutputDevice : IOutputDevice, IDisposable
