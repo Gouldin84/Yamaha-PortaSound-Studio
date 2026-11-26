@@ -34,6 +34,8 @@ namespace PSS790Player.Core
         public static string Pss790MidiDir => Path.Combine(BaseMidiDir, "PSS-790 Midi");
         public static string Pss680MidiDir => Path.Combine(BaseMidiDir, "PSS-680 Midi");
         public static string SysExDir => Path.Combine(BaseMidiDir, "SysEx Library");
+        public static string Pss790SysExDir => Path.Combine(SysExDir, "PSS-790 Dumps");
+        public static string Pss680SysExDir => Path.Combine(SysExDir, "PSS-680 Dumps");
         public static string FmVoicesDir => Path.Combine(SysExDir, "PSS-680 Voices");
         public static string VectorPresetsDir => Path.Combine(SysExDir, "PSS-790 Vectors");
         public static string RecordingsDir => Path.Combine(BaseMidiDir, "Recordings");
@@ -43,6 +45,9 @@ namespace PSS790Player.Core
 
         public static string GetModelMidiDir(string model) =>
             string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? Pss680MidiDir : Pss790MidiDir;
+
+        public static string GetModelSysExDir(string? model) =>
+            string.Equals(model, "pss680", StringComparison.OrdinalIgnoreCase) ? Pss680SysExDir : Pss790SysExDir;
 
         private static string EnsureTrailingSeparator(string path) =>
             path.EndsWith(Path.DirectorySeparatorChar) || path.EndsWith(Path.AltDirectorySeparatorChar)
@@ -96,6 +101,12 @@ namespace PSS790Player.Core
 
             if (!Directory.Exists(SysExDir))
                 Directory.CreateDirectory(SysExDir);
+
+            if (!Directory.Exists(Pss790SysExDir))
+                Directory.CreateDirectory(Pss790SysExDir);
+
+            if (!Directory.Exists(Pss680SysExDir))
+                Directory.CreateDirectory(Pss680SysExDir);
 
             if (!Directory.Exists(FmVoicesDir))
                 Directory.CreateDirectory(FmVoicesDir);

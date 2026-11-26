@@ -155,5 +155,81 @@ namespace PSS790Player.Tests
             var ex = Record.Exception(() => manager.SendQuickCommand("mode_99"));
             Assert.Null(ex);
         }
+
+        [Fact]
+        public void SysEx_ParseDumpInfo_DetectsTargetModelFromHeaderAndFolder()
+        {
+            var pss680HeaderFile = Path.Combine(_testDir, "loose_680.syx");
+            File.WriteAllBytes(pss680HeaderFile, new byte[] { 0xF0, 0x43, 0x76, 0x03, 0x01, 0xF7 });
+
+            var pss790HeaderFile = Path.Combine(_testDir, "loose_790.syx");
+            File.WriteAllBytes(pss790HeaderFile, new byte[] { 0xF0, 0x43, 0x00, 0x7A, 0x01, 0xF7 });
+
+            var genericRootFile = Path.Combine(_testDir, "gm_universal.syx");
+            File.WriteAllBytes(genericRootFile, new byte[] { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 });
+
+            var pss680Folder = Path.Combine(_testDir, "PSS-680 Dumps");
+            Directory.CreateDirectory(pss680Folder);
+            var folderPlaced680 = Path.Combine(pss680Folder, "custom_generic.syx");
+            File.WriteAllBytes(folderPlaced680, new byte[] { 0xF0, 0x7E, 0x7F, 0x09, 0x01, 0xF7 });
+
+            Assert.Equal("pss680", SysExManager.ParseDumpInfo(pss680HeaderFile).TargetModel);
+            Assert.Equal("pss790", SysExManager.ParseDumpInfo(pss790HeaderFile).TargetModel);
+            Assert.Equal("all", SysExManager.ParseDumpInfo(genericRootFile).TargetModel);
+            Assert.Equal("pss680", SysExManager.ParseDumpInfo(folderPlaced680).TargetModel);
+        }
+
+        [Fact]
+        public void SysEx_IsDumpCompatibleWithModel_FiltersDeviceSpecificDumps()
+        {
+            var dump680 = new SysExDumpInfo { FileName = "d680.syx", TargetModel = "pss680" };
+            var dump790 = new SysExDumpInfo { FileName = "d790.syx", TargetModel = "pss790" };
+            var dumpAll = new SysExDumpInfo { FileName = "gm.syx", TargetModel = "all" };
+
+            Assert.True(SysExManager.IsDumpCompatibleWithModel(dump680, "pss680"));
+            Assert.False(SysExManager.IsDumpCompatibleWithModel(dump680, "pss790"));
+
+            Assert.True(SysExManager.IsDumpCompatibleWithModel(dump790, "pss790"));
+            Assert.False(SysExManager.IsDumpCompatibleWithModel(dump790, "pss680"));
+
+            Assert.True(SysExManager.IsDumpCompatibleWithModel(dumpAll, "pss790"));
+            Assert.True(SysExManager.IsDumpCompatibleWithModel(dumpAll, "pss680"));
+        }
+
+        [Fact]
+        public void SysEx_ImportDump_RoutesFilesIntoModelFoldersAndScansCleanly()
+        {
+            using var player = new MidiPlayer();
+            using var recorder = new MidiRecorder();
+            using var manager = new SysExManager(player, recorder);
+
+            var srcDir = Path.Combine(_testDir, "incoming");
+            var vaultRoot = Path.Combine(_testDir, "vault");
+            Directory.CreateDirectory(srcDir);
+            Directory.CreateDirectory(vaultRoot);
+
+            var src680 = Path.Combine(srcDir, "voice_or_drum.syx");
+            File.WriteAllBytes(src680, new byte[] { 0xF0, 0x43, 0x76, 0x00, 0x10, 0xF7 });
+
+            var src790 = Path.Combine(srcDir, "song_bulk.syx");
+            File.WriteAllBytes(src790, new byte[] { 0xF0, 0x43, 0x00, 0x7A, 0x20, 0xF7 });
+
+            // Simulate non-SysEx library sibling directory like PSS-680 Voices that must remain excluded
+            var voicesSibling = Path.Combine(vaultRoot, "PSS-680 Voices");
+            Directory.CreateDirectory(voicesSibling);
+            File.WriteAllBytes(Path.Combine(voicesSibling, "patch.syx"), new byte[72]);
+
+            var imported680 = manager.ImportDump(src680, "pss790", vaultRoot);
+            var imported790 = manager.ImportDump(src790, "pss680", vaultRoot);
+
+            Assert.Contains("PSS-680 Dumps", imported680, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("PSS-790 Dumps", imported790, StringComparison.OrdinalIgnoreCase);
+
+            var listed = SysExManager.GetSysExLibraryFromDisk(vaultRoot);
+            Assert.Equal(2, listed.Count);
+            Assert.Contains(listed, d => d.TargetModel == "pss680" && d.FileName == "voice_or_drum.syx");
+            Assert.Contains(listed, d => d.TargetModel == "pss790" && d.FileName == "song_bulk.syx");
+            Assert.DoesNotContain(listed, d => d.FileName == "patch.syx");
+        }
     }
 }

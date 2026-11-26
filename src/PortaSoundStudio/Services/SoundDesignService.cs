@@ -667,7 +667,7 @@ namespace PSS790Player.Services
                 {
                     byte[] sysex = pattern.ToSysExMessage();
                     AppPaths.EnsureDirectoriesExist();
-                    string outPath = Path.Combine(AppPaths.SysExDir, $"{cleanName}_03H.syx");
+                    string outPath = Path.Combine(AppPaths.Pss680SysExDir, $"{cleanName}_03H.syx");
                     File.WriteAllBytes(outPath, sysex);
                     RefreshSysExLibrary();
                     _state.AddToast($"Saved Custom Drummer SysEx backup: {Path.GetFileName(outPath)} (704 B).", ToastSeverity.Success);
@@ -821,7 +821,7 @@ namespace PSS790Player.Services
                 };
                 if (dlg.ShowDialog() == true)
                 {
-                    var imported = _sysexManager.ImportDump(dlg.FileName);
+                    var imported = _sysexManager.ImportDump(dlg.FileName, _state.ActiveModel);
                     RefreshSysExLibrary();
                     _state.AddToast($"Imported SysEx dump: {Path.GetFileName(imported)}", ToastSeverity.Success);
                 }

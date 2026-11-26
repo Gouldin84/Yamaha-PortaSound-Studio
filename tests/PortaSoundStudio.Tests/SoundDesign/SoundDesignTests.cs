@@ -15,11 +15,15 @@ namespace PSS790Player.Tests
             Assert.NotNull(AppPaths.FmVoicesDir);
             Assert.NotNull(AppPaths.VectorPresetsDir);
 
+            Assert.EndsWith("PSS-790 Dumps", AppPaths.Pss790SysExDir, StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith("PSS-680 Dumps", AppPaths.Pss680SysExDir, StringComparison.OrdinalIgnoreCase);
             Assert.EndsWith("PSS-680 Voices", AppPaths.FmVoicesDir, StringComparison.OrdinalIgnoreCase);
             Assert.EndsWith("PSS-790 Vectors", AppPaths.VectorPresetsDir, StringComparison.OrdinalIgnoreCase);
 
             // Verify EnsureDirectoriesExist creates them
             AppPaths.EnsureDirectoriesExist();
+            Assert.True(Directory.Exists(AppPaths.Pss790SysExDir), "Pss790SysExDir must exist on disk");
+            Assert.True(Directory.Exists(AppPaths.Pss680SysExDir), "Pss680SysExDir must exist on disk");
             Assert.True(Directory.Exists(AppPaths.FmVoicesDir), "FmVoicesDir must exist on disk");
             Assert.True(Directory.Exists(AppPaths.VectorPresetsDir), "VectorPresetsDir must exist on disk");
         }

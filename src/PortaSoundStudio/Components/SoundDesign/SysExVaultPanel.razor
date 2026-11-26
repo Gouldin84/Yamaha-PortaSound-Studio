@@ -3,11 +3,14 @@
 
 @{
     bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
+    var modelDumps = State.SysExDumps
+        .Where(d => SysExManager.IsDumpCompatibleWithModel(d, State.ActiveModel))
+        .ToList();
     var filteredDumps = string.IsNullOrWhiteSpace(_searchQuery)
-        ? State.SysExDumps
-        : State.SysExDumps.Where(d => d.FileName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                                      d.DumpType.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
-    var selectedDump = State.SysExDumps.FirstOrDefault(d => string.Equals(d.FilePath, _selectedDumpPath, StringComparison.OrdinalIgnoreCase))
+        ? modelDumps
+        : modelDumps.Where(d => d.FileName.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                                d.DumpType.Contains(_searchQuery, StringComparison.OrdinalIgnoreCase)).ToList();
+    var selectedDump = modelDumps.FirstOrDefault(d => string.Equals(d.FilePath, _selectedDumpPath, StringComparison.OrdinalIgnoreCase))
                        ?? filteredDumps.FirstOrDefault();
 }
 

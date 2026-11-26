@@ -337,7 +337,7 @@ namespace PSS790Player.Tests
             var aboutRazor = Path.Combine(root!, "Components", "Modals", "AboutModal.razor");
             Assert.True(File.Exists(aboutRazor), $"Expected {aboutRazor}");
             var aboutContent = File.ReadAllText(aboutRazor);
-            Assert.Contains("v3.0.1", aboutContent);
+            Assert.Contains("v3.0.2", aboutContent);
             Assert.Contains("Transport Actor", aboutContent);
             Assert.True(File.Exists(Path.Combine(root!, "Core", "TransportActor.cs")), "TransportActor.cs must exist.");
             Assert.True(File.Exists(Path.Combine(root!, "Components", "StudioComponentBase.cs")), "StudioComponentBase.cs must exist.");

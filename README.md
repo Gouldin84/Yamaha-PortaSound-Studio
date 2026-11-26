@@ -2,11 +2,11 @@
 
 A standalone MIDI workstation, real-time voice remapper, and multi-tab sound design studio for vintage **Yamaha PortaSound** keyboard synthesizers (**PSS-790**, **PSS-680**, **PSS-480**, and **PSS-780**).
 
-[![Release](https://img.shields.io/badge/release-v3.0.1-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
+[![Release](https://img.shields.io/badge/release-v3.0.2-blue.svg)](https://github.com/Gouldin84/Yamaha-PortaSound-Studio/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x64-green.svg)]()
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)]()
-[![Tests](https://img.shields.io/badge/Tests-264%20Passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/Tests-267%20Passing-brightgreen.svg)]()
 
 > [!TIP]
 > ### 🎹 Community & Hardware Testers Wanted!
@@ -162,7 +162,7 @@ Pre-built standalone single-file executables are available on the **[GitHub Rele
 git clone https://github.com/Gouldin84/Yamaha-PortaSound-Studio.git
 cd Yamaha-PortaSound-Studio
 
-# Run automated test suite (264 tests)
+# Run automated test suite (267 tests)
 dotnet test
 
 # Build single-file release executable

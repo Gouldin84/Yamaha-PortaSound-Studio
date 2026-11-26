@@ -20,6 +20,7 @@ namespace PSS790Player.Core
         public int PacketCount { get; set; }
         public string Manufacturer { get; set; } = "Yamaha";
         public string DumpType { get; set; } = "PSS-790 Memory Bulk Dump";
+        public string TargetModel { get; set; } = "all";
         public string HexPreview { get; set; } = string.Empty;
     }
 
@@ -246,18 +247,22 @@ namespace PSS790Player.Core
             {
                 AppPaths.EnsureDirectoriesExist();
 
-                // Select model-aware filename prefix from first captured packet header
-                string prefix = "SysEx_Backup";
-                var first = packets[0];
-                if (first.Length >= 3 && first[0] == 0xF0 && first[1] == Pss680Constants.ManufacturerYamaha)
+                // Route captures into dedicated keyboard model dump folders when recognizable
+                var detectedModel = DetectModelFromHeaderBytes(packets[0], packets[0].Length);
+                string prefix = detectedModel switch
                 {
-                    prefix = first[2] == Pss680Constants.InstrumentClassPss
-                        ? "PSS680_Backup"
-                        : "PSS790_Backup";
-                }
+                    "pss680" => "PSS680_Backup",
+                    "pss790" => "PSS790_Backup",
+                    _ => "SysEx_Backup"
+                };
+                string targetDir = detectedModel != null
+                    ? AppPaths.GetModelSysExDir(detectedModel)
+                    : AppPaths.SysExDir;
+                if (!Directory.Exists(targetDir))
+                    Directory.CreateDirectory(targetDir);
 
                 var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string fullPath = CreateUniqueSysExFilePath(AppPaths.SysExDir, prefix, timestamp, packets);
+                string fullPath = CreateUniqueSysExFilePath(targetDir, prefix, timestamp, packets);
 
                 var info = ParseDumpInfo(fullPath);
                 DumpCaptured?.Invoke(this, info);
@@ -302,27 +307,95 @@ namespace PSS790Player.Core
 
         public List<SysExDumpInfo> GetSysExLibrary() => GetSysExLibraryFromDisk();
 
-        public static List<SysExDumpInfo> GetSysExLibraryFromDisk()
+        public static List<SysExDumpInfo> GetSysExLibraryFromDisk(string? rootSysExDir = null)
         {
-            AppPaths.EnsureDirectoriesExist();
-            var list = new List<SysExDumpInfo>();
-
-            if (!Directory.Exists(AppPaths.SysExDir))
-                return list;
-
-            var files = Directory.GetFiles(AppPaths.SysExDir, "*.syx", SearchOption.TopDirectoryOnly)
-                .OrderByDescending(f => File.GetLastWriteTime(f));
-
-            foreach (var file in files)
+            string baseDir;
+            string pss790Dir;
+            string pss680Dir;
+            if (string.IsNullOrWhiteSpace(rootSysExDir))
             {
-                try
-                {
-                    list.Add(ParseDumpInfo(file));
-                }
-                catch { }
+                AppPaths.EnsureDirectoriesExist();
+                baseDir = AppPaths.SysExDir;
+                pss790Dir = AppPaths.Pss790SysExDir;
+                pss680Dir = AppPaths.Pss680SysExDir;
+            }
+            else
+            {
+                baseDir = rootSysExDir;
+                pss790Dir = Path.Combine(rootSysExDir, "PSS-790 Dumps");
+                pss680Dir = Path.Combine(rootSysExDir, "PSS-680 Dumps");
             }
 
-            return list;
+            var list = new List<SysExDumpInfo>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            var dumpDirs = new[] { pss790Dir, pss680Dir, baseDir };
+            foreach (var dir in dumpDirs)
+            {
+                if (!Directory.Exists(dir)) continue;
+
+                foreach (var file in Directory.GetFiles(dir, "*.syx", SearchOption.TopDirectoryOnly))
+                {
+                    var full = Path.GetFullPath(file);
+                    if (!seen.Add(full)) continue;
+                    try
+                    {
+                        list.Add(ParseDumpInfo(full));
+                    }
+                    catch { }
+                }
+            }
+
+            return list.OrderByDescending(i => i.CreatedAt).ToList();
+        }
+
+        public static string? DetectModelFromHeaderBytes(byte[]? buffer, int length)
+        {
+            if (buffer == null || length < 3 || buffer[0] != 0xF0)
+                return null;
+
+            if (buffer[1] == Pss680Constants.ManufacturerYamaha)
+            {
+                return buffer[2] == Pss680Constants.InstrumentClassPss ? "pss680" : "pss790";
+            }
+
+            return null;
+        }
+
+        private static string ResolveDumpTargetModel(byte[]? previewBuffer, int previewFilled, string fullPath)
+        {
+            var headerModel = DetectModelFromHeaderBytes(previewBuffer, previewFilled);
+            if (headerModel != null)
+                return headerModel;
+
+            var parentName = Path.GetFileName(Path.GetDirectoryName(fullPath) ?? string.Empty);
+            if (string.Equals(parentName, "PSS-680 Dumps", StringComparison.OrdinalIgnoreCase) ||
+                AppPaths.IsPathInsideDirectory(fullPath, AppPaths.Pss680SysExDir))
+            {
+                return "pss680";
+            }
+
+            if (string.Equals(parentName, "PSS-790 Dumps", StringComparison.OrdinalIgnoreCase) ||
+                AppPaths.IsPathInsideDirectory(fullPath, AppPaths.Pss790SysExDir))
+            {
+                return "pss790";
+            }
+
+            return "all";
+        }
+
+        public static bool IsDumpCompatibleWithModel(SysExDumpInfo dump, string? activeModel)
+        {
+            if (string.Equals(dump.TargetModel, "all", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(dump.TargetModel))
+            {
+                return true;
+            }
+
+            string normalized = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase)
+                ? "pss680"
+                : "pss790";
+            return string.Equals(dump.TargetModel, normalized, StringComparison.OrdinalIgnoreCase);
         }
 
         public static SysExDumpInfo ParseDumpInfo(string fullPath)
@@ -434,6 +507,11 @@ namespace PSS790Player.Core
                 }
 
                 info.HexPreview = GenerateHexPreview(previewBuffer, previewFilled, fi.Length);
+                info.TargetModel = ResolveDumpTargetModel(previewBuffer, previewFilled, fi.FullName);
+            }
+            else
+            {
+                info.TargetModel = ResolveDumpTargetModel(null, 0, fi.FullName);
             }
 
             return info;
@@ -710,19 +788,36 @@ namespace PSS790Player.Core
             return newPath;
         }
 
-        public string ImportDump(string sourceFilePath)
+        public string ImportDump(string sourceFilePath, string? preferredModel = null, string? rootSysExDir = null)
         {
             if (!File.Exists(sourceFilePath)) throw new FileNotFoundException("File not found.", sourceFilePath);
 
-            AppPaths.EnsureDirectoriesExist();
+            if (string.IsNullOrWhiteSpace(rootSysExDir))
+            {
+                AppPaths.EnsureDirectoriesExist();
+            }
+
+            var baseDir = string.IsNullOrWhiteSpace(rootSysExDir) ? AppPaths.SysExDir : rootSysExDir;
+            var inspected = ParseDumpInfo(sourceFilePath);
+            string destDir = inspected.TargetModel switch
+            {
+                "pss680" => Path.Combine(baseDir, "PSS-680 Dumps"),
+                "pss790" => Path.Combine(baseDir, "PSS-790 Dumps"),
+                _ => !string.IsNullOrWhiteSpace(preferredModel)
+                    ? Path.Combine(baseDir, string.Equals(preferredModel, "pss680", StringComparison.OrdinalIgnoreCase) ? "PSS-680 Dumps" : "PSS-790 Dumps")
+                    : baseDir
+            };
+            if (!Directory.Exists(destDir))
+                Directory.CreateDirectory(destDir);
+
             var destName = Path.GetFileName(sourceFilePath);
-            var destPath = Path.Combine(AppPaths.SysExDir, destName);
+            var destPath = Path.Combine(destDir, destName);
 
             if (File.Exists(destPath))
             {
                 var nameWithoutExt = Path.GetFileNameWithoutExtension(destName);
                 destName = $"{nameWithoutExt}_{DateTime.Now:yyyyMMdd_HHmmss}.syx";
-                destPath = Path.Combine(AppPaths.SysExDir, destName);
+                destPath = Path.Combine(destDir, destName);
             }
 
             File.Copy(sourceFilePath, destPath);
