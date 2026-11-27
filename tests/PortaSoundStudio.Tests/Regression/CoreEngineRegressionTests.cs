@@ -629,12 +629,12 @@ namespace PSS790Player.Tests
             Assert.Equal(0, timedEvents.Single(te => te.Event is ControlChangeEvent cc && cc.ControlNumber == 7).Time);
 
             var notes = remapped.GetNotes().OrderBy(n => n.Time).ToList();
-            Assert.Equal(48, notes[0].Time);
-            Assert.Equal(348, notes[1].Time);
+            Assert.Equal(96, notes[0].Time);
+            Assert.Equal(396, notes[1].Time);
 
-            // Mid-song tempo event must shift by 48 ticks alongside Note 2 (300 -> 348)
+            // Mid-song tempo event must shift by 96 ticks alongside Note 2 (300 -> 396)
             var tempoEvt = timedEvents.Single(te => te.Event is SetTempoEvent);
-            Assert.Equal(348, tempoEvt.Time);
+            Assert.Equal(396, tempoEvt.Time);
         }
 
         [Fact]
@@ -933,7 +933,7 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Remapper_ContourPreservingBassLift_LiftsSub24PhraseWithoutInvertingIntervals()
+        public void Remapper_NoAutoOctaveShift_PreservesInRangeNotesAndClampsSub24Outliers()
         {
             var midi = new MidiFile();
             var trk = new TrackChunk(
@@ -950,8 +950,8 @@ namespace PSS790Player.Tests
             var remapped = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
             var notes = remapped.GetNotes().OrderBy(n => n.Time).Select(n => (byte)n.NoteNumber).ToList();
 
-            // Entire phrase shifts up +12 so 14 < 19 < 26 becomes 26 < 31 < 38 (preserving ascending contour)
-            Assert.Equal(new byte[] { 26, 31, 38 }, notes);
+            // Sub-24 hardware outliers clamp +12 into [24..108] (14->26, 19->31), while written note 26 stays untouched (no whole-channel auto shift)
+            Assert.Equal(new byte[] { 26, 31, 26 }, notes);
         }
 
         [Fact]
@@ -1447,9 +1447,10 @@ namespace PSS790Player.Tests
             var optimized = optimizer.Optimize(midi, programs);
             var surviving = optimized.GetNotes().ToList();
 
+            // Yielding already-released Ch 1 tails preserves both the held Ch 2 drone and the Tier-3 Alto Sax melody attack cleanly
             Assert.Contains(surviving, n => n.Channel == 0 && n.NoteNumber == 67);
-            Assert.DoesNotContain(surviving, n => n.Channel == 2 && n.NoteNumber == 82);
-            Assert.True(surviving.Count <= Constants.PolyphonyMax);
+            var ch1NotesAt260 = surviving.Count(n => n.Channel == 1 && n.Time <= 260 && n.EndTime > 260);
+            Assert.Equal(0, ch1NotesAt260);
         }
 
         [Fact]
@@ -1766,10 +1767,10 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Remapper_Pss790_MapsPizzicatoStringsToVoice32_AndPreservesTrebleMelodyContour()
+        public void Remapper_Pss790_MapsPizzicatoStringsToVoice32_AndPreservesTrebleWrittenPitches()
         {
             var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
-            // Range [76..95] on Pizzicato Strings (GM 45): > 88 aliasing limit; -12 octave shift fits cleanly inside [64..83]
+            // Range [76..95] on Pizzicato Strings (GM 45): exact written pitches preserved up to 108 without auto octave shift or 88 cap
             var track = new TrackChunk(
                 new ProgramChangeEvent((SevenBitNumber)45) { Channel = (FourBitNumber)0, DeltaTime = 0 },
                 new NoteOnEvent((SevenBitNumber)76, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
@@ -1785,8 +1786,9 @@ namespace PSS790Player.Tests
 
             var notes = remapped.GetNotes().OrderBy(n => n.Time).ToList();
             Assert.Equal(2, notes.Count);
-            Assert.Equal(19, notes[1].NoteNumber - notes[0].NoteNumber); // Exact ascending 19-semitone interval preserved!
-            Assert.True(notes[1].NoteNumber <= 88);
+            Assert.Equal((SevenBitNumber)76, notes[0].NoteNumber);
+            Assert.Equal((SevenBitNumber)95, notes[1].NoteNumber);
+            Assert.Equal(19, notes[1].NoteNumber - notes[0].NoteNumber);
         }
 
         [Fact]
@@ -1849,6 +1851,113 @@ namespace PSS790Player.Tests
 
             Assert.DoesNotContain(stopNoteOffs, no => no.Channel == 0 && no.NoteNumber == 60);
             Assert.Contains(stopNoteOffs, no => no.Channel == 1 && no.NoteNumber == 64);
+        }
+
+        [Fact]
+        public void Pss680Constants_GmToPss680VoiceMap_AvoidsOverusingSynthBrass_ForLeadsAndHits()
+        {
+            Assert.Equal(99, Pss680Constants.GmToPss680VoiceMap[80]); // Lead 1 Square -> Sine Wave
+            Assert.Equal(98, Pss680Constants.GmToPss680VoiceMap[86]); // Lead 7 Fifths -> Musical Saw
+            Assert.Equal(92, Pss680Constants.GmToPss680VoiceMap[55]); // Orchestra Hit -> Brass Ensemble
+            Assert.Equal(0, Pss680Constants.GmToPss680VoiceMap[62]);  // Synth Brass 1 stays Synth Brass
+        }
+
+        [Fact]
+        public void Remapper_EarlyPostZeroProgramChange_AndIntroTrackName_DoNotFallbackToPianoOrSynthBrass()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            // Ch 0: note at tick 0, first explicit PC (Fingered Bass 33) at tick 4 + "Intro   " text
+            var trk0 = new TrackChunk(
+                new SequenceTrackNameEvent("Intro   "),
+                new NoteOnEvent((SevenBitNumber)40, (SevenBitNumber)95) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new ProgramChangeEvent((SevenBitNumber)33) { Channel = (FourBitNumber)0, DeltaTime = 4 },
+                new NoteOffEvent((SevenBitNumber)40, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 }
+            );
+            // Ch 1: no PC at all, only text "Intro   " -> must NOT infer Piano 0
+            var trk1 = new TrackChunk(
+                new SequenceTrackNameEvent("Intro   "),
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)80) { Channel = (FourBitNumber)1, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 240 }
+            );
+            midi.Chunks.Add(trk0);
+            midi.Chunks.Add(trk1);
+
+            Assert.Null(Remapper.InferGmProgramFromText("Intro   "));
+
+            var rem790 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
+            var ch0Pc790 = rem790.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent pc && pc.Channel == 0).Select(te => ((ProgramChangeEvent)te.Event).ProgramNumber).First();
+            Assert.Equal((SevenBitNumber)Constants.Pss790Voices[Constants.GmToPss790VoiceMap[33]].MidiProgram, ch0Pc790);
+
+            var rem680 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss680" });
+            var ch0Pc680 = rem680.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent pc && pc.Channel == 0).Select(te => ((ProgramChangeEvent)te.Event).ProgramNumber).First();
+            var ch1Pc680 = rem680.GetTimedEvents().Where(te => te.Event is ProgramChangeEvent pc && pc.Channel == 1).Select(te => ((ProgramChangeEvent)te.Event).ProgramNumber).First();
+            Assert.Equal((SevenBitNumber)Pss680Constants.GmToPss680VoiceMap[33], ch0Pc680);
+            Assert.Equal((SevenBitNumber)3, ch1Pc680); // Default Piano 1 (3), never Synth Brass (0)
+        }
+
+        [Fact]
+        public void Remapper_Pss790PolyphonyLimit_Respects22Vs28_AndProtectsSparseMidRegisterMelody()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            var padTrack = new TrackChunk(new ProgramChangeEvent((SevenBitNumber)48) { Channel = (FourBitNumber)1 });
+            for (int i = 0; i < 26; i++)
+            {
+                padTrack.Events.Add(new NoteOnEvent((SevenBitNumber)(48 + i), (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 0 });
+            }
+            for (int i = 0; i < 26; i++)
+            {
+                padTrack.Events.Add(new NoteOffEvent((SevenBitNumber)(48 + i), (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = i == 0 ? 480 : 0 });
+            }
+
+            // Sparse Tier-3 Alto Sax solo (GM 65) at lower pitch & moderate velocity than top pad note 73
+            var soloTrack = new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)65) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)64, (SevenBitNumber)75) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)64, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 }
+            );
+            midi.Chunks.Add(padTrack);
+            midi.Chunks.Add(soloTrack);
+
+            var safe22 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790", EnablePolyphonyGuard = true, Pss790PolyphonyLimit = 22 });
+            var notes22 = safe22.GetNotes().ToList();
+            Assert.True(notes22.Count <= 22);
+            Assert.Contains(notes22, n => n.Channel == 0 && n.NoteNumber == 64);
+
+            var full28 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790", EnablePolyphonyGuard = true, Pss790PolyphonyLimit = 28 });
+            var notes28 = full28.GetNotes().ToList();
+            Assert.Equal(27, notes28.Count); // 26 strings + 1 solo < 28, all preserved
+            Assert.Contains(notes28, n => n.Channel == 0 && n.NoteNumber == 64);
+        }
+
+        [Fact]
+        public void ChannelStateExtractor_Pss680DefaultsToPiano1_AndMatchesRelocatedAndEarlyPcVoices()
+        {
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            // Ch 0: unassigned (no PC, no text) -> must default to PSS-680 Piano 1 (3), not Synth Brass (0)
+            // Ch 1: late pre-note PC 80 (Square Lead -> PSS-680 99 Sine Wave) at tick 4 before note at tick 24
+            // Ch 15: melodic guitar (GM 29) relocated to first free channel (Ch 2)
+            midi.Chunks.Add(new TrackChunk(
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 240 },
+                new ProgramChangeEvent((SevenBitNumber)80) { Channel = (FourBitNumber)1, DeltaTime = 4 },
+                new NoteOnEvent((SevenBitNumber)72, (SevenBitNumber)90) { Channel = (FourBitNumber)1, DeltaTime = 20 },
+                new NoteOffEvent((SevenBitNumber)72, (SevenBitNumber)0) { Channel = (FourBitNumber)1, DeltaTime = 240 },
+                new ProgramChangeEvent((SevenBitNumber)29) { Channel = (FourBitNumber)15, DeltaTime = 0 },
+                new NoteOnEvent((SevenBitNumber)55, (SevenBitNumber)90) { Channel = (FourBitNumber)15, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)55, (SevenBitNumber)0) { Channel = (FourBitNumber)15, DeltaTime = 240 }
+            ));
+
+            var rem680 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss680" });
+            var states680 = PSS790Player.Services.ChannelStateExtractor.Analyze(midi, rem680, MidiFormat.GeneralMidi, "pss680", false, new Dictionary<int, int?>(), new Dictionary<int, int>());
+            Assert.Equal(3, states680[0].PssVoice);
+            Assert.Equal("Piano 1", states680[0].PssVoiceName);
+            Assert.Equal(99, states680[1].PssVoice);
+            Assert.Equal(Pss680Constants.GmToPss680VoiceMap[29], states680[2].PssVoice);
+
+            var rem790 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
+            var states790 = PSS790Player.Services.ChannelStateExtractor.Analyze(midi, rem790, MidiFormat.GeneralMidi, "pss790", false, new Dictionary<int, int?>(), new Dictionary<int, int>());
+            Assert.Equal(Constants.GmToPss790VoiceMap[80], states790[1].PssVoice);
+            Assert.Equal(Constants.GmToPss790VoiceMap[29], states790[2].PssVoice);
         }
 
         private sealed class DisposeOrderMockDevice : IOutputDevice

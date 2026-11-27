@@ -67,6 +67,7 @@ namespace PSS790Player.Core
             {
                 TargetModel = is680 ? "pss680" : "pss790",
                 EnablePolyphonyGuard = source?.EnablePolyphonyGuard ?? true,
+                Pss790PolyphonyLimit = source?.Pss790PolyphonyLimit ?? Constants.PolyphonyGuardThreshold,
                 ScalePitchBend = source?.ScalePitchBend ?? true,
                 PitchBendMode = source?.PitchBendMode ?? PitchBendScaleMode.Auto,
                 NeutralizeAcousticPitchBends = source?.NeutralizeAcousticPitchBends ?? true,

@@ -646,17 +646,17 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Remap_AcousticMelodicNoteClamping_FoldsNotesAbove88()
+        public void Remap_MelodicNoteClamping_PreservesUpTo108AndFoldsOutliers()
         {
-            // For Piano (GM 0), note 92 (E6+) should fold down by 1 octave to 80 on PSS-790
-            Assert.Equal((byte)80, Remapper.ClampMelodicNote(92, 0, is680: false));
-            // On PSS-680 (2-Op FM), note 92 stays 92 (no AWM aliasing ceiling)
+            // All voices (including Acoustic Piano GM 0 and Synth Lead GM 80) preserve full hardware [24..108] range
+            Assert.Equal((byte)92, Remapper.ClampMelodicNote(92, 0, is680: false));
+            Assert.Equal((byte)108, Remapper.ClampMelodicNote(108, 0, is680: false));
             Assert.Equal((byte)92, Remapper.ClampMelodicNote(92, 0, is680: true));
-            // For Flute / Synth (GM 80), note 92 stays 92, and note 108 stays 108
             Assert.Equal((byte)92, Remapper.ClampMelodicNote(92, 80));
             Assert.Equal((byte)108, Remapper.ClampMelodicNote(108, 80));
-            // For Flute / Synth, note 115 folds down to 103 (<= 108)
+            // Strictly above 108 folds down into [24..108]
             Assert.Equal((byte)103, Remapper.ClampMelodicNote(115, 80));
+            Assert.Equal((byte)103, Remapper.ClampMelodicNote(115, 0, is680: false));
         }
 
         [Fact]

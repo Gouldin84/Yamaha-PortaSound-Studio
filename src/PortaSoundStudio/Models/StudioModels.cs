@@ -160,6 +160,7 @@ namespace PSS790Player.Models
         public int MasterTranspose { get; set; }
         public string PitchBendMode { get; set; } = "Auto";
         public bool PolyphonyGuard { get; set; } = true;
+        public int PolyphonyLimit790 { get; set; } = Core.Constants.PolyphonyGuardThreshold;
         public bool IsOptimizedAvailable { get; set; }
         public string? OptimizedFilePath { get; set; }
         public string? LinkedGmPath { get; set; }

@@ -317,6 +317,46 @@ namespace PSS790Player.Tests
             Assert.InRange(store.CurrentSeconds, 0, store.DurationSeconds + 0.01);
         }
 
+        [Fact]
+        public async Task PlaybackCoordinator_Pss790LiveLoad_EnablesDrumTranslationCcFilterAndPolyphonyLimitDropdown()
+        {
+            var trackPath = Path.Combine(_gmDir, "pss790_live_opts.mid");
+            var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
+            midi.Chunks.Add(new TrackChunk(
+                new ProgramChangeEvent((SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new ControlChangeEvent((SevenBitNumber)74, (SevenBitNumber)64) { Channel = (FourBitNumber)0, DeltaTime = 0 }, // unsupported CC 74
+                new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)60, (SevenBitNumber)0) { Channel = (FourBitNumber)0, DeltaTime = 480 },
+                // GM drum hit on Ch 10 (index 9) -> must translate to Ch 16 (index 15) for live PSS-790 playback
+                new NoteOnEvent((SevenBitNumber)36, (SevenBitNumber)100) { Channel = (FourBitNumber)9, DeltaTime = 0 },
+                new NoteOffEvent((SevenBitNumber)36, (SevenBitNumber)0) { Channel = (FourBitNumber)9, DeltaTime = 240 }
+            ));
+            midi.Write(trackPath);
+
+            var store = new AppStateStore();
+            using var library = new LibraryService(store);
+            using var devices = new HardwareDeviceService(store);
+            using var mockDev = new ThreadSafeMockDevice();
+            devices.Player.SetOutputDevice(mockDev);
+            using var playback = new PlaybackCoordinator(store, devices, library);
+            playback.SetActiveModel("pss790");
+
+            await playback.LoadFileAsync(trackPath, autoPlay: false);
+
+            Assert.NotNull(store.LoadedSong);
+            Assert.Equal(22, store.LoadedSong!.PolyphonyLimit790);
+            Assert.Equal(0, store.LoadedSong.Channels[0].PssVoice); // Ch 0 PIANO (00)
+            Assert.Contains(store.LoadedSong.Channels, c => c.Channel == 15 && c.HasNotes);
+
+            playback.SetPolyphonyLimit790(28);
+            var deadline = DateTime.UtcNow.AddSeconds(3);
+            while (store.LoadedSong?.PolyphonyLimit790 != 28 && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(25);
+            }
+            Assert.Equal(28, store.LoadedSong!.PolyphonyLimit790);
+        }
+
         private sealed class ThreadSafeMockDevice : Melanchall.DryWetMidi.Multimedia.IOutputDevice
         {
             public event EventHandler<Melanchall.DryWetMidi.Multimedia.MidiEventSentEventArgs>? EventSent;

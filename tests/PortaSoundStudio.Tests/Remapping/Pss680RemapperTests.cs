@@ -530,15 +530,15 @@ namespace PSS790Player.Tests
             Assert.Equal(100, (byte)notes680[2].NoteNumber);
             Assert.Equal(108, (byte)notes680[3].NoteNumber);
 
-            // Remap for PSS-790 (AWM engine has multisample aliasing above 88, folds notes down)
+            // Remap for PSS-790 also preserves exact written pitches up to 108 (E6/88 cap removed)
             var opt790 = new RemapperOptions { TargetModel = "pss790", ForceRemap = true };
             var remapped790 = Remapper.Remap(midi, opt790);
             var notes790 = remapped790.GetTimedEvents().Select(te => te.Event).OfType<NoteOnEvent>().ToList();
 
             Assert.Equal(88, (byte)notes790[0].NoteNumber);
-            Assert.Equal(80, (byte)notes790[1].NoteNumber); // 92 folded down to 80
-            Assert.Equal(88, (byte)notes790[2].NoteNumber); // 100 folded down to 88
-            Assert.Equal(84, (byte)notes790[3].NoteNumber); // 108 folded down to 84
+            Assert.Equal(92, (byte)notes790[1].NoteNumber);
+            Assert.Equal(100, (byte)notes790[2].NoteNumber);
+            Assert.Equal(108, (byte)notes790[3].NoteNumber);
         }
 
         [Fact]

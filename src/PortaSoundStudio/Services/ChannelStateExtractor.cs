@@ -36,21 +36,37 @@ namespace PSS790Player.Services
                 : new HashSet<int> { 9 };
 
             var channelNotes = new HashSet<int>();
+            var channelNoteCounts = new int[16];
+            var firstNoteTime = new long[16];
+            Array.Fill(firstNoteTime, long.MaxValue);
             var channelPrograms = new Dictionary<int, byte>();
+            var zeroPcPrograms = new Dictionary<int, byte>();
+            var chronologicalPcs = new Dictionary<int, List<(long Time, byte Prog)>>();
             var inferredPrograms = new Dictionary<int, (byte Prog, string Source)>();
             var trackNotes = new Dictionary<int, TrackChunk>();
 
             foreach (var track in originalMidi.GetTrackChunks())
             {
-                foreach (var evt in track.Events)
+                foreach (var te in track.GetTimedEvents())
                 {
-                    switch (evt)
+                    switch (te.Event)
                     {
-                        case ProgramChangeEvent pc when !channelPrograms.ContainsKey(pc.Channel):
-                            channelPrograms[pc.Channel] = pc.ProgramNumber;
+                        case ProgramChangeEvent pc:
+                            if (!chronologicalPcs.TryGetValue(pc.Channel, out var pcList))
+                            {
+                                pcList = new List<(long Time, byte Prog)>();
+                                chronologicalPcs[pc.Channel] = pcList;
+                            }
+                            pcList.Add((te.Time, pc.ProgramNumber));
+                            if (te.Time == 0 && !zeroPcPrograms.ContainsKey(pc.Channel))
+                            {
+                                zeroPcPrograms[pc.Channel] = pc.ProgramNumber;
+                            }
                             break;
                         case NoteOnEvent note when note.Velocity > 0:
                             channelNotes.Add(note.Channel);
+                            channelNoteCounts[note.Channel]++;
+                            if (te.Time < firstNoteTime[note.Channel]) firstNoteTime[note.Channel] = te.Time;
                             trackNotes.TryAdd(note.Channel, track);
                             break;
                         case ControlChangeEvent cc when cc.ControlNumber == 0 && (cc.ControlValue == 126 || cc.ControlValue == 127):
@@ -59,6 +75,36 @@ namespace PSS790Player.Services
                         case NormalSysExEvent sysex when sysex.Data != null && sysex.Data.Length > 6:
                             InspectXgSysEx(sysex.Data, channelPrograms, drumChannels);
                             break;
+                    }
+                }
+            }
+
+            // Resolve each channel's initial program chronologically from its first note setup window
+            // rather than first-track-order PC (fixes late PCs > tick 0 and GM reset PC 0 at tick 0 before Bar 2 PC).
+            foreach (var (ch, pcList) in chronologicalPcs)
+            {
+                if (pcList.Count == 0) continue;
+                pcList.Sort((a, b) => a.Time.CompareTo(b.Time));
+                long fnt = firstNoteTime[ch];
+                if (fnt == long.MaxValue)
+                {
+                    channelPrograms[ch] = zeroPcPrograms.TryGetValue(ch, out var zp) ? zp : pcList[0].Prog;
+                }
+                else
+                {
+                    int idx = -1;
+                    for (int i = 0; i < pcList.Count; i++)
+                    {
+                        if (pcList[i].Time <= fnt) idx = i;
+                        else break;
+                    }
+                    if (idx >= 0)
+                    {
+                        channelPrograms[ch] = pcList[idx].Prog;
+                    }
+                    else if (pcList[0].Time <= fnt + 16)
+                    {
+                        channelPrograms[ch] = pcList[0].Prog;
                     }
                 }
             }
@@ -78,6 +124,7 @@ namespace PSS790Player.Services
             }
 
             var remappedNotes = new HashSet<int>();
+            var remappedPrograms = new Dictionary<int, byte>();
             int? relocatedMelodicChannel = null;
             if (!isGmPassthrough && format == MidiFormat.GeneralMidi && remappedMidi != null)
             {
@@ -87,17 +134,39 @@ namespace PSS790Player.Services
                     {
                         remappedNotes.Add(noteOn.Channel);
                     }
+                    else if (te.Event is ProgramChangeEvent remPc && remPc.Channel != 15 && !remappedPrograms.ContainsKey(remPc.Channel))
+                    {
+                        remappedPrograms[remPc.Channel] = remPc.ProgramNumber;
+                    }
                 }
 
                 if (channelNotes.Contains(15) && !drumChannels.Contains(15))
                 {
+                    // Mirror Remapper.cs Step 6 deterministic relocation selection
                     for (int cand = 0; cand <= 14; cand++)
                     {
-                        if (remappedNotes.Contains(cand) && (!channelNotes.Contains(cand) || drumChannels.Contains(cand)))
+                        if (!drumChannels.Contains(cand) && !channelNotes.Contains(cand) && remappedNotes.Contains(cand))
                         {
                             relocatedMelodicChannel = cand;
                             break;
                         }
+                    }
+                    if (!relocatedMelodicChannel.HasValue)
+                    {
+                        foreach (int d in drumChannels.Where(d => d != 15))
+                        {
+                            if (remappedNotes.Contains(d)) { relocatedMelodicChannel = d; break; }
+                        }
+                    }
+                    if (!relocatedMelodicChannel.HasValue)
+                    {
+                        relocatedMelodicChannel = Enumerable.Range(0, 15)
+                            .Where(c => !drumChannels.Contains(c) && remappedNotes.Contains(c))
+                            .OrderBy(c => c == 0 ? 1 : 0)
+                            .ThenBy(c => channelNoteCounts[c])
+                            .ThenByDescending(c => c)
+                            .Cast<int?>()
+                            .FirstOrDefault();
                     }
                 }
             }
@@ -105,18 +174,25 @@ namespace PSS790Player.Services
             bool isNativeForActiveModel = (format == MidiFormat.Pss680Native && is680) ||
                                           (format == MidiFormat.Pss790Native && !is680);
 
+            bool remappedIsFullHardwareRemap = remappedMidi != null &&
+                                             (!drumChannels.Contains(9) || !remappedNotes.Contains(9) || remappedNotes.Contains(15));
+
             for (int ch = 0; ch < 16; ch++)
             {
-                bool hasNotes = (!isGmPassthrough && format == MidiFormat.GeneralMidi && remappedMidi != null)
+                bool hasNotes = (!isGmPassthrough && format == MidiFormat.GeneralMidi && remappedIsFullHardwareRemap)
                     ? remappedNotes.Contains(ch)
                     : channelNotes.Contains(ch);
 
                 bool isRelocatedTarget = relocatedMelodicChannel.HasValue && ch == relocatedMelodicChannel.Value;
-                int lookupOrigCh = isRelocatedTarget ? 15 : ch;
+                int lookupOrigCh = isRelocatedTarget && !channelNotes.Contains(ch) ? 15 : ch;
                 bool suppressOrigDrumSource = !isGmPassthrough && format == MidiFormat.GeneralMidi &&
                                               drumChannels.Contains(ch) && !isRelocatedTarget;
 
                 byte? prog = (!suppressOrigDrumSource && channelPrograms.TryGetValue(lookupOrigCh, out var p)) ? p : null;
+                if (isRelocatedTarget && !prog.HasValue && channelPrograms.TryGetValue(15, out var p15))
+                {
+                    prog = p15;
+                }
                 string? inferredTag = null;
                 if (!suppressOrigDrumSource && !prog.HasValue && inferredPrograms.TryGetValue(lookupOrigCh, out var inf))
                 {
@@ -151,6 +227,28 @@ namespace PSS790Player.Services
 
                 (string detectedInstrument, int defaultPssVoice, string defaultPssVoiceName) = ResolveVoiceMetadata(
                     isNativeForActiveModel, is680, isDrum, isGmPassthrough, prog);
+
+                // Cross-check against actual remapped output PC so UI voice strip always matches hardware output
+                if (!isGmPassthrough && format == MidiFormat.GeneralMidi && remappedIsFullHardwareRemap && !isDrum &&
+                    remappedPrograms.TryGetValue(ch, out byte remProg) &&
+                    (!voiceOverrides.TryGetValue(ch, out var ovChk) || !ovChk.HasValue))
+                {
+                    if (is680)
+                    {
+                        int actualV680 = Math.Clamp((int)remProg, 0, 104);
+                        if (actualV680 != defaultPssVoice)
+                        {
+                            defaultPssVoice = actualV680;
+                            defaultPssVoiceName = LookupVoiceName(actualV680, is680: true);
+                        }
+                    }
+                    else if (Constants.Pss790MidiProgramToVoice.TryGetValue(remProg, out var actualV790) &&
+                             actualV790.VoiceNumber != defaultPssVoice)
+                    {
+                        defaultPssVoice = actualV790.VoiceNumber;
+                        defaultPssVoiceName = actualV790.Name;
+                    }
+                }
 
                 int activeVoice = defaultPssVoice;
                 string activeVoiceName = defaultPssVoiceName;
@@ -223,7 +321,7 @@ namespace PSS790Player.Services
                 {
                     return (v680.Name, v680.VoiceNumber, v680.Name);
                 }
-                return ("Piano 1 (Default)", 0, "Piano 1");
+                return ("Piano 1 (Default)", 3, "Piano 1");
             }
 
             if (isNativeForActiveModel && !is680)
@@ -248,7 +346,7 @@ namespace PSS790Player.Services
 
             if (is680)
             {
-                int vNum = Pss680Constants.GmToPss680VoiceMap.TryGetValue(gmProg, out var m680) ? m680 : 0;
+                int vNum = Pss680Constants.GmToPss680VoiceMap.TryGetValue(gmProg, out var m680) ? m680 : 3;
                 return (gmName, vNum, LookupVoiceName(vNum, is680: true));
             }
             else

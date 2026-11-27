@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Melanchall.DryWetMidi.Common;
@@ -79,6 +80,14 @@ namespace PSS790Player.Core
         private volatile bool _stripHardwareCc10;
         private string _activeModel = "pss790";
         private int _vectorQuadPlaybackEnabled;
+
+        // One-shot cold-start setup deduplication so Playback.Start() does not immediately
+        // re-blast the identical Tick-0 ProgramChange / CC wave already sent by PrimeInitialVoicesForHardwareStart.
+        private int _primedTickZeroPcMask;
+        private readonly byte[] _primedTickZeroPcValues = new byte[16];
+        private long _primedTickZeroCcMask;
+        private readonly byte[] _primedTickZeroCcValues = new byte[64];
+        private long _primedDedupExpiryTimestamp;
 
         private EventHandler? _playbackFinishedHandler;
         private EventHandler? _repeatStartedHandler;
@@ -340,6 +349,7 @@ namespace PSS790Player.Core
         {
             Interlocked.Increment(ref _stopEpoch);
             Interlocked.Increment(ref _playbackSessionEpoch);
+            ClearPrimedSetupDedup();
             int prevVolumeMask = Interlocked.Exchange(ref _dirtyVolumeMask, 0);
             StopAndDetachPlayback(disposePlayback: true, forceFullPanic: false);
 
@@ -400,6 +410,7 @@ namespace PSS790Player.Core
 
         private void StopAndDetachPlayback(bool disposePlayback, bool forceFullPanic = false)
         {
+            ClearPrimedSetupDedup();
             Playback? oldPlayback = null;
             FilteringOutputDevice? oldFiltering = null;
 
@@ -543,6 +554,7 @@ namespace PSS790Player.Core
                                     if (!ReferenceEquals(_playback, newPlayback)) return;
                                     _hasFinished = false;
                                 }
+                                ClearPrimedSetupDedup();
                                 SendPanicNoteOffInternal(forceAllChannels: false);
                                 RePrimeInitialControllers();
                             }
@@ -886,6 +898,10 @@ namespace PSS790Player.Core
                                 PrimeInitialVoicesForHardwareStart(fileSnapshot, stopEpoch, p);
                             }
                         }
+                        else
+                        {
+                            ClearPrimedSetupDedup();
+                        }
 
                         bool started = false;
                         lock (_transportLock)
@@ -919,6 +935,10 @@ namespace PSS790Player.Core
                             {
                                 filtering?.AllowOutput();
                                 Interlocked.Increment(ref _playbackSessionEpoch);
+                                if (Volatile.Read(ref _primedTickZeroPcMask) != 0 || Volatile.Read(ref _primedTickZeroCcMask) != 0)
+                                {
+                                    Volatile.Write(ref _primedDedupExpiryTimestamp, Stopwatch.GetTimestamp() + (long)(0.25 * Stopwatch.Frequency));
+                                }
                                 p.Start();
                                 started = true;
                             }
@@ -1030,7 +1050,12 @@ namespace PSS790Player.Core
                     return;
                 }
 
+                ClearPrimedSetupDedup();
                 int sentCount = 0;
+                int primedPcMask = 0;
+                long primedCcMask = 0;
+                bool isQuadActive = !is680 && Volatile.Read(ref _vectorQuadPlaybackEnabled) != 0;
+
                 lock (_deviceLock)
                 {
                     if (!ReferenceEquals(_outputDevice, target) || Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
@@ -1040,10 +1065,13 @@ namespace PSS790Player.Core
                         if (Volatile.Read(ref _stopEpoch) != expectedStopEpoch) return;
                         try
                         {
-                            target.SendEvent(new ProgramChangeEvent((SevenBitNumber)initialPcs[ch].Program)
+                            byte pcProg = initialPcs[ch].Program;
+                            target.SendEvent(new ProgramChangeEvent((SevenBitNumber)pcProg)
                             {
                                 Channel = (FourBitNumber)ch
                             });
+                            _primedTickZeroPcValues[ch] = pcProg;
+                            primedPcMask |= (1 << ch);
                             sentCount++;
 
                             // PSS-680 Manual p.35: every ProgramChange resets internal Sustain/Vibrato flags to factory preset defaults.
@@ -1054,6 +1082,12 @@ namespace PSS790Player.Core
                                 Volatile.Write(ref _lastPss680Modulation[ch], initMod);
                                 ResetPss680DefaultEffectsForChannel(target, ch, initMod);
                                 target.SendEvent(new PitchBendEvent(8192) { Channel = (FourBitNumber)ch });
+                                if (initialCcs.ContainsKey((ch, 1)))
+                                {
+                                    int slotIdx = ch * 4;
+                                    _primedTickZeroCcValues[slotIdx] = initMod;
+                                    primedCcMask |= (1L << slotIdx);
+                                }
                                 sentCount += 3;
                             }
 
@@ -1097,7 +1131,19 @@ namespace PSS790Player.Core
                             {
                                 Channel = (FourBitNumber)ch
                             });
+                            bool skipQuadCc = isQuadActive && ch == 0 && (ccNum == 1 || ccNum == 7 || ccNum == 91);
+                            if (!skipQuadCc && TryMapPrimedCcSlot(ccNum, out int slotOffset))
+                            {
+                                int slotIdx = ch * 4 + slotOffset;
+                                _primedTickZeroCcValues[slotIdx] = ccVal;
+                                primedCcMask |= (1L << slotIdx);
+                            }
                             sentCount++;
+
+                            if (!isMsGs && (sentCount % 4) == 0)
+                            {
+                                Thread.Sleep(4);
+                            }
                         }
                         catch { }
                     }
@@ -1107,7 +1153,7 @@ namespace PSS790Player.Core
                 // aborting immediately if Stop/LoadMidi is called during settle.
                 if (!isMsGs && sentCount > 0)
                 {
-                    int settleMs = Math.Clamp(sentCount * 2 + 25, 30, 80);
+                    int settleMs = Math.Clamp(sentCount * 3 + 35, 45, 140);
                     int elapsed = 0;
                     while (elapsed < settleMs)
                     {
@@ -1121,8 +1167,69 @@ namespace PSS790Player.Core
                         elapsed += step;
                     }
                 }
+
+                if (sentCount > 0 && !_isDisposed && Volatile.Read(ref _stopEpoch) == expectedStopEpoch)
+                {
+                    Volatile.Write(ref _primedTickZeroPcMask, primedPcMask);
+                    Volatile.Write(ref _primedTickZeroCcMask, primedCcMask);
+                }
             }
             catch { }
+        }
+
+        private static bool TryMapPrimedCcSlot(byte ccNum, out int slotOffset)
+        {
+            switch (ccNum)
+            {
+                case 1: slotOffset = 0; return true;
+                case 7: slotOffset = 1; return true;
+                case 10: slotOffset = 2; return true;
+                case 91: slotOffset = 3; return true;
+                default: slotOffset = -1; return false;
+            }
+        }
+
+        private void ClearPrimedSetupDedup()
+        {
+            Volatile.Write(ref _primedDedupExpiryTimestamp, 0);
+            Interlocked.Exchange(ref _primedTickZeroPcMask, 0);
+            Interlocked.Exchange(ref _primedTickZeroCcMask, 0);
+        }
+
+        private bool TryConsumePrimedPc(int ch, byte prog)
+        {
+            if ((uint)ch >= 15) return false;
+            long expiry = Volatile.Read(ref _primedDedupExpiryTimestamp);
+            if (expiry == 0) return false;
+            if (Stopwatch.GetTimestamp() > expiry)
+            {
+                ClearPrimedSetupDedup();
+                return false;
+            }
+
+            int bit = 1 << ch;
+            if ((Volatile.Read(ref _primedTickZeroPcMask) & bit) == 0) return false;
+            if (_primedTickZeroPcValues[ch] != prog) return false;
+            Interlocked.And(ref _primedTickZeroPcMask, ~bit);
+            return true;
+        }
+
+        private bool TryConsumePrimedCc(int ch, byte ccNum, byte val)
+        {
+            if ((uint)ch >= 15 || !TryMapPrimedCcSlot(ccNum, out int slotOffset)) return false;
+            long expiry = Volatile.Read(ref _primedDedupExpiryTimestamp);
+            if (expiry == 0) return false;
+            if (Stopwatch.GetTimestamp() > expiry)
+            {
+                ClearPrimedSetupDedup();
+                return false;
+            }
+
+            long bit = 1L << (ch * 4 + slotOffset);
+            if ((Volatile.Read(ref _primedTickZeroCcMask) & bit) == 0) return false;
+            if (_primedTickZeroCcValues[ch * 4 + slotOffset] != val) return false;
+            Interlocked.And(ref _primedTickZeroCcMask, ~bit);
+            return true;
         }
 
         public void Pause() => _actor.Invoke(PauseInternal);
@@ -1133,6 +1240,7 @@ namespace PSS790Player.Core
         {
             Interlocked.Increment(ref _stopEpoch);
             Interlocked.Increment(ref _playbackSessionEpoch);
+            ClearPrimedSetupDedup();
 
             Playback? p;
             FilteringOutputDevice? filtering;
@@ -1191,6 +1299,7 @@ namespace PSS790Player.Core
 
         private void SeekInternal(TimeSpan position)
         {
+            ClearPrimedSetupDedup();
             int stopEpoch = Volatile.Read(ref _stopEpoch);
             Playback? p;
             bool needsInit;
@@ -1403,6 +1512,7 @@ namespace PSS790Player.Core
         public void SendVoiceOverride(int channel, int voiceNumber, string? model = null)
         {
             if (channel < 0 || channel > 14) return; // Ch 15/16 is drum, ignores PC
+            ClearPrimedSetupDedup();
 
             var effectiveModel = model ?? ActiveModel;
             bool is680 = string.Equals(effectiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
@@ -2014,6 +2124,16 @@ namespace PSS790Player.Core
                             return;
                         }
 
+                        if (isNoteOnAudible && (uint)ch < 15 && ((Volatile.Read(ref _player._primedTickZeroPcMask) & (1 << ch)) != 0))
+                        {
+                            Interlocked.And(ref _player._primedTickZeroPcMask, ~(1 << ch));
+                        }
+
+                        if (channelEvent is ProgramChangeEvent pcEvt && _player.TryConsumePrimedPc(ch, (byte)pcEvt.ProgramNumber))
+                        {
+                            return;
+                        }
+
                         bool is680 = _player._isPss680;
 
                         if (is680 && channelEvent is ControlChangeEvent modCc && modCc.ControlNumber == 1)
@@ -2064,6 +2184,12 @@ namespace PSS790Player.Core
                                 };
                             }
                         }
+                    }
+
+                    if (midiEvent is ControlChangeEvent finalCc &&
+                        _player.TryConsumePrimedCc(finalCc.Channel, (byte)finalCc.ControlNumber, (byte)finalCc.ControlValue))
+                    {
+                        return;
                     }
 
                     TransmitSingle(midiEvent);

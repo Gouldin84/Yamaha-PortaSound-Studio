@@ -27,6 +27,7 @@ namespace PSS790Player.Core
     {
         public string TargetModel { get; set; } = "pss790"; // "pss790" or "pss680"
         public bool EnablePolyphonyGuard { get; set; } = true;
+        public int Pss790PolyphonyLimit { get; set; } = Constants.PolyphonyGuardThreshold; // 22 (Safe) / 26 (Balanced) / 28 (Max)
         public bool ScalePitchBend { get; set; } = true;
         public PitchBendScaleMode PitchBendMode { get; set; } = PitchBendScaleMode.Auto;
         public bool NeutralizeAcousticPitchBends { get; set; } = true; // Neutralizes micro pitch bends on acoustic instruments on PSS-790 hardware PCM
@@ -50,9 +51,9 @@ namespace PSS790Player.Core
 
     public class Remapper
     {
-        public const string Pss790MarkerText = "PSS790_REMAPPED:v3";
+        public const string Pss790MarkerText = "PSS790_REMAPPED:v4";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
-        public const string Pss680MarkerText = "PSS680_REMAPPED:v4";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v5";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         private readonly record struct TimedValueEntry(long Time, int TrackIndex, int EventOrder, byte Value);
@@ -364,6 +365,8 @@ namespace PSS790Player.Core
             var sfxChannels = new HashSet<int>();
             var usedChannels = new HashSet<int>();
             var channelNoteCounts = new int[16];
+            var firstNoteTimeOrig = new long[16];
+            Array.Fill(firstNoteTimeOrig, long.MaxValue);
             var rawChannelEvents = new List<(long Time, int Phase, int TrackIndex, int Order, TrackChunk Track, MidiEvent Event)>();
             var tracksList = remapped.GetTrackChunks().ToList();
 
@@ -377,6 +380,10 @@ namespace PSS790Player.Core
                     {
                         usedChannels.Add(noteOn.Channel);
                         channelNoteCounts[noteOn.Channel]++;
+                        if (te.Time < firstNoteTimeOrig[noteOn.Channel])
+                        {
+                            firstNoteTimeOrig[noteOn.Channel] = te.Time;
+                        }
                     }
 
                     int phase = te.Event switch
@@ -449,6 +456,9 @@ namespace PSS790Player.Core
             }
 
             var explicitPcKeys = new HashSet<(int Channel, long Time)>();
+            var hasExplicitZeroProg = new bool[16];
+            var firstExplicitPc = new (long Time, byte Prog)[16];
+            Array.Fill(firstExplicitPc, (long.MaxValue, (byte)0));
             foreach (var item in rawChannelEvents)
             {
                 if (item.Event is ProgramChangeEvent pcEvt)
@@ -530,6 +540,8 @@ namespace PSS790Player.Core
                     byte prog = (byte)pc.ProgramNumber;
                     curProg[ch] = prog;
                     hasExplicitInitialProg[ch] = true;
+                    if (item.Time == 0) hasExplicitZeroProg[ch] = true;
+                    if (item.Time < firstExplicitPc[ch].Time) firstExplicitPc[ch] = (item.Time, prog);
                     RecordChannelState(channelStateTimelines[ch], item.Time, curProg[ch], curIsDrum[ch], curIsSfx[ch], true);
                 }
             }
@@ -537,6 +549,8 @@ namespace PSS790Player.Core
             void ApplyProgramToTimeline(int part, byte prog, long time, TrackChunk sysexTrack)
             {
                 bool shouldUpdateInitial = !hasExplicitInitialProg[part] && time == 0;
+                if (time == 0) hasExplicitZeroProg[part] = true;
+                if (time < firstExplicitPc[part].Time) firstExplicitPc[part] = (time, prog);
                 if (time > 0 || shouldUpdateInitial)
                 {
                     curProg[part] = prog;
@@ -567,7 +581,36 @@ namespace PSS790Player.Core
             {
                 if (usedChannels.Contains(c) || hasExplicitInitialProg[c] || drumChannels.Contains(c))
                 {
-                    channelGmPrograms[c] = channelStateTimelines[c][0].GmProgram;
+                    long fnt = firstNoteTimeOrig[c];
+                    byte resolvedProg = channelStateTimelines[c][0].GmProgram;
+
+                    if (!drumChannels.Contains(c) && firstExplicitPc[c].Time != long.MaxValue)
+                    {
+                        if (fnt == long.MaxValue)
+                        {
+                            resolvedProg = firstExplicitPc[c].Prog;
+                        }
+                        else
+                        {
+                            var atFirstNote = LookupChannelStateAtTime(channelStateTimelines, c, fnt);
+                            if ((hasExplicitZeroProg[c] && atFirstNote.Time == 0) || (atFirstNote.Time > 0 && atFirstNote.Time <= fnt))
+                            {
+                                resolvedProg = atFirstNote.GmProgram;
+                            }
+                            else if (firstExplicitPc[c].Time <= fnt + 16)
+                            {
+                                resolvedProg = firstExplicitPc[c].Prog;
+                                channelStateTimelines[c][0] = new TimedChannelState(
+                                    0,
+                                    resolvedProg,
+                                    channelStateTimelines[c][0].IsDrum,
+                                    channelStateTimelines[c][0].IsSfx,
+                                    true);
+                            }
+                        }
+                    }
+
+                    channelGmPrograms[c] = resolvedProg;
                 }
             }
 
@@ -638,11 +681,6 @@ namespace PSS790Player.Core
                     postRelocationProgramTimelines[destCh] = stLine.Select(s => (s.Time, s.GmProgram)).ToList();
                 }
             }
-
-            // Step 6b: Contour-Preserving Channel Octave Shifting (for both PSS-790 and PSS-680)
-            // Chooses the smallest integer octave shift (-3..+3 octaves) that minimizes out-of-range wrapping
-            // while preserving exact melodic/bassline intervals whenever possible.
-            var autoChannelOctaveShifts = ComputeContourPreservingOctaveShifts(remapped, options, channelStateTimelines, drumChannels, is680);
 
             // 7. Filter Unsupported Events & Remap Channels, Voices, Notes, and Pitch Bends
             // Both PSS-790 and PSS-680 Mode 99 MIDI IN operate at +/- 1 octave (+/- 12 semitones, PSS-680 Manual p.35).
@@ -718,14 +756,6 @@ namespace PSS790Player.Core
                                 {
                                     transposeShift += chShift;
                                 }
-                                else if (autoChannelOctaveShifts.TryGetValue(originalChannel, out var autoShift))
-                                {
-                                    transposeShift += autoShift;
-                                }
-                            }
-                            else if (autoChannelOctaveShifts.TryGetValue(originalChannel, out var autoShift))
-                            {
-                                transposeShift += autoShift;
                             }
 
                             if (chEvt is NoteOnEvent melodicNoteOn)
@@ -1002,11 +1032,16 @@ namespace PSS790Player.Core
             // 10. Run Smart Polyphony Optimizer with chronological program priorities and Vector Quad weights
             if (options.EnablePolyphonyGuard)
             {
-                int threshold = is680 ? Pss680Constants.PolyphonyMode99 : Constants.PolyphonyGuardThreshold;
+                int limit790 = Math.Clamp(options.Pss790PolyphonyLimit, 12, Constants.PolyphonyMax);
+                int threshold = is680 ? Pss680Constants.PolyphonyMode99 : limit790;
                 var voiceWeights = (!is680 && options.VectorQuadLayering)
                     ? new Dictionary<int, int> { [0] = 4 }
                     : null;
-                var optimizer = new PolyphonyOptimizer(enabled: true, threshold: threshold, model: options.TargetModel);
+                var optimizer = new PolyphonyOptimizer(
+                    enabled: true,
+                    threshold: threshold,
+                    model: options.TargetModel,
+                    melodicCeilingOverride: is680 ? null : limit790);
                 remapped = optimizer.Optimize(remapped, postRelocationGmPrograms, voiceWeights, postRelocationProgramTimelines);
             }
 
@@ -1056,96 +1091,6 @@ namespace PSS790Player.Core
                 else break;
             }
             return active;
-        }
-
-        private static Dictionary<int, int> ComputeContourPreservingOctaveShifts(
-            MidiFile midi,
-            RemapperOptions options,
-            Dictionary<int, List<TimedChannelState>> channelStateTimelines,
-            HashSet<int> drumChannels,
-            bool is680)
-        {
-            var result = new Dictionary<int, int>();
-            var channelNotes = new Dictionary<int, List<(byte Note, byte MaxAllowed)>>();
-
-            foreach (var trackChunk in midi.GetTrackChunks())
-            {
-                long absTime = 0;
-                foreach (var evt in trackChunk.Events)
-                {
-                    absTime += evt.DeltaTime;
-                    if (evt is NoteOnEvent noteOn && noteOn.Velocity > 0 && !drumChannels.Contains(noteOn.Channel))
-                    {
-                        int ch = noteOn.Channel;
-                        var state = LookupChannelStateAtTime(channelStateTimelines, ch, absTime);
-                        bool sensitive = !is680 && IsAliasingSensitiveAcousticVoice(state.GmProgram);
-                        byte maxAllowed = sensitive ? (byte)88 : (byte)108;
-
-                        if (!channelNotes.TryGetValue(ch, out var list))
-                        {
-                            list = new List<(byte, byte)>();
-                            channelNotes[ch] = list;
-                        }
-                        list.Add(((byte)noteOn.NoteNumber, maxAllowed));
-                    }
-                }
-            }
-
-            foreach (var (ch, notes) in channelNotes)
-            {
-                if (notes.Count == 0) continue;
-                if (options.ChannelOctaveShifts != null && options.ChannelOctaveShifts.ContainsKey(ch)) continue;
-
-                int baseShift = options.MasterTranspose;
-                int minShifted = notes.Min(n => n.Note + baseShift);
-                int maxShifted = notes.Max(n => n.Note + baseShift);
-                byte minMaxAllowed = notes.Min(n => n.MaxAllowed);
-
-                int bestOctave = 0;
-                if (minShifted < 24)
-                {
-                    int neededUp = (int)Math.Ceiling((24 - minShifted) / 12.0);
-                    for (int oct = Math.Min(3, neededUp); oct >= 1; oct--)
-                    {
-                        if (maxShifted + oct * 12 <= minMaxAllowed)
-                        {
-                            bestOctave = oct;
-                            break;
-                        }
-                    }
-                }
-                else if (minShifted > minMaxAllowed)
-                {
-                    int neededDown = (int)Math.Ceiling((minShifted - minMaxAllowed) / 12.0);
-                    for (int oct = 1; oct <= Math.Min(3, neededDown); oct++)
-                    {
-                        if (minShifted - oct * 12 >= 24 && maxShifted - oct * 12 <= minMaxAllowed)
-                        {
-                            bestOctave = -oct;
-                            break;
-                        }
-                    }
-                    if (bestOctave == 0 && minShifted - Math.Min(3, neededDown) * 12 >= 24)
-                    {
-                        bestOctave = -Math.Min(3, neededDown);
-                    }
-                }
-                else if (maxShifted > minMaxAllowed &&
-                         minShifted >= 60 &&
-                         maxShifted - 12 <= minMaxAllowed)
-                {
-                    // Treble melody overshoots ceiling by <= 1 octave without dipping below C4:
-                    // shift -12 cleanly so ascending phrase contours aren't inverted by per-note folding.
-                    bestOctave = -1;
-                }
-
-                if (bestOctave != 0)
-                {
-                    result[ch] = bestOctave * 12;
-                }
-            }
-
-            return result;
         }
 
         private static void StripVolumeAndExpressionControllers(MidiFile midi)
@@ -1575,11 +1520,16 @@ namespace PSS790Player.Core
 
             if (options.EnablePolyphonyGuard)
             {
-                int threshold = is680 ? Pss680Constants.PolyphonyMode99 : Constants.PolyphonyGuardThreshold;
+                int limit790 = Math.Clamp(options.Pss790PolyphonyLimit, 12, Constants.PolyphonyMax);
+                int threshold = is680 ? Pss680Constants.PolyphonyMode99 : limit790;
                 var voiceWeights = (!is680 && options.VectorQuadLayering)
                     ? new Dictionary<int, int> { [0] = 4 }
                     : null;
-                var optimizer = new PolyphonyOptimizer(enabled: true, threshold: threshold, model: options.TargetModel);
+                var optimizer = new PolyphonyOptimizer(
+                    enabled: true,
+                    threshold: threshold,
+                    model: options.TargetModel,
+                    melodicCeilingOverride: is680 ? null : limit790);
                 remapped = optimizer.Optimize(remapped, channelPrograms, voiceWeights);
             }
 
@@ -1736,13 +1686,6 @@ namespace PSS790Player.Core
                    (gmProgram >= 88 && gmProgram <= 103);
         }
 
-        public static bool IsAliasingSensitiveAcousticVoice(byte gmProgram)
-        {
-            return (gmProgram >= 0 && gmProgram <= 7) ||
-                   (gmProgram >= 16 && gmProgram <= 23) ||
-                   (gmProgram >= 40 && gmProgram <= 55);
-        }
-
         public static bool IsBassInstrument(int gmProg)
         {
             return (gmProg >= 32 && gmProg <= 39) || gmProg == 43 || gmProg == 58;
@@ -1750,9 +1693,8 @@ namespace PSS790Player.Core
 
         public static byte ClampMelodicNote(byte note, int gmProg, bool is680 = false)
         {
-            bool isSensitive = !is680 && gmProg >= 0 && IsAliasingSensitiveAcousticVoice((byte)gmProg);
-            byte maxNote = isSensitive ? (byte)88 : (byte)108;
-            byte minNote = 24;
+            const byte minNote = 24;
+            const byte maxNote = 108;
 
             while (note < minNote) note += 12;
             while (note > maxNote) note -= 12;
@@ -1784,7 +1726,7 @@ namespace PSS790Player.Core
                 if (lower.Contains("jazz")) return 26;
                 return 25;
             }
-            if (lower.Contains("piano") || lower.Contains("pno") || lower.Contains("grand") || lower.Contains("intro"))
+            if (lower.Contains("piano") || lower.Contains("pno") || lower.Contains("grand"))
             {
                 if (lower.Contains("honky") || lower.Contains("tack")) return 3;
                 return 0;
@@ -2487,7 +2429,7 @@ namespace PSS790Player.Core
             }
         }
 
-        private static void ApplySetupPreRoll(MidiFile midi, int minPreRollTicks = 48)
+        private static void ApplySetupPreRoll(MidiFile midi, int minPreRollTicks = 96)
         {
             long minNoteTime = long.MaxValue;
 
@@ -2508,7 +2450,7 @@ namespace PSS790Player.Core
             var tempoMap = midi.GetTempoMap();
             long targetPreRollTicks = Math.Max(
                 minPreRollTicks,
-                LengthConverter.ConvertFrom(new MetricTimeSpan(0, 0, 0, 40), 0, tempoMap));
+                LengthConverter.ConvertFrom(new MetricTimeSpan(0, 0, 0, 100), 0, tempoMap));
 
             if (minNoteTime < targetPreRollTicks)
             {

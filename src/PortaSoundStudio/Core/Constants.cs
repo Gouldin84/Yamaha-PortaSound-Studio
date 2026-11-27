@@ -10,7 +10,7 @@ namespace PSS790Player.Core
     public static class Constants
     {
         public const int PolyphonyMax = 28;
-        public const int PolyphonyGuardThreshold = 26; // Raised from 22 to 26 to maximize utilization of PSS-790 28-voice hardware limit
+        public const int PolyphonyGuardThreshold = 22; // Leaves 6-oscillator headroom below PSS-790 28-voice ceiling for 2-element AWM voices & release tails
         public const double PitchBendScaleFactor = 1.0 / 6.0; // PSS-790 is fixed +/- 12 semitones, GM is +/- 2
         public const byte AwmVelocityMin = 36;
         public const byte AwmVelocityMax = 118;

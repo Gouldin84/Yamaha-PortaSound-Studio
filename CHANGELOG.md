@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.4] - 2026-11-27
+
+### Fixed
+- **Cold-Start UART Overflow (`<bu full>`) & Live PSS-790 Routing**: Restored `FilterUnsupportedControllers = true`, `TranslateDrums = true`, and `VectorQuadLayering` in `PlaybackCoordinator.BuildCleanOptionsLocked`, routed MS GS previews cleanly via `BuildPreviewTransformForMsGs`, added `4 ms` per-4-packet CC pacing and one-shot initial Tick-0 setup deduplication in `MidiPlayer.PrimeInitialVoicesForHardwareStart`, and widened `ApplySetupPreRoll` to `100 ms` (`96` ticks).
+- **Written Melody Pitch Preservation (`[24..108]`)**: Removed `ComputeContourPreservingOctaveShifts` and the `E6 (88)` aliasing cap (`IsAliasingSensitiveAcousticVoice`) so melodies and accompaniments retain their written octave intervals without automated contour inversions or whole-channel pitch shifts.
+- **PSS-790 & PSS-680 Voice Resolution & Mixer UI Alignment**: Resolved initial GM programs chronologically around each channel's first note (fixing post-tick-0 PCs and pre-note reset PCs), removed `"intro"` from Piano keyword inference, mapped PSS-680 `GM 80 → 99 (Sine Wave)`, `GM 86 → 98 (Musical Saw)`, `GM 55 → 92 (Brass Ensemble)`, changed unassigned PSS-680 fallbacks from `0 (Synth Brass)` to `3 (Piano 1)`, aligned relocated Ch 16 attribution in `ChannelStateExtractor`, and synced `<select>` keys across song switches.
+- **PSS-790 Sparse Lead Shielding**: Updated `PolyphonyOptimizer` to yield expired release tails and release-steal held Tier-1 pads cleanly while prioritizing sparse Tier-3/2 melodies (`<= 2` active notes, `velocity >= 48`) over high background arpeggios.
+
+### Added
+- **Configurable PSS-790 Polyphony Limit (`22 / 26 / 28`)**: Added a Player transport limit dropdown (`#polyphonyLimitSelect`) for PSS-790 so you can choose between `22` (2-element oscillator headroom), `26`, and `28` (full hardware polyphony).
+- **Library Sync Upgrade Markers**: Bumped `PSS790_REMAPPED:v4` and `PSS680_REMAPPED:v5` so running **Sync** automatically updates converted library files on disk.
+- **Portable Migration Automation**: Added environment-agnostic `scripts/export_portable_bundle.ps1` and `scripts/setup_rog_ally.ps1` to package libraries, manuals, custom Antigravity rules/skills, and standalone binaries onto a target Windows/ROG Ally Z1 Extreme PC.
+
 ## [3.1.3] - 2026-11-26
 
 ### Added

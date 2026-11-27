@@ -12,6 +12,7 @@ namespace PSS790Player.Core
         private readonly bool _enabled;
         private readonly int _threshold;
         private readonly string _model;
+        private readonly int? _melodicCeilingOverride;
 
         private sealed class NoteContext
         {
@@ -38,11 +39,16 @@ namespace PSS790Player.Core
             }
         }
 
-        public PolyphonyOptimizer(bool enabled = true, int threshold = Constants.PolyphonyGuardThreshold, string model = "pss790")
+        public PolyphonyOptimizer(
+            bool enabled = true,
+            int threshold = Constants.PolyphonyGuardThreshold,
+            string model = "pss790",
+            int? melodicCeilingOverride = null)
         {
             _enabled = enabled;
             _threshold = threshold;
             _model = model;
+            _melodicCeilingOverride = melodicCeilingOverride;
         }
 
         public MidiFile Optimize(
@@ -352,9 +358,9 @@ namespace PSS790Player.Core
                 else
                 {
                     // PSS-790 Architecture: 28-voice shared AWM PCM polyphony.
-                    // Cull incidental drums above effectiveLimit (e.g. 26), then gracefully yield expired tails
-                    // or release-steal melodic voices above the 28-voice hardware ceiling.
-                    int melodicCeiling = Math.Max(Constants.PolyphonyMax, effectiveLimit);
+                    // Cull incidental drums above effectiveLimit (e.g. 22/26/28), then gracefully yield expired tails
+                    // or release-steal Tier-1 accompaniment chords above melodicCeiling.
+                    int melodicCeiling = _melodicCeilingOverride ?? Math.Max(Constants.PolyphonyMax, effectiveLimit);
                     while (activeWeightSum > effectiveLimit)
                     {
                         var incidentalDrum = activeContexts
@@ -386,8 +392,8 @@ namespace PSS790Player.Core
                             currentTime,
                             melodicCeiling,
                             currentWeight: activeWeightSum,
-                            prioritizeExpiredTailsFirst: false,
-                            stealTier1HeldNotes: false,
+                            prioritizeExpiredTailsFirst: true,
+                            stealTier1HeldNotes: true,
                             tempoMap,
                             ref activeWeightSum);
                         if (activeWeightSum == beforeWeight)
@@ -458,9 +464,22 @@ namespace PSS790Player.Core
                 // Only actively held notes (not already-released tails) compete for lead/bass protection.
                 var heldMelodic = activeMelodic.Where(c => c.EffectiveEndTime > currentTime).ToList();
                 var leadPool = heldMelodic.Count > 0 ? heldMelodic : activeMelodic;
-                var leadNote = leadPool.Where(c => c.Priority >= 2).OrderByDescending(c => c.NoteNumber).FirstOrDefault()
-                               ?? leadPool.OrderByDescending(c => c.NoteNumber).FirstOrDefault();
-                var bassNote = leadPool.OrderBy(c => c.NoteNumber).FirstOrDefault();
+                var leadChannelCounts = new int[16];
+                foreach (var lp in leadPool)
+                {
+                    if (lp.Channel >= 0 && lp.Channel < 16)
+                        leadChannelCounts[lp.Channel]++;
+                }
+                var leadNote = leadPool
+                    .OrderByDescending(c => c.Priority)
+                    .ThenByDescending(c => (c.Channel >= 0 && c.Channel < 16 && leadChannelCounts[c.Channel] <= 2) ? 1 : 0)
+                    .ThenByDescending(c => c.Velocity >= 48 ? 1 : 0)
+                    .ThenByDescending(c => c.NoteNumber)
+                    .FirstOrDefault();
+                var bassNote = leadPool
+                    .OrderByDescending(c => c.Priority > 0 ? 1 : 0)
+                    .ThenBy(c => c.NoteNumber)
+                    .FirstOrDefault();
 
                 var channelCounts = new int[16];
                 foreach (var m in activeMelodic)

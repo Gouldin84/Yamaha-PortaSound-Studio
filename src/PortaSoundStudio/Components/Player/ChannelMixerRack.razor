@@ -110,7 +110,7 @@
                         }
                         else
                         {
-                            <select @key="@($"{State.ActiveModel}-{ch.Channel}")"
+                            <select @key="@($"{State.ActiveModel}-{ch.Channel}-{State.SelectedSongPath}")"
                                     value="@ch.PssVoice"
                                     @onchange="(e) => OnVoiceChanged(ch.Channel, e.Value?.ToString())"
                                     class="hw-select flex-1 min-w-0 @(ch.IsOverridden ? "border-cyan-500 font-bold" : "") rounded px-1 py-0.5 text-[9px] cursor-pointer truncate">
@@ -183,7 +183,8 @@
         {
             Channel = ch,
             Role = $"Channel {ch + 1}",
-            PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion" : "Fixed Rhythm") : (is680 ? "Piano" : "PIANO"),
+            PssVoice = ch == 15 ? (is680 ? 99 : -1) : (is680 ? 3 : 0),
+            PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion" : "Fixed Rhythm") : (is680 ? "Piano 1" : "PIANO"),
             IsDrum = ch == 15,
             Volume = 100
         }).ToList();

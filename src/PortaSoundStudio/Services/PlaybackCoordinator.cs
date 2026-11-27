@@ -131,11 +131,13 @@ namespace PSS790Player.Services
                     var overrides = VoiceOverrideStore.Instance.GetOverrides(filePath, activeModel);
                     var opts = BuildCleanOptionsLocked(activeModel, overrides);
 
-                    var transformed = PreparePlaybackMidi(orig, format, activeModel, opts, _isGmPassthrough, isMsGs: IsMsGsOutput());
+                    bool isMsGs = IsMsGsOutput();
+                    var transformed = PreparePlaybackMidi(orig, format, activeModel, opts, _isGmPassthrough, isMsGs: isMsGs);
                     token.ThrowIfCancellationRequested();
 
+                    var uiRemapped = (isMsGs && isGmFile && !_isGmPassthrough) ? null : transformed;
                     var channels = ChannelStateExtractor.Analyze(
-                        orig, transformed, format, activeModel, _isGmPassthrough,
+                        orig, uiRemapped, format, activeModel, _isGmPassthrough,
                         opts.ChannelVoiceOverrides, opts.ChannelOctaveShifts,
                         GetPlayerMixerSnapshot);
 
@@ -161,6 +163,7 @@ namespace PSS790Player.Services
                         MasterTranspose = opts.MasterTranspose,
                         PitchBendMode = opts.PitchBendMode.ToString(),
                         PolyphonyGuard = opts.EnablePolyphonyGuard,
+                        PolyphonyLimit790 = opts.Pss790PolyphonyLimit,
                         IsOptimizedAvailable = optPath != null,
                         OptimizedFilePath = optPath,
                         LinkedGmPath = gmPath,
@@ -253,8 +256,10 @@ namespace PSS790Player.Services
             var activeModel = _state.ActiveModel;
             var format = Remapper.DetectMidiFormat(cloned);
             var opts = BuildCleanOptionsLocked(activeModel, new Dictionary<int, int?>());
-            var transformed = PreparePlaybackMidi(cloned, format, activeModel, opts, _isGmPassthrough, isMsGs: IsMsGsOutput());
-            var channels = ChannelStateExtractor.Analyze(cloned, transformed, format, activeModel, _isGmPassthrough,
+            bool isMsGs = IsMsGsOutput();
+            var transformed = PreparePlaybackMidi(cloned, format, activeModel, opts, _isGmPassthrough, isMsGs: isMsGs);
+            var uiRemapped = (isMsGs && format == MidiFormat.GeneralMidi && !_isGmPassthrough) ? null : transformed;
+            var channels = ChannelStateExtractor.Analyze(cloned, uiRemapped, format, activeModel, _isGmPassthrough,
                 opts.ChannelVoiceOverrides, opts.ChannelOctaveShifts, GetPlayerMixerSnapshot);
             var health = MapHealth(MidiHealthInspector.Analyze(cloned, transformed, title, activeModel));
             double durationSec = transformed.GetDuration<MetricTimeSpan>().TotalSeconds;
@@ -291,6 +296,7 @@ namespace PSS790Player.Services
                     MasterTranspose = opts.MasterTranspose,
                     PitchBendMode = opts.PitchBendMode.ToString(),
                     PolyphonyGuard = opts.EnablePolyphonyGuard,
+                    PolyphonyLimit790 = opts.Pss790PolyphonyLimit,
                     Channels = channels,
                     Health = health,
                     ChannelPrograms = channels.Where(c => c.HasNotes).ToDictionary(c => c.Channel, c => c.PssVoiceName)
@@ -442,6 +448,13 @@ namespace PSS790Player.Services
         public void SetPolyphonyGuard(bool enabled)
         {
             lock (_stateLock) { _options.EnablePolyphonyGuard = enabled; }
+            _ = ReapplyRemappingAsync(preservePosition: true);
+        }
+
+        public void SetPolyphonyLimit790(int limit)
+        {
+            int clamped = Math.Clamp(limit, 12, Constants.PolyphonyMax);
+            lock (_stateLock) { _options.Pss790PolyphonyLimit = clamped; }
             _ = ReapplyRemappingAsync(preservePosition: true);
         }
 
@@ -780,8 +793,10 @@ namespace PSS790Player.Services
 
             var format = Remapper.DetectMidiFormat(origSnap);
             var opts = BuildCleanOptionsLocked(activeModel, null);
-            var transformed = PreparePlaybackMidi(origSnap, format, activeModel, opts, passthrough, isMsGs: IsMsGsOutput());
-            var channels = ChannelStateExtractor.Analyze(origSnap, transformed, format, activeModel, passthrough,
+            bool isMsGs = IsMsGsOutput();
+            var transformed = PreparePlaybackMidi(origSnap, format, activeModel, opts, passthrough, isMsGs: isMsGs);
+            var uiRemapped = (isMsGs && format == MidiFormat.GeneralMidi && !passthrough) ? null : transformed;
+            var channels = ChannelStateExtractor.Analyze(origSnap, uiRemapped, format, activeModel, passthrough,
                 opts.ChannelVoiceOverrides, opts.ChannelOctaveShifts, GetPlayerMixerSnapshot);
             var health = MapHealth(MidiHealthInspector.Analyze(origSnap, transformed, displaySnap ?? "MIDI Track", activeModel));
             double durationSec = transformed.GetDuration<MetricTimeSpan>().TotalSeconds;
@@ -814,6 +829,7 @@ namespace PSS790Player.Services
                     s.LoadedSong.MasterTranspose = opts.MasterTranspose;
                     s.LoadedSong.PitchBendMode = opts.PitchBendMode.ToString();
                     s.LoadedSong.PolyphonyGuard = opts.EnablePolyphonyGuard;
+                    s.LoadedSong.PolyphonyLimit790 = opts.Pss790PolyphonyLimit;
                     s.LoadedSong.Channels = channels;
                     s.LoadedSong.Health = health;
                     s.LoadedSong.ChannelPrograms = channels.Where(c => c.HasNotes).ToDictionary(c => c.Channel, c => c.PssVoiceName);
@@ -823,6 +839,7 @@ namespace PSS790Player.Services
 
         private RemapperOptions BuildCleanOptionsLocked(string activeModel, Dictionary<int, int?>? loadedOverrides)
         {
+            bool is680 = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
             lock (_stateLock)
             {
                 if (loadedOverrides != null)
@@ -835,11 +852,13 @@ namespace PSS790Player.Services
                 {
                     TargetModel = activeModel,
                     EnablePolyphonyGuard = _options.EnablePolyphonyGuard,
-                    DefaultReverbBoost = !string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase),
-                    FilterUnsupportedControllers = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase),
-                    NormalizeAwmVelocities = !string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase),
-                    BakeFmVelocity = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase),
-                    TranslateDrums = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase),
+                    Pss790PolyphonyLimit = _options.Pss790PolyphonyLimit,
+                    DefaultReverbBoost = !is680,
+                    FilterUnsupportedControllers = true, // Protect both PSS-790 & PSS-680 hardware UART buffers
+                    NormalizeAwmVelocities = !is680,
+                    BakeFmVelocity = is680,
+                    TranslateDrums = true, // Translate GM drums -> Chart 1 (790) or 32-Pad (680)
+                    VectorQuadLayering = !is680 && _devices.Player.VectorQuadPlaybackEnabled,
                     MasterTranspose = _options.MasterTranspose,
                     PitchBendMode = _options.PitchBendMode,
                     ChannelVoiceOverrides = new Dictionary<int, int?>(_options.ChannelVoiceOverrides),
@@ -857,6 +876,12 @@ namespace PSS790Player.Services
             bool isMsGs)
         {
             bool is680 = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase);
+            bool isNative = format == MidiFormat.Pss790Native || format == MidiFormat.Pss680Native;
+            if (isMsGs && !isGmPassthrough && !isNative)
+            {
+                return Remapper.BuildPreviewTransformForMsGs(originalMidi, opts);
+            }
+
             bool needsRemap = !isGmPassthrough &&
                               ((format == MidiFormat.GeneralMidi) ||
                                (format == MidiFormat.Pss790Native && is680) ||

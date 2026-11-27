@@ -383,7 +383,7 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Remapper_Pss680_ContourPreservation_ShiftsEntireChannelUpWhenMinNoteBelow24()
+        public void Remapper_Pss680_NoAutoOctaveShift_PreservesInRangeNotesAndClampsSub24()
         {
             var midi = new MidiFile();
             var tr = new TrackChunk();
@@ -404,15 +404,11 @@ namespace PSS790Player.Tests
                 .Select(n => (int)n.NoteNumber)
                 .ToList();
 
-            // All notes are shifted up by 12 st so the descending contour is preserved:
-            // 26 -> 38, 24 -> 36, 22 -> 34
+            // Written notes inside [24..108] stay at exact pitch; only sub-24 outlier (22) wraps +12 to 34
             Assert.Equal(3, notes.Count);
-            Assert.Equal(38, notes[0]);
-            Assert.Equal(36, notes[1]);
+            Assert.Equal(26, notes[0]);
+            Assert.Equal(24, notes[1]);
             Assert.Equal(34, notes[2]);
-            // Descending order is preserved!
-            Assert.True(notes[0] > notes[1]);
-            Assert.True(notes[1] > notes[2]);
         }
 
         [Fact]

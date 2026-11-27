@@ -146,6 +146,19 @@
                        class="w-3.5 h-3.5 rounded accent-cyan-500 cursor-pointer" />
                 <label for="polyphonyGuardToggle" class="text-[10px] font-semibold cursor-pointer select-none" style="color: var(--text-hi);">Guard</label>
                 <span class="polyphony-guard-badge text-[9px] font-semibold px-1.5 py-0.5 rounded">@((song?.PolyphonyGuard ?? true) ? "Protected" : "Bypass")</span>
+                @if (!string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase))
+                {
+                    <select id="polyphonyLimitSelect"
+                            value="@(song?.PolyphonyLimit790 ?? Constants.PolyphonyGuardThreshold)"
+                            disabled="@(!(song?.PolyphonyGuard ?? true))"
+                            @onchange="OnPolyphonyLimitChanged"
+                            title="PSS-790 Polyphony Limit (22 leaves headroom for 2-element voices; 28 allows full hardware ceiling)"
+                            class="hw-select rounded px-1 py-0.5 text-[9px] font-mono font-semibold cursor-pointer disabled:opacity-45">
+                        <option value="22">22</option>
+                        <option value="26">26</option>
+                        <option value="28">28</option>
+                    </select>
+                }
             </div>
 
             <button type="button"
@@ -227,6 +240,14 @@
         if (State.LoadedSong != null && !string.IsNullOrEmpty(State.LoadedSong.FilePath))
         {
             Library.ToggleFavorite(State.LoadedSong.FilePath);
+        }
+    }
+
+    private void OnPolyphonyLimitChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int limit))
+        {
+            Playback.SetPolyphonyLimit790(limit);
         }
     }
 
