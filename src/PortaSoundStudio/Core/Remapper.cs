@@ -53,7 +53,7 @@ namespace PSS790Player.Core
     {
         public const string Pss790MarkerText = "PSS790_REMAPPED:v4";
         public const string Pss790RecordingMarkerText = "PSS790_RECORDING:v1";
-        public const string Pss680MarkerText = "PSS680_REMAPPED:v5";
+        public const string Pss680MarkerText = "PSS680_REMAPPED:v6";
         public const string Pss680RecordingMarkerText = "PSS680_RECORDING:v1";
 
         private readonly record struct TimedValueEntry(long Time, int TrackIndex, int EventOrder, byte Value);

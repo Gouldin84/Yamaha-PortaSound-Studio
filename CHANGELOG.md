@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.5] - 2026-11-27
+
+### Fixed
+- **Eliminated PSS-680 `99: Sine Wave` Over-Selection**: Re-mapped `GM 80` (`Lead 1 Square`) → `27: Transistor Organ`, `GM 81` (`Lead 2 Sawtooth`) → `98: Musical Saw`, `GM 99` (`FX 4 Atmosphere`) → `55: Glass Celesta`, `GM 103` (`FX 8 Sci-Fi`) → `98: Musical Saw`, `GM 119` (`Reverse Cymbal`) → `48: Ice Block`, and `GM 122` (`Seashore`) → `96: Human Chorus` in `Pss680Constants.GmToPss680VoiceMap` (reducing unintended automatic `99: Sine Wave` assignments across the 862-song GM test set from 371 channels down to 0).
+- **Library Sync Upgrade Marker**: Bumped `PSS680_REMAPPED:v6` so **Sync** refreshes `PSS-680 Midi` mirrors automatically.
+
 ## [3.1.4] - 2026-11-27
 
 ### Fixed

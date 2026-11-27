@@ -1854,11 +1854,16 @@ namespace PSS790Player.Tests
         }
 
         [Fact]
-        public void Pss680Constants_GmToPss680VoiceMap_AvoidsOverusingSynthBrass_ForLeadsAndHits()
+        public void Pss680Constants_GmToPss680VoiceMap_AvoidsOverusingSynthBrassOrSineWave_ForLeadsAndHits()
         {
-            Assert.Equal(99, Pss680Constants.GmToPss680VoiceMap[80]); // Lead 1 Square -> Sine Wave
+            Assert.Equal(27, Pss680Constants.GmToPss680VoiceMap[80]); // Lead 1 Square -> Transistor Organ (square-like odd-harmonic lead)
+            Assert.Equal(98, Pss680Constants.GmToPss680VoiceMap[81]); // Lead 2 Sawtooth -> Musical Saw
             Assert.Equal(98, Pss680Constants.GmToPss680VoiceMap[86]); // Lead 7 Fifths -> Musical Saw
             Assert.Equal(92, Pss680Constants.GmToPss680VoiceMap[55]); // Orchestra Hit -> Brass Ensemble
+            Assert.Equal(55, Pss680Constants.GmToPss680VoiceMap[99]); // FX 4 Atmosphere -> Glass Celesta
+            Assert.Equal(98, Pss680Constants.GmToPss680VoiceMap[103]); // FX 8 Sci-Fi -> Musical Saw
+            Assert.Equal(48, Pss680Constants.GmToPss680VoiceMap[119]); // Reverse Cymbal -> Ice Block
+            Assert.Equal(96, Pss680Constants.GmToPss680VoiceMap[122]); // Seashore -> Human Chorus
             Assert.Equal(0, Pss680Constants.GmToPss680VoiceMap[62]);  // Synth Brass 1 stays Synth Brass
         }
 
@@ -1934,7 +1939,7 @@ namespace PSS790Player.Tests
         {
             var midi = new MidiFile { TimeDivision = new TicksPerQuarterNoteTimeDivision(480) };
             // Ch 0: unassigned (no PC, no text) -> must default to PSS-680 Piano 1 (3), not Synth Brass (0)
-            // Ch 1: late pre-note PC 80 (Square Lead -> PSS-680 99 Sine Wave) at tick 4 before note at tick 24
+            // Ch 1: late pre-note PC 80 (Square Lead -> PSS-680 27 Transistor Organ) at tick 4 before note at tick 24
             // Ch 15: melodic guitar (GM 29) relocated to first free channel (Ch 2)
             midi.Chunks.Add(new TrackChunk(
                 new NoteOnEvent((SevenBitNumber)60, (SevenBitNumber)90) { Channel = (FourBitNumber)0, DeltaTime = 0 },
@@ -1951,7 +1956,7 @@ namespace PSS790Player.Tests
             var states680 = PSS790Player.Services.ChannelStateExtractor.Analyze(midi, rem680, MidiFormat.GeneralMidi, "pss680", false, new Dictionary<int, int?>(), new Dictionary<int, int>());
             Assert.Equal(3, states680[0].PssVoice);
             Assert.Equal("Piano 1", states680[0].PssVoiceName);
-            Assert.Equal(99, states680[1].PssVoice);
+            Assert.Equal(27, states680[1].PssVoice);
             Assert.Equal(Pss680Constants.GmToPss680VoiceMap[29], states680[2].PssVoice);
 
             var rem790 = Remapper.Remap(midi, new RemapperOptions { TargetModel = "pss790" });
