@@ -1147,6 +1147,30 @@ namespace PSS790Player.Core
                         }
                         catch { }
                     }
+
+                    // Apply any pre-adjusted user fader levels (!= 100%) on channels that had no Tick-0 CC 7 in the file
+                    if (!is680)
+                    {
+                        for (int ch = 0; ch < 16; ch++)
+                        {
+                            if (initialCcs.ContainsKey((ch, 7))) continue;
+                            byte userVol = Volatile.Read(ref _channelVolumes[ch]);
+                            if (userVol == 100) continue;
+                            if (!initialPcs.ContainsKey(ch) && !minNoteTime.ContainsKey(ch)) continue;
+
+                            try
+                            {
+                                byte scaled = (byte)Math.Clamp((int)Math.Round(100.0 * userVol / 100.0), 0, 127);
+                                target.SendEvent(new ControlChangeEvent((SevenBitNumber)7, (SevenBitNumber)scaled)
+                                {
+                                    Channel = (FourBitNumber)ch
+                                });
+                                sentCount++;
+                                if (!isMsGs && (sentCount % 4) == 0) Thread.Sleep(4);
+                            }
+                            catch { }
+                        }
+                    }
                 }
 
                 // Allow 31.25 kbps serial DIN MIDI UART & hardware wave ROM lookup to settle before Note 1,

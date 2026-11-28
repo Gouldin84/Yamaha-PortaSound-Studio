@@ -1118,6 +1118,103 @@ window.studioInterop = (() => {
         track.addEventListener("pointercancel", finishScrub);
     }
 
+    let activeFaderDrag = null;
+
+    function applyFaderVisuals(hitEl, pct) {
+        const clamped = Math.max(0, Math.min(100, Math.round(pct)));
+        const track = hitEl.closest(".v-fader-track") || hitEl;
+        const card = hitEl.closest(".channel-strip-card");
+        const fill = track.querySelector(".v-fader-fill");
+        const cap = track.querySelector(".v-fader-cap-visual");
+        if (fill) fill.style.height = clamped + "%";
+        if (cap) {
+            const capBottom = Math.max(9, Math.min(91, clamped * 0.82 + 9));
+            cap.style.bottom = capBottom.toFixed(1) + "%";
+        }
+        hitEl.setAttribute("aria-valuenow", String(clamped));
+        if (card) {
+            const readout = card.querySelector(".v-fader-readout");
+            if (readout) readout.textContent = String(clamped);
+        }
+        return clamped;
+    }
+
+    function computeFaderPercent(hitEl, clientY) {
+        const track = hitEl.closest(".v-fader-track") || hitEl;
+        const rect = track.getBoundingClientRect();
+        if (rect.height <= 1) return 100;
+        const ratio = (rect.bottom - clientY) / rect.height;
+        return Math.max(0, Math.min(100, Math.round(ratio * 100)));
+    }
+
+    function initMixerFaders(gridId, dotNetRef) {
+        const grid = document.getElementById(gridId);
+        if (!grid || grid.dataset.fadersBound === "true") return;
+        grid.dataset.fadersBound = "true";
+
+        let lastDispatchTime = 0;
+        let lastSentVal = -1;
+
+        function updateFromPointer(hitEl, clientY, forceCommit) {
+            const val = computeFaderPercent(hitEl, clientY);
+            applyFaderVisuals(hitEl, val);
+            const ch = parseInt(hitEl.dataset.faderChannel, 10);
+            if (Number.isNaN(ch)) return;
+            const now = performance.now();
+            if (forceCommit || (val !== lastSentVal && now - lastDispatchTime >= 28)) {
+                lastSentVal = val;
+                lastDispatchTime = now;
+                dotNetRef.invokeMethodAsync("SetFaderVolume", ch, val);
+            }
+        }
+
+        grid.addEventListener("pointerdown", (e) => {
+            const hitEl = e.target.closest("[data-fader-channel]");
+            if (!hitEl || (e.pointerType === "mouse" && e.button !== 0)) return;
+            activeFaderDrag = hitEl;
+            hitEl.classList.add("is-fader-dragging");
+            try { hitEl.setPointerCapture(e.pointerId); } catch { }
+            lastSentVal = -1;
+            updateFromPointer(hitEl, e.clientY, true);
+            e.preventDefault();
+        });
+
+        grid.addEventListener("pointermove", (e) => {
+            if (!activeFaderDrag) return;
+            updateFromPointer(activeFaderDrag, e.clientY, false);
+        });
+
+        const finishDrag = (e) => {
+            if (!activeFaderDrag) return;
+            const hitEl = activeFaderDrag;
+            activeFaderDrag = null;
+            hitEl.classList.remove("is-fader-dragging");
+            updateFromPointer(hitEl, e.clientY, true);
+            try { if (hitEl.hasPointerCapture(e.pointerId)) hitEl.releasePointerCapture(e.pointerId); } catch { }
+        };
+
+        grid.addEventListener("pointerup", finishDrag);
+        grid.addEventListener("pointercancel", finishDrag);
+
+        grid.addEventListener("keydown", (e) => {
+            const hitEl = e.target.closest("[data-fader-channel]");
+            if (!hitEl) return;
+            const cur = parseInt(hitEl.getAttribute("aria-valuenow") || "100", 10);
+            let next = cur;
+            if (e.key === "ArrowUp" || e.key === "ArrowRight") next = Math.min(100, cur + 5);
+            else if (e.key === "ArrowDown" || e.key === "ArrowLeft") next = Math.max(0, cur - 5);
+            else if (e.key === "PageUp") next = Math.min(100, cur + 15);
+            else if (e.key === "PageDown") next = Math.max(0, cur - 15);
+            else if (e.key === "Home") next = 0;
+            else if (e.key === "End") next = 100;
+            else return;
+            e.preventDefault();
+            const ch = parseInt(hitEl.dataset.faderChannel, 10);
+            applyFaderVisuals(hitEl, next);
+            if (!Number.isNaN(ch)) dotNetRef.invokeMethodAsync("SetFaderVolume", ch, next);
+        });
+    }
+
     function initFmEnvelopeDrag(svgId, isModulator, dotNetRef) {
         const svg = document.getElementById(svgId);
         if (!svg || svg.dataset.bound === "true") return;
@@ -1493,6 +1590,7 @@ window.studioInterop = (() => {
         clearVectorTrail,
         initTimelineScrubber,
         syncTimelineScrubber,
+        initMixerFaders,
         setupVectorTouchpad,
         startVectorOrbit,
         stopVectorOrbit,

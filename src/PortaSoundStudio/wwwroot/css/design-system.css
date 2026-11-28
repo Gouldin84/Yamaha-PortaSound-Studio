@@ -418,16 +418,22 @@ body.theme-light .v-fader-track {
 }
 
 .v-fader-input {
-    -webkit-appearance: slider-vertical;
-    writing-mode: vertical-lr;
-    direction: rtl;
-    width: 24px;
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 28px;
     height: 100%;
-    opacity: 0;
-    margin: 0;
+    transform: translateX(-50%);
+    touch-action: none;
     cursor: ns-resize;
-    position: relative;
+    outline: none;
     z-index: 4;
+}
+
+.v-fader-input.is-fader-dragging ~ .v-fader-fill,
+.v-fader-input.is-fader-dragging ~ .v-fader-cap-visual {
+    transition: none;
 }
 
 .v-fader-cap-visual {
@@ -514,7 +520,7 @@ body.theme-light .mpc-pad {
 
 /* Handheld Touch Mode overrides for vertical faders */
 body.handheld-touch-mode .v-fader-input {
-    width: 34px;
+    width: 38px;
 }
 body.handheld-touch-mode .v-fader-track {
     width: 14px;
@@ -523,10 +529,6 @@ body.handheld-touch-mode .v-fader-cap-visual {
     width: 24px;
     height: 13px;
     border-radius: 4px;
-}
-body.handheld-touch-mode .v-fader-input::-webkit-slider-thumb {
-    width: 28px;
-    height: 15px;
 }
 @media (max-height: 760px) {
     body.handheld-touch-mode .v-fader-stage {

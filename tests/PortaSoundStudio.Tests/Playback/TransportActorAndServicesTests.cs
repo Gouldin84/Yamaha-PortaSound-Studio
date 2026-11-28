@@ -357,6 +357,53 @@ namespace PSS790Player.Tests
             Assert.Equal(28, store.LoadedSong!.PolyphonyLimit790);
         }
 
+        [Fact]
+        public void LibraryService_ResolvePreferredFavorites_PrefersActiveHardwareModelAndCollapsedGmDefault()
+        {
+            var store = new AppStateStore();
+            Assert.DoesNotContain("cat:gm", store.ExpandedFolders);
+            Assert.Contains("cat:fav", store.ExpandedFolders);
+            Assert.Contains("cat:pss790", store.ExpandedFolders);
+            Assert.Contains("cat:pss680", store.ExpandedFolders);
+
+            var gmBoth = new MidiFileItem { FileName = "Theme.mid", RelativePath = "Anime/Theme.mid", FullPath = Path.Combine(_gmDir, "Anime", "Theme.mid"), Format = "gm", IsFavorite = true };
+            var p790Both = new MidiFileItem { FileName = "Theme.mid", RelativePath = "Anime/Theme.mid", FullPath = Path.Combine(_pss790Dir, "Anime", "Theme.mid"), Format = "pss790", IsFavorite = true };
+            var p680Both = new MidiFileItem { FileName = "Theme.mid", RelativePath = "Anime/Theme.mid", FullPath = Path.Combine(_pss680Dir, "Anime", "Theme.mid"), Format = "pss680", IsFavorite = true };
+            var gmOnly = new MidiFileItem { FileName = "Unsynced.mid", RelativePath = "Pop/Unsynced.mid", FullPath = Path.Combine(_gmDir, "Pop", "Unsynced.mid"), Format = "gm", IsFavorite = true };
+
+            var allFiles = new List<MidiFileItem> { gmBoth, gmOnly, p790Both, p680Both };
+
+            var favs790 = LibraryService.ResolvePreferredFavorites(allFiles, "pss790");
+            Assert.Equal(2, favs790.Count);
+            Assert.Contains(favs790, f => f.FullPath == p790Both.FullPath);
+            Assert.DoesNotContain(favs790, f => f.FullPath == gmBoth.FullPath);
+            Assert.DoesNotContain(favs790, f => f.FullPath == p680Both.FullPath);
+            Assert.Contains(favs790, f => f.FullPath == gmOnly.FullPath);
+
+            var favs680 = LibraryService.ResolvePreferredFavorites(allFiles, "pss680");
+            Assert.Equal(2, favs680.Count);
+            Assert.Contains(favs680, f => f.FullPath == p680Both.FullPath);
+            Assert.DoesNotContain(favs680, f => f.FullPath == gmBoth.FullPath);
+            Assert.DoesNotContain(favs680, f => f.FullPath == p790Both.FullPath);
+            Assert.Contains(favs680, f => f.FullPath == gmOnly.FullPath);
+
+            store.Mutate(s =>
+            {
+                s.Library = new LibrarySnapshot { AllFiles = allFiles };
+                s.LibraryFilter = "favorites";
+            }, StateScope.Library);
+
+            using var library = new LibraryService(store);
+            using var devices = new HardwareDeviceService(store);
+            using var playback = new PlaybackCoordinator(store, devices, library);
+
+            playback.SetActiveModel("pss790");
+            Assert.Equal(new[] { p790Both.FullPath, gmOnly.FullPath }, playback.GetFilteredSongList().Select(f => f.FullPath));
+
+            playback.SetActiveModel("pss680");
+            Assert.Equal(new[] { p680Both.FullPath, gmOnly.FullPath }, playback.GetFilteredSongList().Select(f => f.FullPath));
+        }
+
         private sealed class ThreadSafeMockDevice : Melanchall.DryWetMidi.Multimedia.IOutputDevice
         {
             public event EventHandler<Melanchall.DryWetMidi.Multimedia.MidiEventSentEventArgs>? EventSent;

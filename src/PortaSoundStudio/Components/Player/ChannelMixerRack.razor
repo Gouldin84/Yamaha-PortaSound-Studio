@@ -1,6 +1,7 @@
 @inherits StudioComponentBase
 @inject PlaybackCoordinator Playback
 @inject SoundDesignService SoundDesign
+@inject IJSRuntime JS
 
 @{
     bool is680 = string.Equals(State.ActiveModel, "pss680", StringComparison.OrdinalIgnoreCase);
@@ -139,16 +140,18 @@
                         </div>
                     </div>
 
-                    <!-- Sculpted Vertical Volume Fader with Synced 3D Metallic Cap -->
+                    <!-- Sculpted Vertical Volume Fader with Pointer-Captured 3D Metallic Cap -->
                     <div class="v-fader-track w-2.5 h-full rounded-full flex items-center justify-center relative">
+                        <div class="v-fader-input"
+                             data-fader-channel="@ch.Channel"
+                             role="slider"
+                             tabindex="0"
+                             aria-label="Channel @(ch.Channel + 1) Volume"
+                             aria-valuemin="0"
+                             aria-valuemax="100"
+                             aria-valuenow="@ch.Volume"></div>
                         <div class="v-fader-fill w-full rounded-full absolute bottom-0 left-0 right-0 pointer-events-none" style="height: @(ch.Volume)%;"></div>
                         <div class="v-fader-cap-visual" style="bottom: @($"{Math.Clamp(ch.Volume * 0.82 + 9, 9, 91):0.#}%");"></div>
-                        <input type="range"
-                               min="0" max="100"
-                               value="@ch.Volume"
-                               aria-label="Channel @(ch.Channel + 1) Volume"
-                               @oninput="(e) => { if (byte.TryParse(e.Value?.ToString(), out var vol)) Playback.SetChannelVolume(ch.Channel, vol); }"
-                               class="v-fader-input" />
                     </div>
                 </div>
 
@@ -166,7 +169,7 @@
                     {
                         <span class="text-[8px] font-mono uppercase" style="color: var(--text-lo);">Fixed</span>
                     }
-                    <span class="hw-vfd px-1.5 py-0.2 rounded text-[9px] font-bold text-right shrink-0">@ch.Volume</span>
+                    <span class="v-fader-readout hw-vfd px-1.5 py-0.2 rounded text-[9px] font-bold text-right shrink-0">@ch.Volume</span>
                 </div>
             </div>
         }
@@ -175,6 +178,31 @@
 
 @code {
     protected override StateScope SubscribedScopes => StateScope.Channels | StateScope.Transport | StateScope.Shell | StateScope.SoundDesign;
+
+    private DotNetObjectReference<ChannelMixerRack>? _dotNetRef;
+    private readonly byte[] _idleVolumes = Enumerable.Repeat((byte)100, 16).ToArray();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+        }
+        try
+        {
+            await JS.InvokeVoidAsync("studioInterop.initMixerFaders", "mixerGrid", _dotNetRef);
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public void SetFaderVolume(int channel, int volume)
+    {
+        if ((uint)channel >= 16) return;
+        byte vol = (byte)Math.Clamp(volume, 0, 100);
+        _idleVolumes[channel] = vol;
+        Playback.SetChannelVolume(channel, vol);
+    }
 
     private List<ChannelStateDto> DefaultEmptyChannels()
     {
@@ -186,7 +214,7 @@
             PssVoice = ch == 15 ? (is680 ? 99 : -1) : (is680 ? 3 : 0),
             PssVoiceName = ch == 15 ? (is680 ? "Hand Percussion" : "Fixed Rhythm") : (is680 ? "Piano 1" : "PIANO"),
             IsDrum = ch == 15,
-            Volume = 100
+            Volume = _idleVolumes[ch]
         }).ToList();
     }
 
@@ -239,6 +267,9 @@
 
     private void ResetFaders()
     {
+        Array.Fill(_idleVolumes, (byte)100);
         for (int ch = 0; ch < 16; ch++) Playback.SetChannelVolume(ch, 100);
     }
+
+    protected override void OnDisposing() => _dotNetRef?.Dispose();
 }

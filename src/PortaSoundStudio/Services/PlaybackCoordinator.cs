@@ -534,7 +534,7 @@ namespace PSS790Player.Services
             {
                 var ch = s.LoadedSong?.Channels.FirstOrDefault(c => c.Channel == channel);
                 if (ch != null) ch.Volume = volume;
-            });
+            }, StateScope.Channels);
         }
 
         public void SetChannelMute(int channel, bool mute)
@@ -755,7 +755,7 @@ namespace PSS790Player.Services
                 "gm" => visible.Where(f => f.Format == "gm"),
                 "pss790" => visible.Where(f => f.Format == "pss790"),
                 "pss680" => visible.Where(f => f.Format == "pss680"),
-                "favorites" => visible.Where(f => f.IsFavorite || _state.Favorites.Contains(f.FullPath)),
+                "favorites" => LibraryService.ResolvePreferredFavorites(_state.Library.AllFiles, _state.ActiveModel, _state.Favorites),
                 _ => visible
             };
 

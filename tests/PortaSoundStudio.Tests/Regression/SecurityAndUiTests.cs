@@ -222,6 +222,8 @@ namespace PSS790Player.Tests
             Assert.Contains("cat:pss790", librarySidebar);
             Assert.Contains("cat:pss680", librarySidebar);
             Assert.Contains("ActiveModel", librarySidebar);
+            Assert.True(librarySidebar.IndexOf("cat:pss680", StringComparison.Ordinal) < librarySidebar.IndexOf("cat:gm", StringComparison.Ordinal),
+                "General MIDI section should be rendered at the bottom after PSS-790 / PSS-680 sections.");
 
             var drumPads = File.ReadAllText(Path.Combine(srcDir!, "Components", "SoundDesign", "DrumPadsDeck.razor"));
             Assert.Contains("@if (is680)", drumPads);
@@ -239,7 +241,12 @@ namespace PSS790Player.Tests
             var designSystem = File.ReadAllText(Path.Combine(srcDir!, "wwwroot", "css", "design-system.css"));
             Assert.Contains("--vfd-bg:", designSystem);
             Assert.Contains(".v-fader-stage", designSystem);
+            Assert.DoesNotContain("slider-vertical", designSystem);
             Assert.Contains("max-height: 760px", designSystem);
+
+            var mixerRack = File.ReadAllText(Path.Combine(srcDir!, "Components", "Player", "ChannelMixerRack.razor"));
+            Assert.Contains("initMixerFaders", mixerRack);
+            Assert.Contains("data-fader-channel", mixerRack);
 
             var vizDeck = File.ReadAllText(Path.Combine(srcDir!, "Components", "Player", "MidiVisualizerDeck.razor"));
             Assert.Contains("liveStageCanvas", vizDeck);

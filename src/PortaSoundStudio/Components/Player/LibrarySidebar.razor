@@ -54,7 +54,6 @@
     <!-- Tree Scroll Container -->
     <div id="treeContainer" class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-1.5 custom-scrollbar text-xs select-none">
         @RenderCategorySection("cat:fav", "⭐ Favourites", "fav", FavoriteSongs, null)
-        @RenderCategorySection("cat:gm", "🎼 General MIDI", "gm", State.Library.Gm.Files, State.Library.Gm.SubFolders, State.Library.Gm.Count, State.Library.Gm.FullPath)
         @if (!is680)
         {
             @RenderCategorySection("cat:pss790", "🎹 Yamaha PSS-790", "pss790", State.Library.Pss790.Files, State.Library.Pss790.SubFolders, State.Library.Pss790.Count, State.Library.Pss790.FullPath)
@@ -63,6 +62,7 @@
         {
             @RenderCategorySection("cat:pss680", "⚡ Yamaha PSS-680", "pss680", State.Library.Pss680.Files, State.Library.Pss680.SubFolders, State.Library.Pss680.Count, State.Library.Pss680.FullPath)
         }
+        @RenderCategorySection("cat:gm", "🎼 General MIDI", "gm", State.Library.Gm.Files, State.Library.Gm.SubFolders, State.Library.Gm.Count, State.Library.Gm.FullPath)
     </div>
 
     <!-- Batch Selection Action Bar -->
@@ -182,7 +182,7 @@
     }
 
     private List<MidiFileItem> FavoriteSongs =>
-        VisibleFiles.Where(f => f.IsFavorite || State.Favorites.Contains(f.FullPath)).ToList();
+        LibraryService.ResolvePreferredFavorites(State.Library.AllFiles, State.ActiveModel, State.Favorites);
 
     private RenderFragment RenderCategorySection(
         string key,
@@ -287,12 +287,16 @@
         if (s.ExpandedFolders.Count > 3)
         {
             s.ExpandedFolders.Clear();
-            s.ExpandedFolders.Add("cat:gm");
+            s.ExpandedFolders.Add("cat:fav");
             s.ExpandedFolders.Add("cat:pss790");
             s.ExpandedFolders.Add("cat:pss680");
         }
         else
         {
+            s.ExpandedFolders.Add("cat:fav");
+            s.ExpandedFolders.Add("cat:pss790");
+            s.ExpandedFolders.Add("cat:pss680");
+            s.ExpandedFolders.Add("cat:gm");
             foreach (var f in FlattenFolders(s.Library.Gm.SubFolders).Concat(FlattenFolders(s.Library.Pss790.SubFolders)).Concat(FlattenFolders(s.Library.Pss680.SubFolders)))
             {
                 s.ExpandedFolders.Add($"dir:{f.FullPath}");

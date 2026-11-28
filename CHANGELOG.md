@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.6] - 2026-11-28
+
+### Fixed
+- **Working Channel Volume Faders**: Replaced deprecated Chromium vertical `<input type="range">` styling in `ChannelMixerRack` / `design-system.css` with pointer-captured vertical faders (`studioInterop.initMixerFaders`), scoped `SetChannelVolume` updates to `StateScope.Channels` to prevent UI snap-back during playback, preserved idle pre-load fader levels, and ensured `PrimeInitialVoicesForHardwareStart` transmits non-100% user fader levels on Play even for channels lacking Tick-0 `CC 7`.
+- **Favourites Play Active Keyboard Version**: Deduplicated `⭐ Favourites` and `"favorites"` library playback resolution (`LibraryService.ResolvePreferredFavorites`) to prioritize `PSS-790 Midi` (when PSS-790 is active) or `PSS-680 Midi` (when PSS-680 is active) instead of duplicating and loading the `GM Midi` copy first.
+- **Library Ordering & Collapsed General MIDI Default**: Moved `🎼 General MIDI` to the bottom of the library sidebar below `🎹 Yamaha PSS-790` / `⚡ Yamaha PSS-680` and set `cat:gm` collapsed by default (`AppStateStore.ExpandedFolders` and `ToggleCollapseAll`).
+
 ## [3.1.5] - 2026-11-27
 
 ### Fixed

@@ -60,6 +60,53 @@ namespace PSS790Player.Services
             };
         }
 
+        /// <summary>
+        /// Resolves deduplicated favourite songs prioritizing the active keyboard's native
+        /// converted folder (PSS-790 or PSS-680) over General MIDI, falling back to GM when
+        /// no native converted counterpart exists on disk yet.
+        /// </summary>
+        public static List<MidiFileItem> ResolvePreferredFavorites(
+            IEnumerable<MidiFileItem> allFiles,
+            string activeModel,
+            IReadOnlyCollection<string>? favoriteKeys = null)
+        {
+            string targetFormat = string.Equals(activeModel, "pss680", StringComparison.OrdinalIgnoreCase)
+                ? "pss680"
+                : "pss790";
+
+            var chosenByKey = new Dictionary<string, MidiFileItem>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var f in allFiles)
+            {
+                bool isAllowedFormat = string.Equals(f.Format, targetFormat, StringComparison.OrdinalIgnoreCase) ||
+                                       string.Equals(f.Format, "gm", StringComparison.OrdinalIgnoreCase);
+                if (!isAllowedFormat) continue;
+
+                string subKey = !string.IsNullOrWhiteSpace(f.RelativePath)
+                    ? f.RelativePath.Replace('\\', '/')
+                    : AppPaths.GetLibrarySubPath(f.FullPath);
+
+                bool isFav = f.IsFavorite ||
+                             (favoriteKeys != null && (favoriteKeys.Contains(f.FullPath) || favoriteKeys.Contains(subKey)));
+                if (!isFav) continue;
+
+                if (!chosenByKey.TryGetValue(subKey, out var existing))
+                {
+                    chosenByKey[subKey] = f;
+                }
+                else if (string.Equals(f.Format, targetFormat, StringComparison.OrdinalIgnoreCase) &&
+                         !string.Equals(existing.Format, targetFormat, StringComparison.OrdinalIgnoreCase))
+                {
+                    chosenByKey[subKey] = f;
+                }
+            }
+
+            return chosenByKey.Values
+                .OrderBy(f => f.RelativePath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(f => f.FileName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         public void RefreshLibrary()
         {
             if (_isDisposed) return;
